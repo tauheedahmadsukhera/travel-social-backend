@@ -19,7 +19,8 @@
     "add-firebase-apps": "node scripts/addFirebaseApps.js",
     "get-sha1": "node scripts/getAndroidSHA1.js",
     "fix-dev-build": "node scripts/fixDevBuild.js",
-    "verify:patches": "node scripts/verifyPatches.js"
+    "verify:patches": "node scripts/verifyPatches.js",
+    "validate:prod": "node scripts/validateProductionEnv.js"
   },
   "dependencies": {
     "@expo/vector-icons": "~14.0.4",

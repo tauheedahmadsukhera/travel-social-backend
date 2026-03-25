@@ -13,7 +13,7 @@
         "gradleCommand": ":app:assembleDebug"
       },
       "env": {
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCYpwO1yUux1cHtd2bs-huu1hNKv1kC18c",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "SET_IN_EAS_ENV",
         "appAuthRedirectScheme": "trave-social"
       }
     },
@@ -23,7 +23,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCYpwO1yUux1cHtd2bs-huu1hNKv1kC18c",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "SET_IN_EAS_ENV",
         "appAuthRedirectScheme": "trave-social"
       }
     },
@@ -33,7 +33,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCYpwO1yUux1cHtd2bs-huu1hNKv1kC18c",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "SET_IN_EAS_ENV",
         "EXPO_PUBLIC_API_BASE_URL": "https://travel-social-backend.onrender.com/api",
         "appAuthRedirectScheme": "trave-social"
       }
@@ -44,7 +44,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCYpwO1yUux1cHtd2bs-huu1hNKv1kC18c",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "SET_IN_EAS_ENV",
         "EXPO_PUBLIC_API_BASE_URL": "https://travel-social-backend.onrender.com/api",
         "appAuthRedirectScheme": "trave-social"
       }

@@ -6,8 +6,8 @@
 import { LocationData, Region } from '../../types/models';
 import { IMapService } from '../interfaces/IMapService';
 
-// Fallback API key - use hardcoded value if env not available
-let API_KEY = 'AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs';
+// API key must be provided through environment configuration
+let API_KEY = '';
 const API_TIMEOUT = 30000;
 
 // Try to load from environment
@@ -17,7 +17,7 @@ try {
     API_KEY = GOOGLE_MAPS_CONFIG.apiKey;
   }
 } catch (err) {
-  // Using fallback API key
+  // Config module may be unavailable in isolated test contexts
 }
 
 export class GoogleMapsService implements IMapService {

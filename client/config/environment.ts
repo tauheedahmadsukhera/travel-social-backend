@@ -21,15 +21,15 @@ function getEnvVar(key: string, defaultValue?: string): string {
   return value || defaultValue || '';
 }
 
-// Firebase Configuration (hardcoded for Metro compatibility)
+// Firebase Configuration (must come from environment)
 export const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC_0pHFGAK5YySB--8hL3Ctz-u1cx4vaCk",
-  authDomain: "travel-app-3da72.firebaseapp.com",
-  projectId: "travel-app-3da72",
-  storageBucket: "travel-app-3da72.firebasestorage.app",
-  messagingSenderId: "709095117662",
-  appId: "1:709095117662:web:5f00f45bb4e392ee17f5cf",
-  measurementId: "G-PFZRL4FDFD"
+  apiKey: getEnvVar('EXPO_PUBLIC_FIREBASE_API_KEY', ''),
+  authDomain: getEnvVar('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', ''),
+  projectId: getEnvVar('EXPO_PUBLIC_FIREBASE_PROJECT_ID', ''),
+  storageBucket: getEnvVar('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', ''),
+  messagingSenderId: getEnvVar('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', ''),
+  appId: getEnvVar('EXPO_PUBLIC_FIREBASE_APP_ID', ''),
+  measurementId: getEnvVar('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID', '')
 } as const;
 
 // Google Maps Configuration

@@ -127,7 +127,7 @@ async function addFirebaseApps() {
           ],
           "api_key": [
             {
-              "current_key": "AIzaSyC_0pHFGAK5YySB--8hL3Ctz-u1cx4vaCk"
+              "current_key": "YOUR_FIREBASE_ANDROID_API_KEY"
             }
           ],
           "services": {
@@ -170,7 +170,7 @@ async function addFirebaseApps() {
   <key>REVERSED_CLIENT_ID</key>
   <string>com.googleusercontent.apps.709095117662-DOWNLOAD_FROM_FIREBASE</string>
   <key>API_KEY</key>
-  <string>AIzaSyC_0pHFGAK5YySB--8hL3Ctz-u1cx4vaCk</string>
+  <string>YOUR_FIREBASE_IOS_API_KEY</string>
   <key>GCM_SENDER_ID</key>
   <string>709095117662</string>
   <key>PLIST_VERSION</key>

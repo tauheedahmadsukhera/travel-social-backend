@@ -11,6 +11,7 @@ serviceAccountKey.json
 serviceAccount*.json
 google-services.json
 GoogleService-Info.plist
+android/app/google-services.json
 
 # dependencies
 node_modules/
@@ -35,6 +36,7 @@ expo-env.d.ts
 *.aab
 downloads/
 *.apk.orig
+build.json
 
 # Metro
 .metro-health-check*

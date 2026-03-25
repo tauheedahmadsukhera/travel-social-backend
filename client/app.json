@@ -30,7 +30,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs"
+          "apiKey": "SET_GOOGLE_MAPS_API_KEY_IN_BUILD_ENV"
         }
       }
     },
@@ -40,7 +40,7 @@
       "buildNumber": "1.0.7",
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
-        "googleMapsApiKey": "AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs"
+        "googleMapsApiKey": "SET_GOOGLE_MAPS_API_KEY_IN_BUILD_ENV"
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -139,8 +139,8 @@
       "costMode": true,
       "analyticsEnabled": true,
       "dailyCounterSampleRate": 0.05,
-      "GOOGLE_MAP_API_KEY": "AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs",
-      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs",
+      "GOOGLE_MAP_API_KEY": "SET_IN_ENV",
+      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "SET_IN_ENV",
       "FIREBASE_API_KEY": "",
       "FIREBASE_AUTH_DOMAIN": "travel-app-3da72.firebaseapp.com",
       "FIREBASE_PROJECT_ID": "travel-app-3da72",
