@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Environment variables - NEVER COMMIT SECRETS
+.env
+.env.*
+.env.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+*.p8
+serviceAccountKey.json
+serviceAccount*.json
+private*.json
+
+# Build outputs
+/dist
+/build
+/.next
+/out
+/.expo
+*.apk
+*.aab
+downloads/
+client/downloads/
+client/*.apk
+backend/build/
+.gradle/
+.gradle-tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Firebase
+.firebase/
+firebase-debug.log
+functions/lib/
+
+# Logs
+logs/
+*.log
+
+# Client debug and backup artifacts
+client/config_debug*.txt
+client/config_debug*.json
+client/config_output.txt
+client/config_log.txt
+client/config_error.txt
+client/error.txt
+client/crash_dump.txt
+client/full_trace*.txt
+client/tmp-*.txt
+client/madge_output.txt
+client/prebuild_log.txt
+client/*_backup.json
+
+# OS specific
+.windows/
+.mac/

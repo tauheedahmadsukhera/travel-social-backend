@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "manifestPlaceholders": {
+              "traveSocialScheme": "trave-social",
+              "appAuthRedirectScheme": "trave-social"
+            }
+          }
+        }
+      ]
+    ]
+  }
+}

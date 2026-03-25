@@ -1,0 +1,13 @@
+diff --git a/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js b/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js
+index d77ca60..d142b59 100644
+--- a/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js
++++ b/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js
+@@ -527,7 +527,7 @@ export function useNavigationBuilder(createRouter, options) {
+   });
+   const onUnhandledActionParent = React.useContext(UnhandledActionContext);
+   const onUnhandledAction = useLatestCallback(action => {
+-    if (options.UNSTABLE_routeNamesChangeBehavior === 'lastUnhandled' && action.type === 'NAVIGATE' && action.payload != null && 'name' in action.payload && typeof action.payload.name === 'string' && !routeNames.includes(action.payload.name)) {
++    if (options.UNSTABLE_routeNamesChangeBehavior === 'lastUnhandled' && action.type === 'NAVIGATE' && action.payload != null && typeof action.payload === 'object' && 'name' in action.payload && typeof action.payload.name === 'string' && !routeNames.includes(action.payload.name)) {
+       const state = {
+         routes: [{
+           name: action.payload.name,

@@ -1,0 +1,22 @@
+diff --git a/node_modules/@react-navigation/routers/lib/module/CommonActions.js b/node_modules/@react-navigation/routers/lib/module/CommonActions.js
+index b3f7cbb..9610786 100644
+--- a/node_modules/@react-navigation/routers/lib/module/CommonActions.js
++++ b/node_modules/@react-navigation/routers/lib/module/CommonActions.js
+@@ -22,7 +22,7 @@ export function navigate(...args) {
+     };
+   } else {
+     const payload = args[0] || {};
+-    if (!('name' in payload)) {
++    if (typeof payload !== 'object' || payload === null || !('name' in payload)) {
+       throw new Error('You need to specify a name when calling navigate with an object as the argument. See https://reactnavigation.org/docs/navigation-actions#navigate for usage.');
+     }
+     return {
+@@ -42,7 +42,7 @@ export function navigateDeprecated(...args) {
+     };
+   } else {
+     const payload = args[0] || {};
+-    if (!('name' in payload)) {
++    if (typeof payload !== 'object' || payload === null || !('name' in payload)) {
+       throw new Error('You need to specify a name when calling navigateDeprecated with an object as the argument. See https://reactnavigation.org/docs/navigation-actions#navigatelegacy for usage.');
+     }
+     return {

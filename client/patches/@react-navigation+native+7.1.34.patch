@@ -1,0 +1,13 @@
+diff --git a/node_modules/@react-navigation/native/lib/module/useLinking.js b/node_modules/@react-navigation/native/lib/module/useLinking.js
+index d30009f..069159f 100644
+--- a/node_modules/@react-navigation/native/lib/module/useLinking.js
++++ b/node_modules/@react-navigation/native/lib/module/useLinking.js
+@@ -207,7 +207,7 @@ export function useLinking(ref, {
+       const previousRoute = previousStateRef.current ? findFocusedRoute(previousStateRef.current) : undefined;
+ 
+       // Preserve the hash if the route didn't change
+-      if (previousRoute && route && 'key' in previousRoute && 'key' in route && previousRoute.key === route.key) {
++      if (previousRoute && route && typeof previousRoute === 'object' && typeof route === 'object' && 'key' in previousRoute && 'key' in route && previousRoute.key === route.key) {
+         path = path + location.hash;
+       }
+       return path;

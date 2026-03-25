@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "trave-social",
+    "slug": "trave-social",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "trave-social",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.tauhee56.travesocial"
+    },
+    "owner": "dev0056",
+    "extra": {
+      "eas": {
+        "projectId": "35fbb460-3503-4b79-aedd-9f550880738e"
+      }
+    }
+  }
+}

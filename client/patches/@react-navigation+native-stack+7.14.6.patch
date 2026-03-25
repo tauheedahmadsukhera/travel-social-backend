@@ -1,0 +1,26 @@
+diff --git a/node_modules/@react-navigation/native-stack/lib/module/navigators/createNativeStackNavigator.js b/node_modules/@react-navigation/native-stack/lib/module/navigators/createNativeStackNavigator.js
+index 86e1d42..204f9e9 100644
+--- a/node_modules/@react-navigation/native-stack/lib/module/navigators/createNativeStackNavigator.js
++++ b/node_modules/@react-navigation/native-stack/lib/module/navigators/createNativeStackNavigator.js
+@@ -35,7 +35,7 @@ function NativeStackNavigator({
+   });
+   const meta = React.useContext(NavigationMetaContext);
+   React.useEffect(() => {
+-    if (meta && 'type' in meta && meta.type === 'native-tabs') {
++    if (meta && typeof meta === 'object' && 'type' in meta && meta.type === 'native-tabs') {
+       // If we're inside native tabs, we don't need to handle popToTop
+       // It's handled natively by native tabs
+       return;
+diff --git a/node_modules/@react-navigation/native-stack/lib/module/views/NativeStackView.native.js b/node_modules/@react-navigation/native-stack/lib/module/views/NativeStackView.native.js
+index b83806b..fc57894 100644
+--- a/node_modules/@react-navigation/native-stack/lib/module/views/NativeStackView.native.js
++++ b/node_modules/@react-navigation/native-stack/lib/module/views/NativeStackView.native.js
+@@ -144,7 +144,7 @@ const SceneView = ({
+   // Debounce the header height updates to avoid excessive re-renders
+   debounce(setHeaderHeight, 100), []);
+   const hasCustomHeader = header != null;
+-  const usesNewAndroidHeaderHeightImplementation = 'usesNewAndroidHeaderHeightImplementation' in compatibilityFlags && compatibilityFlags['usesNewAndroidHeaderHeightImplementation'] === true;
++  const usesNewAndroidHeaderHeightImplementation = compatibilityFlags != null && typeof compatibilityFlags === 'object' && 'usesNewAndroidHeaderHeightImplementation' in compatibilityFlags && compatibilityFlags['usesNewAndroidHeaderHeightImplementation'] === true;
+   let headerHeightCorrectionOffset = 0;
+   if (Platform.OS === 'android' && !hasCustomHeader && !usesNewAndroidHeaderHeightImplementation) {
+     const statusBarHeight = StatusBar.currentHeight ?? 0;
