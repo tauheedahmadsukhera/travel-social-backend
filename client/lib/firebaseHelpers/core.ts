@@ -12,16 +12,31 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, si
 import { FIREBASE_CONFIG } from '../../config/environment';
 
 // Initialize Firebase app and auth (avoid duplicate app crash)
-const firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
-const auth = getAuth(firebaseApp);
+let firebaseApp: any = null;
+let auth: any = null;
+
+try {
+  firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+  auth = getAuth(firebaseApp);
+} catch (error: any) {
+  console.error('[firebaseHelpers/core] Firebase initialization failed:', error?.message || error);
+}
+
+function getRequiredAuth() {
+  if (!auth) {
+    throw new Error('Firebase auth is not configured. Please verify EXPO_PUBLIC_FIREBASE_* environment variables.');
+  }
+  return auth;
+}
 
 // Firebase auth + MongoDB storage
 export async function signInWithEmailPassword(email: string, password: string): Promise<{ success: boolean; user?: any; error?: string }> {
   try {
     console.log('[signInWithEmailPassword] Firebase login:', email);
+    const firebaseAuth = getRequiredAuth();
 
     // Step 1: Firebase authentication
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
     const firebaseUser = userCredential.user;
 
     // Step 2: Sync with backend (save to MongoDB)
@@ -46,7 +61,7 @@ export async function signInWithEmailPassword(email: string, password: string): 
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('userId');
       await AsyncStorage.removeItem('userEmail');
-      try { await signOut(auth); } catch (e) { }
+      try { await signOut(firebaseAuth); } catch (e) { }
 
       return { success: false, error: response.error || 'Login sync failed' };
     }
@@ -55,7 +70,11 @@ export async function signInWithEmailPassword(email: string, password: string): 
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('userId');
     await AsyncStorage.removeItem('userEmail');
-    try { await signOut(auth); } catch (e) { }
+    try {
+      if (auth) {
+        await signOut(auth);
+      }
+    } catch (e) { }
     return { success: false, error: error.message };
   }
 }
@@ -63,9 +82,10 @@ export async function signInWithEmailPassword(email: string, password: string): 
 export async function registerWithEmailPassword(email: string, password: string, displayName?: string): Promise<{ success: boolean; user?: any; error?: string }> {
   try {
     console.log('[registerWithEmailPassword] Firebase register:', email);
+    const firebaseAuth = getRequiredAuth();
 
     // Step 1: Firebase registration
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
     const firebaseUser = userCredential.user;
 
     // Update profile
@@ -104,7 +124,7 @@ export async function registerWithEmailPassword(email: string, password: string,
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('userId');
       await AsyncStorage.removeItem('userEmail');
-      try { await signOut(auth); } catch (e) { }
+      try { await signOut(firebaseAuth); } catch (e) { }
       return { success: false, error: response.error || 'Signup sync failed' };
     }
   } catch (error: any) {
@@ -112,7 +132,11 @@ export async function registerWithEmailPassword(email: string, password: string,
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('userId');
     await AsyncStorage.removeItem('userEmail');
-    try { await signOut(auth); } catch (e) { }
+    try {
+      if (auth) {
+        await signOut(auth);
+      }
+    } catch (e) { }
     return { success: false, error: error.message };
   }
 }
@@ -146,7 +170,9 @@ export async function signOutUser(): Promise<{ success: boolean; error?: string 
 
     // Sign out from Firebase
     try {
-      await signOut(auth);
+      if (auth) {
+        await signOut(auth);
+      }
     } catch (e) {
       console.warn('[signOutUser] Firebase signOut warning:', e);
     }

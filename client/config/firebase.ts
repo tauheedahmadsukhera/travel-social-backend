@@ -23,22 +23,37 @@ const firebaseConfig = {
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
 };
 
-// Initialize Firebase (prevent duplicate)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Initialize Firebase (prevent duplicate). Keep module load crash-safe.
+let app: any = null;
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+} catch (error: any) {
+  console.error('Firebase app initialization failed:', error?.message || error);
+}
 
 // ✅ AUTHENTICATION ONLY - Initialize Firebase Auth with React Native persistence
-let auth: Auth;
+let auth: Auth | null = null;
 try {
-  const { getReactNativePersistence } = require('firebase/auth');
-  auth = initializeAuth(app, {
-    persistence: Platform.OS === 'web'
-      ? undefined
-      : getReactNativePersistence(AsyncStorage),
-  });
-  console.log('✅ Firebase Auth initialized (AUTHENTICATION ONLY)');
+  if (app) {
+    const { getReactNativePersistence } = require('firebase/auth');
+    auth = initializeAuth(app, {
+      persistence: Platform.OS === 'web'
+        ? undefined
+        : getReactNativePersistence(AsyncStorage),
+    });
+    console.log('✅ Firebase Auth initialized (AUTHENTICATION ONLY)');
+  } else {
+    console.warn('Firebase app not available, auth initialization skipped');
+  }
 } catch (error: any) {
   console.warn('Using existing Firebase Auth instance:', error?.message || error);
-  auth = getAuth(app);
+  if (app) {
+    try {
+      auth = getAuth(app);
+    } catch (fallbackError: any) {
+      console.error('Firebase Auth fallback failed:', fallbackError?.message || fallbackError);
+    }
+  }
 }
 
 // ❌ FIRESTORE & STORAGE DISABLED - Use Backend API instead
