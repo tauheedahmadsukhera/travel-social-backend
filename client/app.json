@@ -73,6 +73,9 @@
       [
         "expo-build-properties",
         {
+          "ios": {
+            "useFrameworks": "static"
+          },
           "android": {
             "manifestPlaceholders": {
               "appAuthRedirectScheme": "trave-social",
