@@ -14,7 +14,31 @@ const env = Constants.expoConfig?.extra || process.env;
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
 function getEnvVar(key: string, defaultValue?: string): string {
-  const value = env[key] || process.env[key];
+  const isPlaceholder = (val: unknown): boolean => {
+    if (typeof val !== 'string') {
+      return false;
+    }
+    const normalized = val.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    return (
+      normalized === 'set_in_env' ||
+      normalized === 'set_in_eas_env' ||
+      normalized === 'set_google_maps_api_key_in_build_env' ||
+      normalized.startsWith('set_') ||
+      normalized.includes('placeholder') ||
+      normalized.includes('your-')
+    );
+  };
+
+  const configValue = env[key];
+  const processValue = process.env[key];
+  const value = !isPlaceholder(configValue)
+    ? configValue
+    : !isPlaceholder(processValue)
+      ? processValue
+      : '';
   if (!value && !isDevelopment && defaultValue === undefined) {
     throw new Error(`Missing critical environment variable: ${key}`);
   }
