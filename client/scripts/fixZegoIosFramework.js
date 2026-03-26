@@ -34,7 +34,10 @@ function main() {
       continue;
     }
 
-    if (!entry.name.toLowerCase().includes('maccatalyst')) {
+    const normalized = entry.name.toLowerCase();
+    const keepSlice = normalized === 'ios-arm64';
+
+    if (keepSlice) {
       continue;
     }
 
@@ -46,7 +49,7 @@ function main() {
   }
 
   if (removedCount === 0) {
-    console.log('[fixZegoIosFramework] No maccatalyst slices found.');
+    console.log('[fixZegoIosFramework] No non-ios-arm64 slices found.');
     return;
   }
 
