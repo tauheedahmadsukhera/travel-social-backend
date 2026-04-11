@@ -1,8 +1,11 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is required for auth middleware');
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !String(secret).trim()) {
+    throw new Error('JWT_SECRET is not configured (set it in your host env, e.g. Render Environment)');
+  }
+  return secret;
 }
 
 /**
@@ -22,7 +25,7 @@ exports.verifyToken = (req, res, next) => {
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
     req.user = decoded;
     req.userId = decoded.userId;
 
@@ -46,7 +49,7 @@ exports.generateToken = (userId, email) => {
       email,
       iat: Math.floor(Date.now() / 1000),
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '7d' } // Token expires in 7 days
   );
 };

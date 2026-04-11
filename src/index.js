@@ -15,10 +15,11 @@ const cloudinary = require('cloudinary').v2;
 const { Server } = require('socket.io');
 const { validateEnv } = require('./config/validateEnv');
 
+// Fail fast on missing env *before* loading modules that read secrets at require-time.
+validateEnv();
+
 const { verifyToken } = require('./middleware/authMiddleware');
 const { resolveUserIdentifiers } = require('./utils/userUtils');
-
-validateEnv();
 
 // Configure Cloudinary
 cloudinary.config({
