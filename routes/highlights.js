@@ -90,12 +90,36 @@ router.get('/users/:userId/highlights', async (req, res) => {
     
     const user = await resolveUserIdentifiers(req.params.userId);
     const highlights = await Highlight.find({ userId: { $in: user.candidates } }).lean();
+
+    // Self-heal: delete empty highlights (no items/stories) so they don't show on profile.
+    const emptyIds = (Array.isArray(highlights) ? highlights : [])
+      .filter((h) => {
+        const itemsLen = Array.isArray(h?.items) ? h.items.length : 0;
+        const storiesLen = Array.isArray(h?.stories) ? h.stories.length : 0;
+        return (itemsLen + storiesLen) <= 0;
+      })
+      .map((h) => h?._id)
+      .filter(Boolean);
+
+    if (emptyIds.length > 0) {
+      try {
+        await Highlight.deleteMany({ _id: { $in: emptyIds } });
+      } catch {
+        // best-effort cleanup
+      }
+    }
     
     // Normalize _id to id for client compatibility
-    const normalizedHighlights = highlights.map(h => ({
-      ...h,
-      id: String(h._id)
-    }));
+    const normalizedHighlights = (Array.isArray(highlights) ? highlights : [])
+      .filter((h) => {
+        const itemsLen = Array.isArray(h?.items) ? h.items.length : 0;
+        const storiesLen = Array.isArray(h?.stories) ? h.stories.length : 0;
+        return (itemsLen + storiesLen) > 0;
+      })
+      .map(h => ({
+        ...h,
+        id: String(h._id)
+      }));
     
     res.json({ success: true, data: normalizedHighlights });
   } catch (err) {
