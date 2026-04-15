@@ -128,11 +128,12 @@ router.get('/', async (req, res) => {
 // Edit a highlight
 router.patch('/highlights/:highlightId', async (req, res) => {
   try {
-    const { title, items } = req.body;
+    const { title, items, coverImage } = req.body;
     const highlight = await Highlight.findById(req.params.highlightId);
     if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
     if (title) highlight.title = title;
     if (items) highlight.items = items;
+    if (typeof coverImage === 'string') highlight.coverImage = coverImage;
     await highlight.save();
     res.json({ success: true });
   } catch (err) {
@@ -152,12 +153,38 @@ router.post('/highlights/:highlightId/stories', async (req, res) => {
     const highlight = await Highlight.findById(highlightId);
     
     if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
+
+    // Fetch story doc once and store a snapshot into highlight.items so the highlight survives 24h expiry.
+    let storySnapshot = null;
+    try {
+      const Story = mongoose.model('Story');
+      const st = mongoose.Types.ObjectId.isValid(storyId) ? await Story.findById(storyId).lean() : null;
+      if (st) {
+        storySnapshot = {
+          id: String(st._id),
+          storyId: String(st._id),
+          userId: st.userId,
+          userName: st.userName,
+          userAvatar: st.userAvatar,
+          imageUrl: st.image || null,
+          videoUrl: st.video || null,
+          thumbnailUrl: st.thumbnail || null,
+          mediaUrl: st.image || st.video || null,
+          mediaType: st.video ? 'video' : 'image',
+          createdAt: st.createdAt || new Date(),
+          expiresAt: st.expiresAt || null,
+          locationData: st.locationData || null,
+        };
+      }
+    } catch {
+      storySnapshot = null;
+    }
     
     // Add to items array if it doesn't exist
-    const isAlreadyInItems = highlight.items?.some(item => (item.id === storyId || item === storyId));
+    const isAlreadyInItems = highlight.items?.some(item => (item?.id === storyId || item?.storyId === storyId || item === storyId));
     if (!isAlreadyInItems) {
       if (!highlight.items) highlight.items = [];
-      highlight.items.push(storyId); // Keep simple string ID for now to match stories array
+      highlight.items.push(storySnapshot || storyId);
     }
 
     // Compatibility for stories array
@@ -172,10 +199,97 @@ router.post('/highlights/:highlightId/stories', async (req, res) => {
   }
 });
 
+// Remove a story from a highlight (DELETE /api/highlights/:highlightId/stories/:storyId)
+router.delete('/highlights/:highlightId/stories/:storyId', async (req, res) => {
+  try {
+    const { highlightId, storyId } = req.params;
+    const Highlight = getHighlight();
+    if (!Highlight) return res.status(500).json({ success: false, error: 'Highlight model not available' });
+
+    const highlight = await Highlight.findById(highlightId);
+    if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
+
+    // Remove from stories array (string ids)
+    highlight.stories = Array.isArray(highlight.stories)
+      ? highlight.stories.filter((id) => String(id) !== String(storyId))
+      : [];
+
+    // Remove from items array (can be string or object)
+    highlight.items = Array.isArray(highlight.items)
+      ? highlight.items.filter((it) => {
+          if (typeof it === 'string') return String(it) !== String(storyId);
+          if (it && typeof it === 'object') return String(it.id || it.storyId || '') !== String(storyId);
+          return true;
+        })
+      : [];
+
+    // If highlight is now empty, delete it (Instagram-like)
+    const remaining = (highlight.items?.length || 0) + (highlight.stories?.length || 0);
+    if (remaining <= 0) {
+      await Highlight.findByIdAndDelete(highlightId);
+      return res.json({ success: true, deletedHighlight: true });
+    }
+
+    await highlight.save();
+    return res.json({ success: true, data: highlight, deletedHighlight: false });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Fallback remove (POST /api/highlights/:highlightId/stories/remove)
+router.post('/highlights/:highlightId/stories/remove', async (req, res) => {
+  try {
+    const { highlightId } = req.params;
+    const { storyId } = req.body;
+    if (!storyId) return res.status(400).json({ success: false, error: 'storyId is required' });
+
+    const Highlight = getHighlight();
+    if (!Highlight) return res.status(500).json({ success: false, error: 'Highlight model not available' });
+
+    const highlight = await Highlight.findById(highlightId);
+    if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
+
+    highlight.stories = Array.isArray(highlight.stories)
+      ? highlight.stories.filter((id) => String(id) !== String(storyId))
+      : [];
+
+    highlight.items = Array.isArray(highlight.items)
+      ? highlight.items.filter((it) => {
+          if (typeof it === 'string') return String(it) !== String(storyId);
+          if (it && typeof it === 'object') return String(it.id || it.storyId || '') !== String(storyId);
+          return true;
+        })
+      : [];
+
+    const remaining = (highlight.items?.length || 0) + (highlight.stories?.length || 0);
+    if (remaining <= 0) {
+      await Highlight.findByIdAndDelete(highlightId);
+      return res.json({ success: true, deletedHighlight: true });
+    }
+
+    await highlight.save();
+    return res.json({ success: true, data: highlight, deletedHighlight: false });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Delete a highlight
 router.delete('/highlights/:highlightId', async (req, res) => {
   try {
-    await Highlight.findByIdAndDelete(req.params.highlightId);
+    const { highlightId } = req.params;
+    const { userId } = req.body || {};
+    // If userId provided, enforce ownership (production safety)
+    if (userId) {
+      const user = await resolveUserIdentifiers(userId);
+      const hl = await Highlight.findById(highlightId);
+      if (!hl) return res.status(404).json({ success: false, error: 'Highlight not found' });
+      if (!user?.candidates?.includes?.(String(hl.userId))) {
+        return res.status(403).json({ success: false, error: 'Not allowed' });
+      }
+    }
+    await Highlight.findByIdAndDelete(highlightId);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -193,10 +307,31 @@ router.get('/highlights/:highlightId/stories', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Highlight not found' });
     }
 
-    // Try to use items if available, fallback to stories array
-    const storyIds = highlight.items?.length > 0
-      ? highlight.items.map(item => typeof item === 'string' ? item : item.id)
-      : highlight.stories || [];
+    // Prefer items snapshots (survives story expiry). Fallback to stories ids.
+    const items = Array.isArray(highlight.items) ? highlight.items : [];
+    const hasSnapshots = items.some((it) => it && typeof it === 'object' && (it.mediaUrl || it.imageUrl || it.videoUrl));
+    if (hasSnapshots) {
+      const normalized = items
+        .map((it) => {
+          if (!it) return null;
+          if (typeof it === 'string') return null;
+          const id = String(it.id || it.storyId || '').trim();
+          if (!id) return null;
+          return {
+            ...it,
+            id,
+            _id: id,
+            imageUrl: it.imageUrl || null,
+            videoUrl: it.videoUrl || null,
+            mediaUrl: it.mediaUrl || it.imageUrl || it.videoUrl || null,
+            mediaType: it.mediaType || (it.videoUrl ? 'video' : 'image'),
+          };
+        })
+        .filter(Boolean);
+      return res.json({ success: true, data: normalized });
+    }
+
+    const storyIds = highlight.stories || [];
 
     if (!storyIds || storyIds.length === 0) {
       return res.json({ success: true, data: [] });
