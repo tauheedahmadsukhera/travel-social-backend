@@ -279,6 +279,8 @@ router.post('/highlights/:highlightId/stories/remove', async (req, res) => {
 router.delete('/highlights/:highlightId', async (req, res) => {
   try {
     const { highlightId } = req.params;
+    const Highlight = getHighlight();
+    if (!Highlight) return res.status(500).json({ success: false, error: 'Highlight model not available' });
     const { userId } = req.body || {};
     // If userId provided, enforce ownership (production safety)
     if (userId) {
