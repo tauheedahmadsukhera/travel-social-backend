@@ -682,6 +682,100 @@ app.get('/api/posts/by-location', async (req, res, next) => {
 });
 console.log('  ✅ /api/posts/by-location loaded');
 
+// GET /api/posts/recommended - Endless feed fallback (randomized, privacy-aware)
+// NOTE: MUST be before `/api/posts/:postId` route.
+// Query:
+// - limit: number (default 20)
+// - excludeIds: comma-separated post ids to avoid repeats (optional)
+app.get('/api/posts/recommended', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(parseInt(String(req.query.limit || '20'), 10) || 20, 50));
+    const excludeRaw = typeof req.query.excludeIds === 'string' ? req.query.excludeIds : '';
+    const excludeIds = excludeRaw
+      ? excludeRaw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 250)
+      : [];
+
+    const currentUserId = req.headers.userid || req.query.viewerId || req.query.requesterUserId || null;
+    const viewerVariants = currentUserId ? (await resolveUserIdentifiers(currentUserId)).candidates : [];
+
+    const baseQuery = (viewerVariants.length > 0)
+      ? { $or: [ { isPrivate: { $ne: true } }, { userId: { $in: viewerVariants } }, { allowedFollowers: { $in: viewerVariants } } ] }
+      : { isPrivate: { $ne: true } };
+
+    const PostModel = mongoose.model('Post');
+
+    const toObjectIds = (ids) => {
+      const out = [];
+      for (const id of ids) {
+        if (mongoose.Types.ObjectId.isValid(id)) out.push(new mongoose.Types.ObjectId(id));
+      }
+      return out;
+    };
+
+    const excludeObjectIds = toObjectIds(excludeIds);
+
+    const sampleOnce = async (useExclude) => {
+      const match = {
+        ...baseQuery,
+        ...(useExclude && excludeObjectIds.length > 0 ? { _id: { $nin: excludeObjectIds } } : {}),
+      };
+      const sampleSize = Math.min(limit * 4, 120);
+      const sampled = await PostModel.aggregate([{ $match: match }, { $sample: { size: sampleSize } }]);
+      const ids = (Array.isArray(sampled) ? sampled : []).map((p) => String(p?._id || '')).filter(Boolean);
+      if (ids.length === 0) return [];
+      const docs = await PostModel.find({ _id: { $in: ids } })
+        .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate followers')
+        .lean()
+        .catch(() => []);
+      const byId = new Map(docs.map((d) => [String(d?._id), d]));
+      return ids.map((id) => byId.get(id)).filter(Boolean);
+    };
+
+    // Try with exclude first, then allow repeats if needed.
+    let posts = await sampleOnce(true);
+    if (!posts || posts.length < Math.max(3, Math.floor(limit / 3))) {
+      const more = await sampleOnce(false);
+      posts = [...(posts || []), ...(more || [])];
+    }
+
+    // Build authorGroupsMap for visibility checks
+    const authorIds = [...new Set((posts || []).map((p) => String(p?.userId?._id || p?.userId || '')).filter(Boolean))];
+    const authorGroupsMap = {};
+    if (authorIds.length > 0) {
+      try {
+        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } });
+        for (const g of allAuthorGroups) {
+          if (!authorGroupsMap[g.userId]) authorGroupsMap[g.userId] = { friendIds: [], familyMemberIds: [] };
+          if (g.type === 'friends') authorGroupsMap[g.userId].friendIds = [...authorGroupsMap[g.userId].friendIds, ...g.members];
+          if (g.type === 'family') authorGroupsMap[g.userId].familyMemberIds = [...authorGroupsMap[g.userId].familyMemberIds, ...g.members];
+        }
+      } catch { }
+    }
+
+    const visible = (Array.isArray(posts) ? posts : [])
+      .map((p) => ({
+        ...p,
+        id: p?.id || (p?._id ? String(p._id) : undefined),
+        isPrivate: p?.isPrivate || false,
+        allowedFollowers: p?.allowedFollowers || [],
+      }))
+      .filter((postObj) => {
+        const authorId = String(postObj.userId?._id || postObj.userId || '');
+        const authorGroups = authorGroupsMap[authorId] || { friendIds: [], familyMemberIds: [] };
+        return isPostVisibleToViewer(postObj, viewerVariants, authorGroups.friendIds, authorGroups.familyMemberIds);
+      });
+
+    const finalPosts = await enrichPostsWithUserData(visible);
+    const unique = Array.from(new Map(finalPosts.map((p) => [String(p?.id || p?._id || ''), p])).values())
+      .filter((p) => p && (p.id || p._id))
+      .slice(0, limit);
+
+    return res.status(200).json({ success: true, data: unique });
+  } catch (err) {
+    return res.status(200).json({ success: true, data: [] });
+  }
+});
+
 // GET /api/posts/:postId - Get single post detail
 app.get('/api/posts/:postId', async (req, res, next) => {
   try {
