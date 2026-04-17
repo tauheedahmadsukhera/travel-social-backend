@@ -14,12 +14,56 @@ const jwt = require('jsonwebtoken');
 const cloudinary = require('cloudinary').v2;
 const { Server } = require('socket.io');
 const { validateEnv } = require('./config/validateEnv');
+const { Expo } = require('expo-server-sdk');
+
+const expo = new Expo();
 
 // Fail fast on missing env *before* loading modules that read secrets at require-time.
 validateEnv();
 
 const { verifyToken } = require('./middleware/authMiddleware');
 const { resolveUserIdentifiers } = require('./utils/userUtils');
+
+async function sendExpoPushToUser(recipientId, message) {
+  try {
+    if (!recipientId) return { success: false, error: 'missing recipientId' };
+    const User = mongoose.model('User');
+
+    const rid = String(recipientId);
+    const query = {
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(rid) ? new mongoose.Types.ObjectId(rid) : null },
+        { firebaseUid: rid },
+        { uid: rid },
+      ],
+    };
+    const user = await User.findOne(query);
+    const pushToken = user?.pushToken;
+    if (!pushToken || typeof pushToken !== 'string') return { success: false, error: 'no pushToken' };
+    if (!Expo.isExpoPushToken(pushToken)) return { success: false, error: 'invalid Expo pushToken' };
+
+    const msg = {
+      to: pushToken,
+      sound: 'default',
+      priority: 'high',
+      ...message,
+    };
+
+    const chunks = expo.chunkPushNotifications([msg]);
+    for (const chunk of chunks) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await expo.sendPushNotificationsAsync(chunk);
+      } catch (e) {
+        console.warn('[push] Expo send error:', e?.message || e);
+      }
+    }
+    return { success: true };
+  } catch (e) {
+    console.warn('[push] sendExpoPushToUser failed:', e?.message || e);
+    return { success: false, error: e?.message || String(e) };
+  }
+}
 
 // Configure Cloudinary
 cloudinary.config({
@@ -736,10 +780,22 @@ app.delete('/api/posts/:postId', async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Post not found' });
     }
 
-    // 2. Check ownership if currentUserId is provided
-    // Ensure we compare strings as IDs might be ObjectIds or strings
-    if (currentUserId && String(post.userId) !== String(currentUserId)) {
-      return res.status(403).json({ success: false, error: 'Unauthorized: You can only delete your own posts' });
+    // 2. Ownership check (supports Mongo _id <-> firebaseUid mismatches)
+    if (currentUserId) {
+      try {
+        const ownerResolved = await resolveUserIdentifiers(String(post.userId));
+        const actorResolved = await resolveUserIdentifiers(String(currentUserId));
+        const ownerSet = new Set((ownerResolved?.candidates || []).map(String));
+        const isOwner = (actorResolved?.candidates || []).map(String).some((id) => ownerSet.has(id));
+        if (!isOwner) {
+          return res.status(403).json({ success: false, error: 'Unauthorized: You can only delete your own posts' });
+        }
+      } catch {
+        // Fallback to strict comparison
+        if (String(post.userId) !== String(currentUserId)) {
+          return res.status(403).json({ success: false, error: 'Unauthorized: You can only delete your own posts' });
+        }
+      }
     }
 
     // 3. Delete the post
@@ -756,6 +812,55 @@ app.delete('/api/posts/:postId', async (req, res, next) => {
 
     console.log(`✅ [API] Post ${postId} deleted by user ${currentUserId}`);
     res.json({ success: true, message: 'Post deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/posts/:postId - Edit a post (caption/content only)
+app.patch('/api/posts/:postId', async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const { currentUserId, caption, content } = req.body || {};
+
+    if (!postId) return res.status(400).json({ success: false, error: 'Post ID required' });
+    if (!currentUserId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const Post = mongoose.model('Post');
+
+    // 1) Load post
+    let post = null;
+    if (mongoose.Types.ObjectId.isValid(postId)) {
+      post = await Post.findById(postId);
+    }
+    if (!post) {
+      post = await Post.findOne({ id: postId });
+    }
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    // 2) Ownership check (supports Mongo _id <-> firebaseUid mismatches)
+    try {
+      const ownerResolved = await resolveUserIdentifiers(String(post.userId));
+      const actorResolved = await resolveUserIdentifiers(String(currentUserId));
+      const ownerSet = new Set((ownerResolved?.candidates || []).map(String));
+      const isOwner = (actorResolved?.candidates || []).map(String).some((id) => ownerSet.has(id));
+      if (!isOwner) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
+      }
+    } catch {
+      if (String(post.userId) !== String(currentUserId)) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
+      }
+    }
+
+    // 3) Apply edits (keep non-empty string; allow clearing by sending empty string)
+    if (caption !== undefined) post.caption = typeof caption === 'string' ? caption : String(caption || '');
+    if (content !== undefined) post.content = typeof content === 'string' ? content : String(content || '');
+    post.updatedAt = new Date();
+
+    await post.save();
+
+    res.json({ success: true, data: post });
   } catch (err) {
     next(err);
   }
@@ -5050,6 +5155,57 @@ app.post('/api/notifications', verifyToken, async (req, res, next) => {
     notification._id = newNotification._id;
 
     console.log('[POST] /api/notifications - Created:', type, 'for user:', recipientId);
+    
+    // Best-effort push notification (works when app is closed on iOS/Android)
+    try {
+      const t = safeType;
+      const title =
+        t === 'message' || t === 'dm'
+          ? `💌 ${senderName}`
+          : t === 'like'
+            ? '❤️ New Like'
+            : t === 'comment'
+              ? '💬 New Comment'
+              : t === 'follow'
+                ? '👤 New Follower'
+                : t === 'mention'
+                  ? '📢 Mention'
+                  : t === 'tag'
+                    ? '🏷️ Tagged'
+                    : t === 'passport'
+                      ? '✈️ Passport'
+                      : 'Notification';
+
+      const body =
+        t === 'like'
+          ? `${senderName} liked your post`
+          : t === 'comment'
+            ? `${senderName} commented on your post`
+            : t === 'follow'
+              ? `${senderName} started following you`
+              : t === 'message' || t === 'dm'
+                ? 'Sent you a message'
+                : safeMessage || 'You have a new notification';
+
+      const data = {
+        type: t,
+        senderId: String(senderId),
+        recipientId: String(recipientId),
+        postId: notification.postId,
+        commentId: notification.commentId,
+        storyId: notification.storyId,
+        streamId: notification.streamId,
+        conversationId: notification.conversationId,
+        // Optional explicit screen hint for legacy passport nav
+        screen: t === 'passport' || t === 'passport_suggestion' ? 'passport' : undefined,
+      };
+
+      // Don't block the API response if Expo push is down
+      sendExpoPushToUser(recipientId, { title, body, data }).catch(() => {});
+    } catch (e) {
+      console.warn('[push] Skipped push for notification:', e?.message || e);
+    }
+
     res.status(201).json({ success: true, data: notification });
   } catch (err) {
     next(err);
@@ -5237,6 +5393,28 @@ io.on('connection', (socket) => {
 
           // Notify sender of delivery
           socket.emit('messageDelivered', { messageId: message.id, conversationId: actualConversationId });
+        } else {
+          // Recipient offline: send push notification
+          try {
+            const User = mongoose.model('User');
+            const senderUser = mongoose.Types.ObjectId.isValid(String(senderId))
+              ? await User.findOne({ _id: toObjectId(senderId) })
+              : null;
+            const senderName = senderUser?.displayName || senderUser?.name || 'Someone';
+            const preview = typeof text === 'string' ? text.trim().slice(0, 120) : 'Sent you a message';
+            sendExpoPushToUser(recipientId, {
+              title: `💌 ${senderName}`,
+              body: preview || 'Sent you a message',
+              data: {
+                type: 'message',
+                senderId: String(senderId),
+                recipientId: String(recipientId),
+                conversationId: String(actualConversationId),
+              },
+            }).catch(() => {});
+          } catch (e) {
+            console.warn('[push] message push skipped:', e?.message || e);
+          }
         }
 
         console.log('✅ Message saved and emitted to rooms:', {
@@ -5351,6 +5529,38 @@ io.on('connection', (socket) => {
 
         // Emit to sender's personal room
         io.to(`user_${senderId}`).emit('newMediaMessage', { ...message, conversationId: actualConversationId });
+
+        // Recipient offline: send push notification
+        try {
+          const recipientSocketId = connectedUsers.get(recipientId);
+          if (!recipientSocketId) {
+            const User = mongoose.model('User');
+            const senderUser = mongoose.Types.ObjectId.isValid(String(senderId))
+              ? await User.findOne({ _id: toObjectId(senderId) })
+              : null;
+            const senderName = senderUser?.displayName || senderUser?.name || 'Someone';
+            const kind = String(mediaType || '').toLowerCase();
+            const body =
+              kind === 'audio'
+                ? 'Sent you a voice message'
+                : kind === 'video'
+                  ? 'Sent you a video'
+                  : 'Sent you a photo';
+
+            sendExpoPushToUser(recipientId, {
+              title: `💌 ${senderName}`,
+              body,
+              data: {
+                type: 'message',
+                senderId: String(senderId),
+                recipientId: String(recipientId),
+                conversationId: String(actualConversationId),
+              },
+            }).catch(() => {});
+          }
+        } catch (e) {
+          console.warn('[push] media message push skipped:', e?.message || e);
+        }
 
         console.log('✅ Media message saved:', mediaType);
       }

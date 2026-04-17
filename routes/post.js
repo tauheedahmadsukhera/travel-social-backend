@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Post = require('../models/Post');
+const { resolveUserIdentifiers } = require('../src/utils/userUtils');
 
 function resolvePostQuery(postId) {
   const or = [{ id: String(postId) }];
@@ -119,6 +120,44 @@ router.post('/:postId/react', async (req, res) => {
     }
 
     post.markModified('reactions');
+    await post.save();
+    return res.json({ success: true, data: post });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PATCH /api/posts/:postId - Edit caption/content (owner-only)
+router.patch('/:postId', async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { currentUserId, caption, content } = req.body || {};
+
+    if (!postId) return res.status(400).json({ success: false, error: 'Post ID required' });
+    if (!currentUserId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const post = await Post.findOne(resolvePostQuery(postId));
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    // Ownership check with id resolution
+    try {
+      const ownerResolved = await resolveUserIdentifiers(String(post.userId));
+      const actorResolved = await resolveUserIdentifiers(String(currentUserId));
+      const ownerSet = new Set((ownerResolved?.candidates || []).map(String));
+      const isOwner = (actorResolved?.candidates || []).map(String).some((id) => ownerSet.has(id));
+      if (!isOwner) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
+      }
+    } catch {
+      if (String(post.userId) !== String(currentUserId)) {
+        return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
+      }
+    }
+
+    if (caption !== undefined) post.caption = typeof caption === 'string' ? caption : String(caption || '');
+    if (content !== undefined) post.content = typeof content === 'string' ? content : String(content || '');
+    post.updatedAt = new Date();
+
     await post.save();
     return res.json({ success: true, data: post });
   } catch (err) {

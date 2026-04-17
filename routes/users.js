@@ -169,6 +169,17 @@ router.get('/:userId', async (req, res) => {
       
       const userObj = user;
 
+      // If displayName is missing/placeholder, derive a readable one from email.
+      // This avoids showing "User" in inbox for accounts that never set a name.
+      try {
+        const dn = typeof userObj.displayName === 'string' ? userObj.displayName.trim() : '';
+        const isPlaceholder = !dn || dn.toLowerCase() === 'user' || dn.toLowerCase() === 'unknown';
+        const email = typeof userObj.email === 'string' ? userObj.email.trim() : '';
+        if (isPlaceholder && email && email.includes('@')) {
+          userObj.displayName = email.split('@')[0] || userObj.displayName;
+        }
+      } catch { }
+
       // Check if profile is private
       if (userObj.isPrivate && requesterUserId) {
         const targetResolved = await resolveUserIdentifiers(userId);
@@ -914,7 +925,7 @@ router.delete('/:userId/sections/:sectionId', async (req, res) => {
           _id: { $ne: section._id }
         }).select('postIds');
 
-        const retainedPostIds = new Set<string>();
+        const retainedPostIds = new Set();
         remainingSections.forEach((s) => {
           const ids = Array.isArray(s.postIds) ? s.postIds : [];
           ids.forEach((id) => retainedPostIds.add(String(id)));
