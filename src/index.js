@@ -107,7 +107,8 @@ if (!mongoose.models.Message) {
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
-const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || '80mb';
+// JSON body cap: large base64 uploads can OOM small hosts; override with REQUEST_BODY_LIMIT if needed.
+const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || (isProduction ? '12mb' : '80mb');
 const JWT_SECRET = process.env.JWT_SECRET;
 const ENABLE_POSTS_DEBUG_LOGS = process.env.ENABLE_POSTS_DEBUG_LOGS === 'true';
 const ENABLE_NOTIFICATION_ROUTE_LOGS = process.env.ENABLE_NOTIFICATION_ROUTE_LOGS === 'true';
@@ -389,7 +390,9 @@ if (mongoUri) {
   mongoose.connect(mongoUri, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 15000 // Give it 15 seconds
+    serverSelectionTimeoutMS: 15000, // Give it 15 seconds
+    maxPoolSize: Math.min(50, Math.max(5, parseInt(String(process.env.MONGO_MAX_POOL_SIZE || '20'), 10) || 20)),
+    minPoolSize: 0,
   })
     .then(() => {
       console.log('✅ MongoDB connected');
@@ -724,6 +727,7 @@ app.get('/api/posts/recommended', async (req, res) => {
       const ids = (Array.isArray(sampled) ? sampled : []).map((p) => String(p?._id || '')).filter(Boolean);
       if (ids.length === 0) return [];
       const docs = await PostModel.find({ _id: { $in: ids } })
+        .select('-comments')
         .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate followers')
         .lean()
         .catch(() => []);
@@ -743,7 +747,9 @@ app.get('/api/posts/recommended', async (req, res) => {
     const authorGroupsMap = {};
     if (authorIds.length > 0) {
       try {
-        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } });
+        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } })
+          .select('userId type members')
+          .lean();
         for (const g of allAuthorGroups) {
           if (!authorGroupsMap[g.userId]) authorGroupsMap[g.userId] = { friendIds: [], familyMemberIds: [] };
           if (g.type === 'friends') authorGroupsMap[g.userId].friendIds = [...authorGroupsMap[g.userId].friendIds, ...g.members];
@@ -1195,7 +1201,9 @@ app.get('/api/posts', async (req, res, next) => {
     let familyMemberIds = [];
     if (viewerVariants.length > 0) {
       try {
-        const viewerGroups = await Group.find({ userId: { $in: viewerVariants } });
+        const viewerGroups = await Group.find({ userId: { $in: viewerVariants } })
+          .select('userId type members')
+          .lean();
         for (const g of viewerGroups) {
           if (g.type === 'friends') friendIds = [...friendIds, ...g.members];
           if (g.type === 'family') familyMemberIds = [...familyMemberIds, ...g.members];
@@ -1210,11 +1218,15 @@ app.get('/api/posts', async (req, res, next) => {
       ? { $or: [ { isPrivate: { $ne: true } }, { userId: { $in: viewerVariants } }, { allowedFollowers: { $in: viewerVariants } } ] }
       : { isPrivate: { $ne: true } };
 
+    const skipN = Math.max(0, parseInt(String(skip), 10) || 0);
+    const limitN = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 50));
     const posts = await mongoose.model('Post').find(baseQuery)
       .sort({ createdAt: -1 })
-      .skip(parseInt(skip))
-      .limit(parseInt(limit))
+      .skip(skipN)
+      .limit(limitN)
+      .select('-comments')
       .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate followers')
+      .lean()
       .catch(() => []);
 
     // For each post, fetch the author's groups to check if viewer is in them
@@ -1228,7 +1240,9 @@ app.get('/api/posts', async (req, res, next) => {
     const authorGroupsMap = {};
     if (authorIds.length > 0) {
       try {
-        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } });
+        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } })
+          .select('userId type members')
+          .lean();
         for (const g of allAuthorGroups) {
           if (!authorGroupsMap[g.userId]) authorGroupsMap[g.userId] = { friendIds: [], familyMemberIds: [] };
           if (g.type === 'friends') authorGroupsMap[g.userId].friendIds = [...authorGroupsMap[g.userId].friendIds, ...g.members];
@@ -1302,7 +1316,9 @@ app.get('/api/posts/feed', async (req, res, next) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('userId', 'displayName name avatar profilePicture photoURL');
+      .select('-comments')
+      .populate('userId', 'displayName name avatar profilePicture photoURL')
+      .lean();
 
     const authorIds = [...new Set(posts.map(p => {
       const obj = p.toObject ? p.toObject() : p;
@@ -1312,7 +1328,9 @@ app.get('/api/posts/feed', async (req, res, next) => {
     const authorGroupsMap = {};
     if (authorIds.length > 0) {
       try {
-        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } });
+        const allAuthorGroups = await Group.find({ userId: { $in: authorIds } })
+          .select('userId type members')
+          .lean();
         for (const g of allAuthorGroups) {
           if (!authorGroupsMap[g.userId]) authorGroupsMap[g.userId] = { friendIds: [], familyMemberIds: [] };
           if (g.type === 'friends') authorGroupsMap[g.userId].friendIds = [...authorGroupsMap[g.userId].friendIds, ...g.members];
@@ -5384,297 +5402,25 @@ console.log('✅ 404 handler registered');
 // ============= ERROR HANDLING =============
 app.use((err, req, res, next) => {
   console.error('Error:', err);
+  if (err.name === 'MongooseError' || String(err.message || '').includes('buffering timed out')) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database operation timed out. This is usually due to an IP whitelist issue in MongoDB Atlas.',
+      details: err.message,
+    });
+  }
   res.status(500).json({
     success: false,
     error: err.message || 'Internal server error',
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 });
 
 console.log('✅ Error handler registered');
 
-// ============= SOCKET.IO EVENT HANDLERS =============
-// Store connected users: { userId: socketId }
-const connectedUsers = new Map();
+const { registerMessagingSocket } = require('./socket/registerMessagingSocket');
+registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser });
 
-io.on('connection', (socket) => {
-  console.log('🔌 Socket connected:', socket.id);
-
-  // User joins with their userId
-  socket.on('join', (userId) => {
-    if (userId) {
-      connectedUsers.set(userId, socket.id);
-      socket.userId = userId;
-
-      // Join user's personal room
-      socket.join(`user_${userId}`);
-
-      console.log(`👤 User ${userId} joined with socket ${socket.id}`);
-
-      // Notify user they're connected
-      socket.emit('connected', { userId, socketId: socket.id });
-    }
-  });
-
-  // User subscribes to a conversation
-  socket.on('subscribeToConversation', (conversationId) => {
-    if (conversationId) {
-      socket.join(conversationId);
-      console.log(`📬 Socket ${socket.id} subscribed to conversation: ${conversationId}`);
-    }
-  });
-
-  // User unsubscribes from a conversation
-  socket.on('unsubscribeFromConversation', (conversationId) => {
-    if (conversationId) {
-      socket.leave(conversationId);
-      console.log(`📭 Socket ${socket.id} unsubscribed from conversation: ${conversationId}`);
-    }
-  });
-
-  // Send message event
-  socket.on('sendMessage', async (data) => {
-    try {
-      const { conversationId, senderId, recipientId, text, timestamp } = data;
-      console.log('📨 Message received:', { conversationId, senderId, recipientId, text: text?.substring(0, 30) });
-
-      // Save message to database
-      const Conversation = mongoose.model('Conversation');
-      const convo = await Conversation.findOne({
-        $or: [
-          { conversationId: conversationId },
-          { _id: mongoose.Types.ObjectId.isValid(conversationId) ? new mongoose.Types.ObjectId(conversationId) : null }
-        ]
-      });
-
-      if (convo) {
-        const message = {
-          id: new mongoose.Types.ObjectId().toString(),
-          senderId,
-          recipientId,
-          text,
-          timestamp: timestamp || new Date(),
-          read: false,
-          delivered: false
-        };
-
-        convo.messages.push(message);
-        convo.lastMessage = text;
-        convo.lastMessageAt = new Date();
-        await convo.save();
-
-        // Use the actual conversationId from database
-        const actualConversationId = convo.conversationId;
-
-        // Emit to sender (confirmation)
-        socket.emit('messageSent', { ...message, conversationId: actualConversationId });
-
-        // Emit to conversation room (all subscribers)
-        io.to(actualConversationId).emit('newMessage', { ...message, conversationId: actualConversationId });
-
-        // Emit to recipient's personal room
-        io.to(`user_${recipientId}`).emit('newMessage', { ...message, conversationId: actualConversationId });
-
-        // Emit to sender's personal room (for multi-device sync)
-        io.to(`user_${senderId}`).emit('newMessage', { ...message, conversationId: actualConversationId });
-
-        // Check if recipient is online for delivery status
-        const recipientSocketId = connectedUsers.get(recipientId);
-        if (recipientSocketId) {
-          // Mark as delivered
-          message.delivered = true;
-          await convo.save();
-
-          // Notify sender of delivery
-          socket.emit('messageDelivered', { messageId: message.id, conversationId: actualConversationId });
-        } else {
-          // Recipient offline: send push notification
-          try {
-            const User = mongoose.model('User');
-            const senderUser = mongoose.Types.ObjectId.isValid(String(senderId))
-              ? await User.findOne({ _id: toObjectId(senderId) })
-              : null;
-            const senderName = senderUser?.displayName || senderUser?.name || 'Someone';
-            const preview = typeof text === 'string' ? text.trim().slice(0, 120) : 'Sent you a message';
-            sendExpoPushToUser(recipientId, {
-              title: `💌 ${senderName}`,
-              body: preview || 'Sent you a message',
-              data: {
-                type: 'message',
-                senderId: String(senderId),
-                recipientId: String(recipientId),
-                conversationId: String(actualConversationId),
-              },
-            }).catch(() => {});
-          } catch (e) {
-            console.warn('[push] message push skipped:', e?.message || e);
-          }
-        }
-
-        console.log('✅ Message saved and emitted to rooms:', {
-          conversationRoom: actualConversationId,
-          recipientRoom: `user_${recipientId}`,
-          senderRoom: `user_${senderId}`
-        });
-      }
-    } catch (error) {
-      console.error('❌ Error handling sendMessage:', error);
-      socket.emit('messageError', { error: error.message });
-    }
-  });
-
-  // Mark message as read
-  socket.on('markAsRead', async (data) => {
-    try {
-      const { conversationId, messageId, userId } = data;
-      console.log('👁️ Mark as read:', { conversationId, messageId, userId });
-
-      const Conversation = mongoose.model('Conversation');
-      const convo = await Conversation.findOne({
-        $or: [
-          { conversationId: conversationId },
-          { _id: mongoose.Types.ObjectId.isValid(conversationId) ? new mongoose.Types.ObjectId(conversationId) : null }
-        ]
-      });
-
-      if (convo) {
-        const message = convo.messages.find(m => m.id === messageId);
-        if (message && message.recipientId === userId) {
-          message.read = true;
-          await convo.save();
-
-          // Notify sender
-          const senderSocketId = connectedUsers.get(message.senderId);
-          if (senderSocketId) {
-            io.to(senderSocketId).emit('messageRead', { messageId, conversationId });
-          }
-
-          console.log('✅ Message marked as read');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error marking message as read:', error);
-    }
-  });
-
-  // User typing indicator
-  socket.on('typing', (data) => {
-    const { conversationId, userId, recipientId } = data;
-    const recipientSocketId = connectedUsers.get(recipientId);
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit('userTyping', { conversationId, userId });
-    }
-  });
-
-  socket.on('stopTyping', (data) => {
-    const { conversationId, userId, recipientId } = data;
-    const recipientSocketId = connectedUsers.get(recipientId);
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit('userStoppedTyping', { conversationId, userId });
-    }
-  });
-
-  // Send media message (image, video, audio)
-  socket.on('sendMediaMessage', async (data) => {
-    try {
-      const { conversationId, senderId, recipientId, mediaUrl, mediaType, audioUrl, audioDuration, text, thumbnailUrl, tempId } = data;
-      console.log('📸 Media message received:', { conversationId, senderId, mediaType: mediaType?.substring(0, 5) });
-
-      const Conversation = mongoose.model('Conversation');
-      const convo = await Conversation.findOne({
-        $or: [
-          { conversationId: conversationId },
-          { _id: mongoose.Types.ObjectId.isValid(conversationId) ? new mongoose.Types.ObjectId(conversationId) : null }
-        ]
-      });
-
-      if (convo) {
-        const message = {
-          id: new mongoose.Types.ObjectId().toString(),
-          senderId,
-          recipientId,
-          text: text || '',
-          mediaType,
-          mediaUrl,
-          audioUrl,
-          audioDuration,
-          thumbnailUrl,
-          timestamp: new Date(),
-          read: false,
-          delivered: false,
-          readBy: [senderId],
-          tempId
-        };
-
-        convo.messages.push(message);
-        convo.lastMessage = `[${mediaType?.toUpperCase()}]`;
-        convo.lastMessageAt = new Date();
-        await convo.save();
-
-        const actualConversationId = convo.conversationId;
-
-        // Emit to conversation room
-        io.to(actualConversationId).emit('newMediaMessage', { ...message, conversationId: actualConversationId });
-
-        // Emit to recipient's personal room
-        if (recipientId) {
-          io.to(`user_${recipientId}`).emit('newMediaMessage', { ...message, conversationId: actualConversationId });
-        }
-
-        // Emit to sender's personal room
-        io.to(`user_${senderId}`).emit('newMediaMessage', { ...message, conversationId: actualConversationId });
-
-        // Recipient offline: send push notification
-        try {
-          const recipientSocketId = connectedUsers.get(recipientId);
-          if (!recipientSocketId) {
-            const User = mongoose.model('User');
-            const senderUser = mongoose.Types.ObjectId.isValid(String(senderId))
-              ? await User.findOne({ _id: toObjectId(senderId) })
-              : null;
-            const senderName = senderUser?.displayName || senderUser?.name || 'Someone';
-            const kind = String(mediaType || '').toLowerCase();
-            const body =
-              kind === 'audio'
-                ? 'Sent you a voice message'
-                : kind === 'video'
-                  ? 'Sent you a video'
-                  : 'Sent you a photo';
-
-            sendExpoPushToUser(recipientId, {
-              title: `💌 ${senderName}`,
-              body,
-              data: {
-                type: 'message',
-                senderId: String(senderId),
-                recipientId: String(recipientId),
-                conversationId: String(actualConversationId),
-              },
-            }).catch(() => {});
-          }
-        } catch (e) {
-          console.warn('[push] media message push skipped:', e?.message || e);
-        }
-
-        console.log('✅ Media message saved:', mediaType);
-      }
-    } catch (error) {
-      console.error('❌ Error handling sendMediaMessage:', error);
-      socket.emit('messageError', { error: error.message });
-    }
-  });
-
-  // Disconnect
-  socket.on('disconnect', () => {
-    if (socket.userId) {
-      connectedUsers.delete(socket.userId);
-      console.log(`👋 User ${socket.userId} disconnected`);
-    }
-    console.log('🔌 Socket disconnected:', socket.id);
-  });
-});
-
-console.log('✅ Socket.IO event handlers registered');
 
 console.log('🚀 STARTING SERVER - PORT:', PORT, typeof PORT);
 console.log('🚀 STARTING SERVER - Type of PORT:', typeof PORT);
@@ -5694,27 +5440,6 @@ try {
 } catch (err) {
   console.error('❌ Failed to start server:', err.message);
 }
-
-console.log('✅ Server startup code executed');
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(`❌ [ERROR] ${req.method} ${req.path}:`, err);
-
-  if (err.name === 'MongooseError' || err.message.includes('buffering timed out')) {
-    return res.status(503).json({
-      success: false,
-      error: 'Database operation timed out. This is usually due to an IP whitelist issue in MongoDB Atlas.',
-      details: err.message
-    });
-  }
-
-  res.status(500).json({
-    success: false,
-    error: 'Internal Server Error',
-    message: err.message
-  });
-});
 
 module.exports = app;
 

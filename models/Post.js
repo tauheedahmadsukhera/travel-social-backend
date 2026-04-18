@@ -40,4 +40,9 @@ const PostSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
+// Feed / discovery: sort by createdAt + privacy filters hit these paths constantly.
+PostSchema.index({ createdAt: -1 });
+PostSchema.index({ isPrivate: 1, createdAt: -1 });
+PostSchema.index({ userId: 1, createdAt: -1 });
+
 module.exports = mongoose.models.Post || mongoose.model('Post', PostSchema);

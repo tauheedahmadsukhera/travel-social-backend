@@ -48,6 +48,8 @@ build/
 *.tmp
 .temp/
 tmp_*.js
+# Ad-hoc migration/binary blobs accidentally dropped under src/
+src/tmp_*
 audit_*.js
 check_*.js
 debug_*.js
