@@ -1,16 +1,19 @@
 {
-  "name": "trave-social",
+  "name": "trips",
   "main": "index.js",
   "version": "1.0.7",
   "scripts": {
     "postinstall": "node scripts/fixAndroidManifest.js && node scripts/fixZegoIosFramework.js && npx patch-package",
-    "eas-build-post-install": "node scripts/fixAndroidManifest.js && node scripts/fixZegoIosFramework.js && npx patch-package && node scripts/verifyPatches.js",
+    "eas-build-post-install": "node scripts/cleanAndroidAutolinking.js && node scripts/fixAndroidManifest.js && node scripts/fixZegoIosFramework.js && npx patch-package && node scripts/verifyPatches.js && node scripts/generate-trips-png-assets.mjs",
+    "gen:cards": "node scripts/generateSearchCardAssets.js",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint",
+    "lint": "eslint app hooks lib src components config services utils types",
+    "lint:expo": "expo lint",
+    "lint:all": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -20,7 +23,8 @@
     "get-sha1": "node scripts/getAndroidSHA1.js",
     "fix-dev-build": "node scripts/fixDevBuild.js",
     "verify:patches": "node scripts/verifyPatches.js",
-    "validate:prod": "node scripts/validateProductionEnv.js"
+    "validate:prod": "node scripts/validateProductionEnv.js",
+    "assets:trips-png": "node scripts/generate-trips-png-assets.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "~14.0.4",
@@ -119,6 +123,7 @@
     "prettier": "^3.2.5",
     "react-native-dotenv": "^3.4.11",
     "react-test-renderer": "18.3.1",
+    "sharp": "^0.33.5",
     "tsx": "^4.21.0",
     "typescript": "~5.3.3"
   },
