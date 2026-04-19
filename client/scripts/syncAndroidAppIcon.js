@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Regenerates Android launcher mipmaps + splash logos from assets/images/icon.png
- * (matches app.json "icon"). Run after changing the source icon.
+ * Regenerates Android launcher mipmaps from assets/images/icon.png,
+ * and splash drawables from assets/images/splashscreenlogo.png (matches expo-splash-screen image).
  */
 const fs = require('fs');
 const path = require('path');
@@ -16,8 +16,13 @@ try {
 
 const root = path.join(__dirname, '..');
 const srcIcon = path.join(root, 'assets', 'images', 'icon.png');
+const srcSplashLogo = path.join(root, 'assets', 'images', 'splashscreenlogo.png');
 if (!fs.existsSync(srcIcon)) {
   console.error('Missing', srcIcon);
+  process.exit(1);
+}
+if (!fs.existsSync(srcSplashLogo)) {
+  console.error('Missing', srcSplashLogo);
   process.exit(1);
 }
 
@@ -30,16 +35,18 @@ const SPLASH = { mdpi: 124, hdpi: 186, xhdpi: 248, xxhdpi: 372, xxxhdpi: 496 };
 
 const densities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
 
+const ICON_BG = { r: 255, g: 255, b: 255, alpha: 1 };
+
 async function writeWebp(size, outPath) {
   const buf = await sharp(srcIcon)
-    .resize(size, size, { fit: 'cover', position: 'centre' })
+    .resize(size, size, { fit: 'contain', position: 'centre', background: ICON_BG })
     .webp({ quality: 90 })
     .toBuffer();
   fs.writeFileSync(outPath, buf);
 }
 
 async function writeSplash(width, outPath) {
-  const buf = await sharp(srcIcon)
+  const buf = await sharp(srcSplashLogo)
     .resize(width, width, {
       fit: 'contain',
       position: 'centre',
@@ -52,7 +59,7 @@ async function writeSplash(width, outPath) {
 
 async function writeMonochrome(size, outPath) {
   const buf = await sharp(srcIcon)
-    .resize(size, size, { fit: 'cover', position: 'centre' })
+    .resize(size, size, { fit: 'contain', position: 'centre', background: ICON_BG })
     .grayscale()
     .webp({ quality: 90 })
     .toBuffer();
@@ -80,7 +87,7 @@ async function main() {
     console.log('drawable-' + d, 'splash ok');
   }
 
-  console.log('\nDone: launcher + splash logos synced from assets/images/icon.png\n');
+  console.log('\nDone: launcher from icon.png; splash drawables from splashscreenlogo.png\n');
 }
 
 main().catch((e) => {

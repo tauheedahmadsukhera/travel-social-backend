@@ -53,21 +53,21 @@ export function AuthBrandHeader({
 const styles = StyleSheet.create({
   welcomeOuter: {
     alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 20,
+    marginTop: 56,
+    marginBottom: 10,
   },
   defaultOuter: {
     alignItems: 'center',
   },
   markWrap: {
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: '#000',
-    marginBottom: 10,
+    marginBottom: 6,
     textAlign: 'center',
     paddingHorizontal: 8,
   },

@@ -12,7 +12,8 @@ type Size = 'sm' | 'md' | 'lg';
 const SIZES: Record<Size, { text: number; icon: number }> = {
   sm: { text: 22, icon: 34 },
   md: { text: 28, icon: 44 },
-  lg: { text: 36, icon: 52 },
+  /** Auth hero: slightly larger mark than before, paired with tighter header spacing. */
+  lg: { text: 40, icon: 64 },
 };
 
 /** Top tab bar: icon + wordmark sized as a pair (icon cap-height ≈ text line). */
