@@ -20,12 +20,13 @@ const SIZES: Record<Size, { text: number; icon: number }> = {
 const TAB_BAR = {
   icon: 36,
   text: 20,
-  textMarginLeft: 0,
+  // Reduce icon ↔ text gap (iOS looks wider by default)
+  textMarginLeft: -2,
   letter: -0.45,
   weight: '800' as const,
 };
 
-const DEFAULT_TEXT_TIGHTEN = 0;
+const DEFAULT_TEXT_TIGHTEN = -2;
 
 type Props = {
   /** Optional remote logo from `/branding`; otherwise bundled Trips mark is used. */
@@ -109,7 +110,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 1,
+    gap: 0,
   },
   rowTextOnly: {
     gap: 0,
