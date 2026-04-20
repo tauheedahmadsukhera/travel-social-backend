@@ -26,8 +26,8 @@ export function AuthBrandHeader({
   return (
     <View style={[variant === 'welcome' ? styles.welcomeOuter : styles.defaultOuter, style]}>
       <View style={styles.markWrap}>
-        {/* `logo-trips-mark.png` is treated as the full brand lockup (icon + Trips). */}
-        <AppBrandMark size="lg" iconAsset="mark" showWordmark={false} />
+        {/* Brand lockup: icon + Trips text (rendered as Text for crispness). */}
+        <AppBrandMark size="lg" iconAsset="app" showWordmark iconSize={78} />
       </View>
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}

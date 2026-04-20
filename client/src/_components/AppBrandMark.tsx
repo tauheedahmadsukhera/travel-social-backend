@@ -18,8 +18,8 @@ const SIZES: Record<Size, { text: number; icon: number }> = {
 
 /** Top tab bar: icon + wordmark sized as a pair (icon cap-height ≈ text line). */
 const TAB_BAR = {
-  icon: 32,
-  text: 19,
+  icon: 36,
+  text: 20,
   textMarginLeft: 0,
   letter: -0.45,
   weight: '800' as const,

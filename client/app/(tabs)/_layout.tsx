@@ -733,8 +733,8 @@ function TopMenu({ setMenuVisible, setGroupsDrawerVisible }: { setMenuVisible: (
         >
           <AppBrandMark
             size="sm"
-            showWordmark={false}
-            iconAsset="mark"
+            showWordmark
+            iconAsset="app"
             variant="tabBar"
           />
         </TouchableOpacity>
