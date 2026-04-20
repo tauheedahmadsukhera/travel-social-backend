@@ -8,7 +8,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Keyboard, Modal, PanResponder, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@/src/_components/UserContext';
 import VerifiedBadge from '@/src/_components/VerifiedBadge';
@@ -190,6 +190,23 @@ export default function CreatePostScreen() {
   const [showVerifiedModal, setShowVerifiedModal] = useState<boolean>(false);
   const [showTagModal, setShowTagModal] = useState<boolean>(false);
   const [showVisibilityModal, setShowVisibilityModal] = useState<boolean>(false);
+  const closeVerifiedModal = useCallback(() => {
+    Keyboard.dismiss();
+    setShowVerifiedModal(false);
+  }, []);
+
+  const verifiedSheetPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: () => {},
+      onPanResponderRelease: (_, g) => {
+        if (g.vy > 0.6 || g.dy > 90) {
+          closeVerifiedModal();
+        }
+      },
+    })
+  ).current;
 
   // Gallery
   const [galleryAssets, setGalleryAssets] = useState<GalleryAsset[]>([]);
@@ -1657,9 +1674,17 @@ export default function CreatePostScreen() {
               </View>
             </Modal>
         {/* Verified Location Modal */}
-        <Modal visible={showVerifiedModal} animationType="slide" transparent onRequestClose={() => setShowVerifiedModal(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-            <View style={{
+        <Modal visible={showVerifiedModal} animationType="slide" transparent onRequestClose={closeVerifiedModal}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={getKeyboardOffset()}
+          >
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} onPress={closeVerifiedModal}>
+              <TouchableWithoutFeedback>
+                <View
+                  {...verifiedSheetPan.panHandlers}
+                  style={{
               backgroundColor: '#fff',
               borderTopLeftRadius: 32,
               borderTopRightRadius: 32,
@@ -1667,7 +1692,8 @@ export default function CreatePostScreen() {
               paddingTop: 16,
               paddingBottom: 32,
               height: getModalHeight(0.70)
-            }}>
+                  }}
+                >
                   {/* Handle bar */}
                   <View style={{ width: 40, height: 4, backgroundColor: '#e0e0e0', borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
@@ -1691,7 +1717,12 @@ export default function CreatePostScreen() {
                     />
                   </View>
 
-                  <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 28 }}
+                  >
                     <Text style={{ fontWeight: '700', fontSize: 14, color: '#111', marginBottom: 8 }}>Nearby (100m)</Text>
                     {verifiedCenter ? null : (
                       <Text style={{ color: '#888', marginBottom: 12, textAlign: 'center' }}>Enable location permission to see nearby verified places.</Text>
@@ -1763,7 +1794,7 @@ export default function CreatePostScreen() {
                     <TouchableOpacity
                       onPress={() => {
                         hapticLight();
-                        setShowVerifiedModal(false);
+                        closeVerifiedModal();
                       }}
                     >
                       <Text style={{ color: '#111', fontWeight: '700', fontSize: 15 }}>Cancel</Text>
@@ -1772,7 +1803,7 @@ export default function CreatePostScreen() {
                       <TouchableOpacity
                         onPress={() => {
                           hapticLight();
-                          setShowVerifiedModal(false);
+                          closeVerifiedModal();
                         }}
                         style={{ backgroundColor: '#000', borderRadius: 6, paddingHorizontal: 20, paddingVertical: 10 }}
                       >
@@ -1781,7 +1812,7 @@ export default function CreatePostScreen() {
                       <TouchableOpacity
                         onPress={() => {
                           hapticLight();
-                          setShowVerifiedModal(false);
+                          closeVerifiedModal();
                         }}
                         style={{ backgroundColor: '#0A3D62', borderRadius: 6, paddingHorizontal: 20, paddingVertical: 10 }}
                       >
@@ -1790,8 +1821,10 @@ export default function CreatePostScreen() {
                     </View>
                   </View>
                 </View>
-              </View>
-            </Modal>
+              </TouchableWithoutFeedback>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Modal>
         {/* Tag People Modal */}
         <Modal visible={showTagModal} animationType="slide" transparent onRequestClose={() => setShowTagModal(false)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
