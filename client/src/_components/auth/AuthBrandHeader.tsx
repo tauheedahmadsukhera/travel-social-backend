@@ -23,12 +23,14 @@ export function AuthBrandHeader({
   children,
   style,
 }: AuthBrandHeaderProps) {
+  const resolvedTitle = title ?? 'Trips';
   return (
     <View style={[variant === 'welcome' ? styles.welcomeOuter : styles.defaultOuter, style]}>
       <View style={styles.markWrap}>
-        <AppBrandMark size="lg" iconAsset="mark" />
+        {/* Render only the mark here; title is rendered as text below to avoid double-wordmark glitches on iOS. */}
+        <AppBrandMark size="lg" iconAsset="mark" showWordmark={false} />
       </View>
-      {title ? <Text style={styles.title}>{title}</Text> : null}
+      {resolvedTitle ? <Text style={styles.title}>{resolvedTitle}</Text> : null}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {children}
     </View>

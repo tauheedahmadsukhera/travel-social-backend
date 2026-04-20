@@ -400,6 +400,10 @@ const styles = StyleSheet.create({
     top: 44,
     right: 18,
     zIndex: 60,
+    elevation: 60,
+    padding: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   mediaModalMedia: {
     width: '100%',
@@ -928,10 +932,30 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
     });
   }, [modalMediaIndex]);
 
+  const prefetchDetailAround = useCallback((centerIdx: number) => {
+    try {
+      if (!showImages || images.length === 0) return;
+      const window = 2;
+      const candidates: (string | null)[] = [];
+      for (let d = -window; d <= window; d++) {
+        const idx = Math.max(0, Math.min(images.length - 1, centerIdx + d));
+        const raw = images[idx];
+        if (typeof raw !== 'string' || !raw) continue;
+        candidates.push(getOptimizedImageUrl(raw, 'detail'));
+      }
+      const uris = candidates.filter(Boolean) as string[];
+      if (uris.length > 0) {
+        ExpoImage.prefetch(uris);
+      }
+    } catch {}
+  }, [showImages, images]);
+
   const openMediaModal = useCallback(() => {
+    // Warm up detail-sized images before opening the viewer to reduce perceived lag.
+    prefetchDetailAround(mediaIndex);
     setModalMediaIndex(mediaIndex);
     setShowMediaModal(true);
-  }, [mediaIndex]);
+  }, [mediaIndex, prefetchDetailAround]);
 
   const imageTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastImageTapRef = useRef(0);
@@ -2190,36 +2214,6 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
             onPress={closeMediaModal}
           />
 
-          {showImages && images.length > 1 && (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                bottom: 52,
-                right: 12,
-                zIndex: 999,
-                elevation: 40,
-                backgroundColor: 'rgba(0,0,0,0.55)',
-                borderRadius: 12,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>
-                {modalMediaIndex + 1}/{images.length}
-              </Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.mediaModalClose}
-            onPress={closeMediaModal}
-            accessibilityRole="button"
-            accessibilityLabel="Close media"
-          >
-            <Feather name="x" size={22} color="#fff" />
-          </TouchableOpacity>
-
           {showImages && images.length > 0 ? (
             <View style={styles.mediaModalMedia} {...modalPanResponder.panHandlers}>
               {images.length === 1 ? (
@@ -2305,6 +2299,37 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
               />
             )
           ) : null}
+
+          {showImages && images.length > 1 && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                bottom: 52,
+                right: 12,
+                zIndex: 999,
+                elevation: 40,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                borderRadius: 12,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>
+                {modalMediaIndex + 1}/{images.length}
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.mediaModalClose}
+            onPress={closeMediaModal}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close media"
+          >
+            <Feather name="x" size={22} color="#fff" />
+          </TouchableOpacity>
         </View>
       </Modal>
 
