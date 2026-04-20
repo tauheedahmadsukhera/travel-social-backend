@@ -1476,8 +1476,6 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
       <View style={styles.cardShadow}>
         <View
           style={[styles.cardInner, { backgroundColor: appColors.background }]}
-          renderToHardwareTextureAndroid
-          shouldRasterizeIOS
         >
           {/* ── Instagram-style card header (above image) ── */}
           <TouchableOpacity
