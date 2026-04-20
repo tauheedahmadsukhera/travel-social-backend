@@ -16,7 +16,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Animated,
   Platform
 } from "react-native";
 import PostCard from '@/src/_components/PostCard';
@@ -111,12 +110,10 @@ export default function Home() {
   const categoriesScrollRef = React.useRef<ScrollView>(null);
   const categoriesAutoScrolledRef = React.useRef(false);
   const openedStoryIdRef = React.useRef<string | null>(null);
-  const { hideHeader, showHeader, headerScrollY } = useHeaderVisibility();
+  const { showHeader } = useHeaderVisibility();
   // Header padding is handled by Tabs sceneStyle (see (tabs)/_layout.tsx)
   const headerHeight = 0;
   const tabEvent = useTabEvent();
-  const lastScrollYRef = useRef(0);
-  const lastEmitTsRef = useRef(0);
   const headerHiddenRef = useRef(false);
   const { isOnline } = useNetworkStatus();
   const { showBanner } = useOfflineBanner();
@@ -833,7 +830,7 @@ export default function Home() {
       )}
 
 
-      <Animated.FlatList
+      <FlatList
         ref={flatListRef}
         data={showInitialSkeleton ? skeletonItems : privacyFiltered}
         keyExtractor={(item: any, index: number) => {
@@ -845,13 +842,7 @@ export default function Home() {
         showsHorizontalScrollIndicator={false}
         persistentScrollbar={false}
         scrollEventThrottle={16}
-        onScroll={
-          headerScrollY
-            ? Animated.event([{ nativeEvent: { contentOffset: { y: headerScrollY } } }], {
-                useNativeDriver: false,
-              })
-            : undefined
-        }
+        // Keep scroll fully native-driven (no JS onScroll work).
         // PERF: slightly larger window reduces blanking/jank while scrolling.
         initialNumToRender={4}
         maxToRenderPerBatch={6}

@@ -351,6 +351,9 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 4,
     overflow: 'hidden',
+    // Scrolling perf: reduce expensive re-draws while list scrolls
+    shouldRasterizeIOS: true,
+    renderToHardwareTextureAndroid: true,
   },
   categoryImage: {
     width: 60,

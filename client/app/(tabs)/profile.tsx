@@ -7,7 +7,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Alert,
   Dimensions,
   Image,
@@ -391,7 +390,7 @@ export default function Profile({ userIdProp }: any) {
   const lastRefreshEventAtRef = useRef(0);
   const MIN_PROFILE_RELOAD_MS = 2500;
   const MIN_REFRESH_EVENT_GAP_MS = 1200;
-  const { hideHeader, showHeader, headerScrollY } = useHeaderVisibility();
+  const { hideHeader, showHeader } = useHeaderVisibility();
   // Header padding is handled by Tabs sceneStyle (see (tabs)/_layout.tsx)
   const headerHeight = 0;
 
@@ -1251,18 +1250,12 @@ export default function Profile({ userIdProp }: any) {
           <ActivityIndicator size="large" color="#007aff" />
         </View>
       )}
-      <Animated.ScrollView 
+      <ScrollView 
         contentContainerStyle={[styles.content, { paddingTop: headerHeight }]}
         scrollEventThrottle={16}
         // iOS: avoid unmount/remount while scrolling (prevents "reload" feel)
         removeClippedSubviews={Platform.OS === 'android'}
-        onScroll={
-          headerScrollY
-            ? Animated.event([{ nativeEvent: { contentOffset: { y: headerScrollY } } }], {
-                useNativeDriver: false,
-              })
-            : undefined
-        }
+        // Keep scroll fully native-driven (no JS onScroll work).
       >
         {/* Avatar centered */}
         <View style={styles.avatarContainer}>
@@ -1800,7 +1793,7 @@ export default function Profile({ userIdProp }: any) {
             })}
           </View>
         )}
-      </Animated.ScrollView>
+      </ScrollView>
 
       {/* Collections View Sheet */}
       <Modal
