@@ -98,6 +98,7 @@ export default function CreatePostScreen() {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewHeight, setPreviewHeight] = useState<number>(width);
+  const [previewVideoRatio, setPreviewVideoRatio] = useState<number>(1);
   const previewRatioCacheRef = useRef<Map<string, number>>(new Map());
   const activePreviewUriRef = useRef<string | null>(null);
   const previewReqIdRef = useRef(0);
@@ -1199,11 +1200,21 @@ export default function CreatePostScreen() {
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <Video
                 source={{ uri: selectedImages[0] }}
-                style={{ width: windowWidth, height: Math.min(windowWidth * 1.25, height * 0.75) }}
+                style={{
+                  width: windowWidth,
+                  height: Math.min(height * 0.75, Math.max(220, windowWidth / Math.max(0.5, Math.min(2.5, previewVideoRatio)))),
+                }}
                 resizeMode={ResizeMode.CONTAIN}
                 useNativeControls
                 shouldPlay={false}
                 isLooping
+                onReadyForDisplay={(e: any) => {
+                  const w = e?.naturalSize?.width;
+                  const h = e?.naturalSize?.height;
+                  if (typeof w === 'number' && typeof h === 'number' && h > 0) {
+                    setPreviewVideoRatio(w / h);
+                  }
+                }}
               />
             </View>
 

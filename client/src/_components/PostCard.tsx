@@ -1711,7 +1711,7 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
           {/* Video if no images and video exists */}
           {showVideo && (
             <TouchableOpacity
-              style={[styles.imageWrap, { height: mediaHeight }]}
+              style={[styles.imageWrap, { height: mediaHeight, backgroundColor: '#000' }]}
               activeOpacity={1}
               onPress={() => {
                 // Toggle play/pause on tap (center area)
@@ -1734,7 +1734,8 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
                     ref={videoRef}
                     source={{ uri: videos[0] }}
                     style={[styles.image, { width: '100%', height: '100%' }]}
-                    resizeMode={ResizeMode.COVER}
+                    // Show original aspect ratio (like images), avoid cropping
+                    resizeMode={ResizeMode.CONTAIN}
                     shouldPlay={isVideoPlaying}
                     useNativeControls={false}
                     isLooping={false}
