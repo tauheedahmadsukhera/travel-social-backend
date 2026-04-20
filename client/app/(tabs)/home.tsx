@@ -505,8 +505,10 @@ export default function Home() {
     }
   };
 
+  // Guard: only do the initial API fetch once, even if HOME_CACHE_KEY changes (userId loads async)
+  const hasFetchedRef = useRef(false);
+
   useEffect(() => {
-    if (__DEV__) console.log('[Home] Initial load effect running...');
     (async () => {
       // Cache-first boot: show cached feed immediately (works offline)
       try {
@@ -519,11 +521,13 @@ export default function Home() {
         }
       } catch { }
 
-      // If we're online, refresh in background; if offline and no cache, UI will keep loader.
+      // Only hit the API once on mount — HOME_CACHE_KEY change (userId resolving) must not re-fetch
+      if (hasFetchedRef.current) return;
+      hasFetchedRef.current = true;
+
       if (isOnline) {
         await loadInitialFeed(0);
       } else {
-        // Ensure we don't block forever on first launch with no cache
         setLoading((prev) => (prev ? false : prev));
       }
     })();
