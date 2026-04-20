@@ -1301,14 +1301,7 @@ export default function Profile({ userIdProp }: any) {
                   avatarUri = null;
                 }
 
-                console.log('[Profile Avatar] Resolved avatarUri:', {
-                  profileAvatar: profile?.avatar,
-                  photoURL: (profile as any)?.photoURL,
-                  profilePicture: (profile as any)?.profilePicture,
-                  finalUri: avatarUri,
-                  isOwnProfile,
-                  platform: Platform.OS
-                });
+                // Avoid logging in render path (hurts scroll perf).
 
                 const dimmed = isPrivate && !isOwnProfile && !approvedFollower;
 
@@ -1319,7 +1312,7 @@ export default function Profile({ userIdProp }: any) {
                       source={{ uri: avatarUri }}
                       style={[styles.avatar, dimmed && { opacity: 0.3 }]}
                       contentFit="cover"
-                      transition={200}
+                      transition={0}
                       cachePolicy="memory-disk"
                       priority="high"
                       onError={() => {
@@ -1339,7 +1332,7 @@ export default function Profile({ userIdProp }: any) {
                     source={DEFAULT_AVATAR_SOURCE}
                     style={[styles.avatar, dimmed && { opacity: 0.3 }]}
                     contentFit="cover"
-                    transition={200}
+                    transition={0}
                     cachePolicy="memory-disk"
                     priority="high"
                   />
@@ -1741,7 +1734,7 @@ export default function Profile({ userIdProp }: any) {
                         source={{ uri: coverUri }}
                         style={{ width: '100%', height: '100%' }}
                         contentFit="cover"
-                        transition={200}
+                        transition={0}
                       />
                     </View>
                     <Text
@@ -1785,7 +1778,7 @@ export default function Profile({ userIdProp }: any) {
                     source={{ uri: p.thumbnailUrl || p.imageUrl || p.mediaUrls?.[0] || p.imageUrls?.[0] || DEFAULT_IMAGE_URL }}
                     style={{ width: '100%', height: '100%' }}
                     contentFit="cover"
-                    transition={200}
+                    transition={0}
                     cachePolicy="memory-disk"
                   />
                 </TouchableOpacity>
@@ -1849,7 +1842,7 @@ export default function Profile({ userIdProp }: any) {
                       source={{ uri: coverUri }}
                       style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: '#eee', borderWidth: isActive ? 2 : 0, borderColor: '#0A3D62' }}
                       contentFit="cover"
-                      transition={200}
+                      transition={0}
                     />
                     <Text style={{ marginLeft: 16, fontSize: 16, fontWeight: isActive ? '700' : '500', color: isActive ? '#0A3D62' : '#222' }}>
                       {s.name}
