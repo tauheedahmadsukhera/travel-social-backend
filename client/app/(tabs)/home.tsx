@@ -5,10 +5,10 @@ import { DEFAULT_AVATAR_URL, API_BASE_URL } from '../../lib/api';
 import { Image as ExpoImage } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
   ActivityIndicator,
   Dimensions,
-  FlatList,
   Modal,
   RefreshControl,
   ScrollView,
@@ -834,7 +834,7 @@ export default function Home() {
       )}
 
 
-      <FlatList
+      <FlashList
         ref={flatListRef}
         data={showInitialSkeleton ? skeletonItems : privacyFiltered}
         keyExtractor={(item: any, index: number) => {
@@ -846,12 +846,8 @@ export default function Home() {
         showsHorizontalScrollIndicator={false}
         persistentScrollbar={false}
         scrollEventThrottle={16}
-        // PERF: keep JS work per frame minimal for smooth 60fps scroll
-        initialNumToRender={3}
-        maxToRenderPerBatch={2}
-        windowSize={5}
-        removeClippedSubviews={Platform.OS === 'android'}
-        updateCellsBatchingPeriod={80}
+        // FlashList needs this for good perf
+        estimatedItemSize={560}
 
         contentContainerStyle={contentContainerStyle}
         ListHeaderComponent={listHeader}
