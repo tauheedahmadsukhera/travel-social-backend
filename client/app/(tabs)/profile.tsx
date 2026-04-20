@@ -1254,7 +1254,8 @@ export default function Profile({ userIdProp }: any) {
       <Animated.ScrollView 
         contentContainerStyle={[styles.content, { paddingTop: headerHeight }]}
         scrollEventThrottle={16}
-        removeClippedSubviews={Platform.OS !== 'web'}
+        // iOS: avoid unmount/remount while scrolling (prevents "reload" feel)
+        removeClippedSubviews={Platform.OS === 'android'}
         onScroll={
           headerScrollY
             ? Animated.event([{ nativeEvent: { contentOffset: { y: headerScrollY } } }], {

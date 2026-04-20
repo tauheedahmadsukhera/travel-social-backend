@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef } from 'react';
-import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PostCard from './PostCard';
 
@@ -131,7 +131,8 @@ export default function PostViewerModal({
           maxToRenderPerBatch={4}
           windowSize={5}
           updateCellsBatchingPeriod={40}
-          removeClippedSubviews
+          // iOS: keep offscreen cards mounted to avoid "reload" when scrolling back
+          removeClippedSubviews={Platform.OS === 'android'}
           onScrollToIndexFailed={(info) => {
             if (!Array.isArray(posts) || posts.length === 0) return;
             const safeIndex = Math.max(0, Math.min(posts.length - 1, info.index));
