@@ -2149,8 +2149,8 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
         </View>
       </View>
 
-      {/* Comments + Reactions Modal (tabbed) */}
-      <Modal
+      {/* Comments + Reactions Modal (tabbed) — lazy: only mount when open */}
+      {showCommentsModal && <Modal
         visible={showCommentsModal}
         animationType="slide"
         transparent={true}
@@ -2302,9 +2302,10 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
             </Animated.View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </Modal>}
 
-      <Modal
+      {/* Media viewer Modal — lazy */}
+      {showMediaModal && <Modal
         visible={showMediaModal}
         animationType="none"
         transparent={true}
@@ -2437,10 +2438,10 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
             <Feather name="x" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
-      </Modal>
+      </Modal>}
 
-      {/* Post Options Modal (Bottom Sheet Style) */}
-      <Modal visible={showOptionsModal} transparent animationType="slide" onRequestClose={() => setShowOptionsModal(false)}>
+      {/* Post Options Modal — lazy */}
+      {showOptionsModal && <Modal visible={showOptionsModal} transparent animationType="slide" onRequestClose={() => setShowOptionsModal(false)}>
         <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setShowOptionsModal(false)}>
           <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, width: '100%', paddingBottom: 30, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 20 }}>
             <View style={{ width: 40, height: 4, backgroundColor: '#dbdbdb', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 20 }} />
@@ -2524,10 +2525,10 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
             })()}
           </View>
         </TouchableOpacity>
-      </Modal>
+      </Modal>}
 
-      {/* Delete Confirmation Modal (Centered Premium Dialog) */}
-      <Modal visible={showDeleteConfirm} transparent animationType="fade" onRequestClose={() => setShowDeleteConfirm(false)}>
+      {/* Delete Confirmation Modal — lazy */}
+      {showDeleteConfirm && <Modal visible={showDeleteConfirm} transparent animationType="fade" onRequestClose={() => setShowDeleteConfirm(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 54 }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', overflow: 'hidden', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 20 }}>
             <View style={{ paddingVertical: 24, paddingHorizontal: 30, alignItems: 'center' }}>
@@ -2551,9 +2552,10 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
             </View>
           </View>
         </View>
-      </Modal>
+      </Modal>}
 
-      <ShareModal
+      {/* ShareModal — lazy */}
+      {showShareModal && <ShareModal
         visible={showShareModal}
         currentUserId={userIdForLike}
         modalVariant="home"
@@ -2636,7 +2638,7 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
           }
         }}
         title="Share Post"
-      />
+      />}
     </View>
   );
 }
