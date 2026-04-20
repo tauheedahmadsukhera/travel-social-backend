@@ -8,7 +8,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as Haptics from 'expo-haptics';
-import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, InteractionManager, KeyboardAvoidingView, Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { feedEventEmitter } from '@/lib/feedEventEmitter';
 import { getLocationVisitCount, likePost, unlikePost } from "../../lib/firebaseHelpers";
@@ -895,9 +895,10 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
       return;
     }
 
-    // 3. Last resort: Fetch from API
+    // 3. Last resort: Fetch from API — defer until scroll is idle so it doesn't stutter
     let cancelled = false;
-    async function fetchAvatar() {
+    const task = InteractionManager.runAfterInteractions(async () => {
+      if (cancelled) return;
       try {
         const { getUserProfile } = await import('../../lib/firebaseHelpers/user');
         const res = await getUserProfile(authorId);
@@ -912,9 +913,8 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
       } catch (err) {
         if (!cancelled) setCurrentAvatar(DEFAULT_AVATAR);
       }
-    }
-    fetchAvatar();
-    return () => { cancelled = true; };
+    });
+    return () => { cancelled = true; task.cancel(); };
   }, [post?.userId, post?.userAvatar, post?.userName]);
 
   // Helper function to check if URL is a video
@@ -1248,33 +1248,36 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
       })
       .catch(() => {});
 
-    // 3) Pre-measure ratio before image finishes loading (reduces "small→big" jump).
+    // 3) Pre-measure ratio — defer until scroll is idle so it never blocks scroll frames
+    let sizeTask: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
     if (showImages && images.length > 0 && !heightLockedRef.current) {
       if (!mediaRatioInFlight.has(firstMediaUrl)) {
         mediaRatioInFlight.add(firstMediaUrl);
         const uri = getOptimizedImageUrl(firstMediaUrl, 'feed');
-        Image.getSize(
-          uri,
-          (w, h) => {
-            mediaRatioInFlight.delete(firstMediaUrl);
-            if (cancelled) return;
-            if (typeof w === 'number' && typeof h === 'number' && h > 0) {
-              const ratio = w / h;
-              mediaRatioCacheRef.current.set(firstMediaUrl, ratio);
-              setCachedRatio(firstMediaUrl, ratio);
-              setHeightFromRatio(ratio);
-              heightLockedRef.current = true;
-            }
-          },
-          () => {
-            mediaRatioInFlight.delete(firstMediaUrl);
-          }
-        );
+        sizeTask = InteractionManager.runAfterInteractions(() => {
+          if (cancelled) { mediaRatioInFlight.delete(firstMediaUrl); return; }
+          Image.getSize(
+            uri,
+            (w, h) => {
+              mediaRatioInFlight.delete(firstMediaUrl);
+              if (cancelled) return;
+              if (typeof w === 'number' && typeof h === 'number' && h > 0) {
+                const ratio = w / h;
+                mediaRatioCacheRef.current.set(firstMediaUrl, ratio);
+                setCachedRatio(firstMediaUrl, ratio);
+                if (!heightLockedRef.current) setHeightFromRatio(ratio);
+                heightLockedRef.current = true;
+              }
+            },
+            () => { mediaRatioInFlight.delete(firstMediaUrl); }
+          );
+        });
       }
     }
 
     return () => {
       cancelled = true;
+      sizeTask?.cancel();
     };
   }, [showImages, images[0], videos[0]]); // Only lock to the FIRST media item
 
