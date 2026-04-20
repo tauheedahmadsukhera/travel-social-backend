@@ -237,8 +237,10 @@ export default function Home() {
   // Story deep-linking is now handled in (tabs)/_layout.tsx
 
 
-  // Memoized shuffle
+  // iOS scroll perf: avoid reshuffling while user scrolls (causes jitter/reorder).
+  // Keep deterministic order (newest first) on iOS; Android can keep the mixed feed.
   const shufflePosts = useCallback((postsArray: any[]) => {
+    if (Platform.OS === 'ios') return [...postsArray];
     const shuffled = [...postsArray];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -250,6 +252,17 @@ export default function Home() {
   // Memoized feed mixer
   const createMixedFeed = useCallback((postsArray: any[]) => {
     if (postsArray.length === 0) return [];
+    // Deterministic ordering on iOS (no randomization) for smooth scrolling.
+    if (Platform.OS === 'ios') {
+      const getPostTimestamp = (createdAt: any): number => {
+        if (!createdAt) return 0;
+        if (typeof createdAt.toMillis === 'function') return createdAt.toMillis();
+        if (typeof createdAt === 'string') return new Date(createdAt).getTime();
+        if (typeof createdAt === 'number') return createdAt;
+        return 0;
+      };
+      return [...postsArray].sort((a: any, b: any) => getPostTimestamp(b?.createdAt) - getPostTimestamp(a?.createdAt));
+    }
     const now = Date.now();
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000;
