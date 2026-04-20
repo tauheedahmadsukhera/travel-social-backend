@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { notificationService, Notification } from '@/lib/notificationService';
 
-export const useNotifications = (userId: string, pollInterval = 15000) => {
+export const useNotifications = (userId: string, pollInterval = 60000) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const isFetchingRef = useRef(false);
   const lastFetchAtRef = useRef(0);
-  const MIN_FETCH_GAP_MS = 8000;
+  const MIN_FETCH_GAP_MS = 30000;
   const appStateRef = useRef(AppState.currentState);
 
   const fetchNotifications = useCallback(async (options?: { force?: boolean }) => {

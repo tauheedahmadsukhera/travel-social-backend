@@ -594,7 +594,8 @@ function TopMenu({ setMenuVisible, setGroupsDrawerVisible }: { setMenuVisible: (
   const isHomeScreen = segments[segments.length - 1] === 'home';
 
   // Get notifications from hook
-  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotifications(currentUserId || '');
+  // 60s poll — frequent polling causes re-renders that stutter the scroll
+  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotifications(currentUserId || '', 60000);
 
   const renderCountBadge = useCallback((count: number, bgColor: string, top: number, right: number) => {
     if (!count || count <= 0) return null;

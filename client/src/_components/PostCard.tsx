@@ -11,7 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image, InteractionManager, KeyboardAvoidingView, Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { feedEventEmitter } from '@/lib/feedEventEmitter';
-import { getLocationVisitCount, likePost, unlikePost } from "../../lib/firebaseHelpers";
+import { likePost, unlikePost } from "../../lib/firebaseHelpers";
 import { getOptimizedImageUrl } from "../../lib/imageHelpers";
 import { sharePost } from '../../lib/postShare';
 import { notificationService } from '../../lib/notificationService';
@@ -715,16 +715,7 @@ const profileCache: Record<string, { avatar: string, name: string }> = {};
 function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, highlightedCommentText, mirror = false, onCommentPress, inPostViewer = false }: PostCardProps) {
   const { showSuccess } = useAppDialog();
   // Visits logic
-  const [visitCount, setVisitCount] = useState<number>(typeof post?.visits === 'number' ? post.visits : 0);
-  useEffect(() => {
-    async function fetchVisits() {
-      if (post?.location) {
-        const count = await getLocationVisitCount(post.location);
-        setVisitCount(count);
-      }
-    }
-    fetchVisits();
-  }, [post?.location]);
+  // visitCount removed — was fetching /posts/location-count per card (never displayed, pure overhead)
 
   // App color scheme
   const appColors = {
