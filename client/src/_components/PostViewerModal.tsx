@@ -66,6 +66,7 @@ export default function PostViewerModal({
   const insets = useSafeAreaInsets();
   const didInitialScrollRef = useRef(false);
   const prevVisibleRef = useRef(false);
+  const targetIndexRef = useRef(0);
 
   useEffect(() => {
     const wasVisible = prevVisibleRef.current;
@@ -80,6 +81,7 @@ export default function PostViewerModal({
     if (!Array.isArray(posts) || posts.length === 0) return;
     if (selectedPostIndex < 0 || selectedPostIndex >= posts.length) return;
 
+    targetIndexRef.current = selectedPostIndex;
     didInitialScrollRef.current = true;
     // Let layout settle, then jump without fighting user scroll.
     requestAnimationFrame(() => {
@@ -123,6 +125,8 @@ export default function PostViewerModal({
           onScrollBeginDrag={() => {
             didInitialScrollRef.current = true;
           }}
+          // Best-effort: start close to target as early as possible.
+          initialScrollIndex={Math.max(0, Math.min(posts.length - 1, selectedPostIndex))}
           initialNumToRender={3}
           maxToRenderPerBatch={4}
           windowSize={5}
@@ -130,16 +134,25 @@ export default function PostViewerModal({
           removeClippedSubviews
           onScrollToIndexFailed={(info) => {
             if (!Array.isArray(posts) || posts.length === 0) return;
-            if (info.index < 0 || info.index >= posts.length) return;
+            const safeIndex = Math.max(0, Math.min(posts.length - 1, info.index));
             flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
+              offset: info.averageItemLength * safeIndex,
               animated: false,
             });
+            // Retry a couple of times; variable-height cards can fail on first layout.
             setTimeout(() => {
-              if (!Array.isArray(posts) || posts.length === 0) return;
-              if (info.index < 0 || info.index >= posts.length) return;
-              flatListRef.current?.scrollToIndex({ index: info.index, animated: false });
-            }, 100);
+              try {
+                flatListRef.current?.scrollToIndex({ index: safeIndex, animated: false });
+              } catch {}
+            }, 120);
+            setTimeout(() => {
+              try {
+                flatListRef.current?.scrollToIndex({
+                  index: targetIndexRef.current ?? safeIndex,
+                  animated: false,
+                });
+              } catch {}
+            }, 260);
           }}
           renderItem={({ item }) => (
             <PostCard
