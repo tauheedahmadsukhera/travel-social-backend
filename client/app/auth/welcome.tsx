@@ -22,6 +22,11 @@ export default function WelcomeScreen() {
       const result = await signInWithGoogle();
       await handleSocialAuthResult(result, router);
     } catch (error) {
+      const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
+      if (msg.includes('cancel')) {
+        setLoading(false);
+        return;
+      }
       console.error('Google Sign-In error:', error);
       Alert.alert('Error', 'Failed to sign in with Google. Please try again.');
     } finally {

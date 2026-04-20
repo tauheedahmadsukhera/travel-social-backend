@@ -703,6 +703,9 @@ export async function handleSocialAuthResult(result: any, router: any) {
       Alert.alert('Error', 'Failed to complete login process');
     }
   } else {
+    const msg = String(result?.error || '').toLowerCase();
+    // User-backed-out is a normal flow; don't show an error dialog.
+    if (msg.includes('cancel')) return;
     Alert.alert('Authentication Error', result.error);
   }
 }
