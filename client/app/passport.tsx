@@ -271,6 +271,8 @@ export default function PassportScreen() {
   const [suggestion, setSuggestion] = useState<any>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [stampSearchVisible, setStampSearchVisible] = useState(false);
+  const [stampSearchQuery, setStampSearchQuery] = useState('');
 
   // Location modal state
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -643,6 +645,63 @@ export default function PassportScreen() {
     return stamp.type;
   };
 
+  const normalizeSearch = (value: any) =>
+    String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const stampMatchesQuery = (stamp: Stamp, q: string) => {
+    if (!q) return true;
+    const text = [
+      stamp.name,
+      stamp.type,
+      stamp.parentCity,
+      stamp.parentCountry,
+      stamp.countryCode,
+    ]
+      .map((x) => normalizeSearch(x))
+      .filter(Boolean)
+      .join(' ');
+    return text.includes(q);
+  };
+
+  const stampSearchResults = useMemo(() => {
+    const q = normalizeSearch(stampSearchQuery);
+    if (!q) return [];
+    // Search across all stamps (ignores current filter tabs so user can find anything quickly).
+    const list = Array.isArray(stamps) ? stamps : [];
+    const hits = list.filter((s) => stampMatchesQuery(s, q));
+    // Prefer newest first
+    hits.sort((a, b) => Number(new Date(b.createdAt).getTime()) - Number(new Date(a.createdAt).getTime()));
+    return hits.slice(0, 100);
+  }, [stamps, stampSearchQuery]);
+
+  const openStampSearch = () => {
+    hapticLight();
+    setStampSearchVisible(true);
+  };
+
+  const closeStampSearch = () => {
+    setStampSearchVisible(false);
+    Keyboard.dismiss();
+  };
+
+  const handlePickStampFromSearch = (stamp: Stamp) => {
+    // Reset to main list context then take the most sensible action.
+    setStampSearchVisible(false);
+    setStampSearchQuery('');
+    if (stamp.type === 'country') {
+      setSelectedCountry(stamp.name);
+      setActiveFilter('All');
+      return;
+    }
+    // For city/place: clear country filter and show the relevant tab.
+    setSelectedCountry(null);
+    setActiveFilter(stamp.type === 'city' ? 'Cities' : stamp.type === 'place' ? 'Places' : 'All');
+  };
+
   const openDeleteSheet = (stamp: Stamp) => {
     if (!isOwner) return;
     hapticLight();
@@ -707,7 +766,7 @@ export default function PassportScreen() {
 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
 
-          <TouchableOpacity style={styles.headerBtn} onPress={handleOpenLocationPicker}>
+          <TouchableOpacity style={styles.headerBtn} onPress={openStampSearch}>
             <Feather name="search" size={20} color="#000" />
           </TouchableOpacity>
         </View>
@@ -823,6 +882,91 @@ export default function PassportScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Stamps search modal */}
+      <Modal
+        visible={stampSearchVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeStampSearch}
+      >
+        <TouchableOpacity style={styles.deleteOverlay} activeOpacity={1} onPress={closeStampSearch}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            style={styles.deleteSheet}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={[styles.deleteIcon, { backgroundColor: '#0A3D62' }]}>
+                <Feather name="search" size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deleteTitle}>Search stamps</Text>
+                <Text style={styles.deleteSub}>Find countries, cities, and places</Text>
+              </View>
+            </View>
+
+            <View style={[styles.modalSearchContainer, { marginTop: 14 }]}>
+              <Feather name="search" size={18} color="#0A3D62" style={{ marginRight: 12 }} />
+              <TextInput
+                style={styles.modalSearchInput}
+                placeholder="Search (e.g. Dubai, France, city, place)"
+                placeholderTextColor="#999"
+                value={stampSearchQuery}
+                onChangeText={setStampSearchQuery}
+                autoFocus
+                returnKeyType="search"
+              />
+              {!!stampSearchQuery && (
+                <TouchableOpacity onPress={() => setStampSearchQuery('')} style={{ padding: 6 }}>
+                  <Feather name="x" size={18} color="#999" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView
+              style={{ marginTop: 10, maxHeight: 420 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {stampSearchQuery.trim() ? (
+                stampSearchResults.length > 0 ? (
+                  stampSearchResults.map((s) => (
+                    <TouchableOpacity
+                      key={`ss_${String(s._id)}`}
+                      style={{
+                        paddingVertical: 12,
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: '#eee',
+                      }}
+                      onPress={() => handlePickStampFromSearch(s)}
+                    >
+                      <Text style={{ fontWeight: '800', color: '#111' }}>{s.name}</Text>
+                      <Text style={{ marginTop: 2, color: '#666', fontSize: 12 }}>
+                        {s.type.toUpperCase()}
+                        {s.parentCity ? ` • ${s.parentCity}` : ''}
+                        {s.parentCountry ? ` • ${s.parentCountry}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={{ paddingVertical: 18 }}>
+                    <Text style={{ color: '#666', textAlign: 'center' }}>No matching stamps found.</Text>
+                  </View>
+                )
+              ) : (
+                <View style={{ paddingVertical: 18 }}>
+                  <Text style={{ color: '#666', textAlign: 'center' }}>Type to search your passport stamps.</Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity style={styles.deleteCancelBtn} onPress={closeStampSearch}>
+              <Text style={styles.deleteCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Delete stamp sheet (owner only) */}
       <Modal
