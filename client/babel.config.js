@@ -22,8 +22,8 @@ module.exports = function(api) {
     'react-native-reanimated/plugin'
   ];
 
-  // Remove console logs in production for better performance
-  if (process.env.NODE_ENV === 'production') {
+  // Remove console.log everywhere (keep error/warn); massively improves scroll perf in dev
+  if (process.env.NODE_ENV !== 'test') {
     plugins.unshift(['transform-remove-console', { exclude: ['error', 'warn'] }]);
   }
 

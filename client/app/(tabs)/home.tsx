@@ -842,14 +842,12 @@ export default function Home() {
         showsHorizontalScrollIndicator={false}
         persistentScrollbar={false}
         scrollEventThrottle={16}
-        // Keep scroll fully native-driven (no JS onScroll work).
-        // PERF: slightly larger window reduces blanking/jank while scrolling.
-        initialNumToRender={4}
-        maxToRenderPerBatch={6}
-        windowSize={9}
-        // iOS: avoid blank/jitter from offscreen unmount/remount
+        // PERF: keep JS work per frame minimal for smooth 60fps scroll
+        initialNumToRender={3}
+        maxToRenderPerBatch={2}
+        windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
-        updateCellsBatchingPeriod={50}
+        updateCellsBatchingPeriod={80}
 
         contentContainerStyle={contentContainerStyle}
         ListHeaderComponent={listHeader}

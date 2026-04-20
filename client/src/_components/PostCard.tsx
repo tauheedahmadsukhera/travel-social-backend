@@ -351,9 +351,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 4,
     overflow: 'hidden',
-    // Scrolling perf: reduce expensive re-draws while list scrolls
-    shouldRasterizeIOS: true,
-    renderToHardwareTextureAndroid: true,
   },
   categoryImage: {
     width: 60,
@@ -784,9 +781,6 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
     };
   }, []);
 
-  if (__DEV__) {
-    console.log('[PostCard] userIdForLike:', userIdForLike, 'user:', user, 'currentUser:', currentUser, 'likes:', likes.length);
-  }
 
   // OPTIMIZATION: Update local state when post prop changes (no real-time listener)
   useEffect(() => {
@@ -1494,7 +1488,11 @@ function PostCard({ post, currentUser, showMenu = true, highlightedCommentId, hi
   return (
     <View style={{ flex: 1, backgroundColor: appColors.background }}>
       <View style={styles.cardShadow}>
-        <View style={[styles.cardInner, { backgroundColor: appColors.background }]}>
+        <View
+          style={[styles.cardInner, { backgroundColor: appColors.background }]}
+          renderToHardwareTextureAndroid
+          shouldRasterizeIOS
+        >
           {/* ── Instagram-style card header (above image) ── */}
           <TouchableOpacity
             style={styles.cardHeader}
