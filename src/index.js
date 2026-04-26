@@ -996,8 +996,8 @@ app.patch('/api/posts/:postId', async (req, res, next) => {
     // 3) Apply edits (keep non-empty string; allow clearing by sending empty string)
     const { location, locationData, hashtags, category, taggedUserIds, visibility } = req.body || {};
 
-    if (caption !== undefined) post.caption = typeof caption === 'string' ? caption : String(caption || '');
-    if (content !== undefined) post.content = typeof content === 'string' ? content : String(content || '');
+    if (caption !== undefined) post.caption = caption || ' ';
+    if (content !== undefined) post.content = content || ' ';
     
     // Support extended fields from create-post.tsx
     if (location !== undefined) post.location = location;
