@@ -1002,26 +1002,30 @@ app.patch('/api/posts/:postId', async (req, res, next) => {
       return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
     }
 
-    // 3) Apply edits (keep non-empty string; allow clearing by sending empty string)
+    // 3) Apply edits
+    const updateData = {};
     const { location, locationData, hashtags, category, taggedUserIds, visibility } = req.body || {};
 
-    if (caption !== undefined) post.caption = caption || ' ';
-    if (content !== undefined) post.content = content || ' ';
-    
-    // Support extended fields from create-post.tsx
-    if (location !== undefined) post.location = location;
-    if (locationData !== undefined) post.locationData = locationData;
-    if (hashtags !== undefined) post.hashtags = Array.isArray(hashtags) ? hashtags : post.hashtags;
-    if (category !== undefined) post.category = category;
-    if (taggedUserIds !== undefined) post.taggedUserIds = Array.isArray(taggedUserIds) ? taggedUserIds : post.taggedUserIds;
-    if (visibility !== undefined) post.visibility = visibility;
+    if (caption !== undefined) updateData.caption = caption || ' ';
+    if (content !== undefined) updateData.content = content || ' ';
+    if (location !== undefined) updateData.location = location;
+    if (locationData !== undefined) updateData.locationData = locationData;
+    if (hashtags !== undefined) updateData.hashtags = Array.isArray(hashtags) ? hashtags : undefined;
+    if (category !== undefined) updateData.category = category;
+    if (taggedUserIds !== undefined) updateData.taggedUserIds = Array.isArray(taggedUserIds) ? taggedUserIds : undefined;
+    if (visibility !== undefined) updateData.visibility = visibility;
+    updateData.updatedAt = new Date();
 
-    post.updatedAt = new Date();
+    // Remove undefined fields
+    Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
 
-    await post.save();
+    const updatedPost = await Post.findByIdAndUpdate(post._id, { $set: updateData }, { new: true, runValidators: true });
+    if (!updatedPost) return res.status(500).json({ success: false, error: 'Failed to update post' });
 
-    res.json({ success: true, data: post });
+    console.log(`✅ [API] Post ${postId} updated by user ${currentUserId}`);
+    res.json({ success: true, data: updatedPost });
   } catch (err) {
+    console.error('[PATCH /posts/:postId] Error:', err.message);
     next(err);
   }
 });
