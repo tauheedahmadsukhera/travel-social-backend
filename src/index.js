@@ -978,19 +978,28 @@ app.patch('/api/posts/:postId', async (req, res, next) => {
     }
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
 
-    // 2) Ownership check (supports Mongo _id <-> firebaseUid mismatches)
-    try {
-      const ownerResolved = await resolveUserIdentifiers(String(post.userId));
-      const actorResolved = await resolveUserIdentifiers(String(currentUserId));
-      const ownerSet = new Set((ownerResolved?.candidates || []).map(String));
-      const isOwner = (actorResolved?.candidates || []).map(String).some((id) => ownerSet.has(id));
-      if (!isOwner) {
-        return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
+    // 2) Ownership check
+    const postOwnerId = String(post.userId?._id || post.userId || '');
+    const actorId = String(currentUserId || '');
+
+    if (__DEV__ || process.env.NODE_ENV !== 'production') {
+      console.log(`[PATCH] Post: ${postId}, Owner: ${postOwnerId}, Actor: ${actorId}`);
+    }
+
+    let isOwner = postOwnerId === actorId;
+    if (!isOwner) {
+      try {
+        const ownerResolved = await resolveUserIdentifiers(postOwnerId);
+        const actorResolved = await resolveUserIdentifiers(actorId);
+        const ownerSet = new Set((ownerResolved?.candidates || []).map(String));
+        isOwner = (actorResolved?.candidates || []).map(String).some((id) => ownerSet.has(id));
+      } catch (e) {
+        console.error('[PATCH] Ownership resolve error:', e.message);
       }
-    } catch {
-      if (String(post.userId) !== String(currentUserId)) {
-        return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
-      }
+    }
+
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: You can only edit your own posts' });
     }
 
     // 3) Apply edits (keep non-empty string; allow clearing by sending empty string)
