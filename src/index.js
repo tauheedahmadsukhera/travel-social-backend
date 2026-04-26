@@ -3,6 +3,10 @@ console.log('🚀 [INDEX.JS] LOADED AT:', new Date().toISOString());
 
 // CRITICAL DEPLOY: 2026-01-03T02:30:00Z - Conversation creation logic
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
+const hpp = require('hpp');
 const compression = require('compression');
 const http = require('http');
 const cors = require('cors');
@@ -148,16 +152,17 @@ app.set('trust proxy', 1);
 // ============= SOCKET.IO SETUP =============
 const io = new Server(server, {
   cors: {
-    origin: true, // Allow all origins in development
+    // Production: same allowlist as REST: mobile apps send Origin null/undefined often — allow non-browser clients.
+    origin: isProduction ? corsOriginMatcher : true,
     methods: ['GET', 'POST'],
     credentials: true,
-    allowEIO3: true
+    allowEIO3: true,
   },
   transports: ['websocket', 'polling'], // Support both transports
   pingTimeout: 120000, // Increased from 60s to 120s
   pingInterval: 25000,
-  serveClient: true,
-  cookie: false // Disable cookie to avoid CORS issues
+  serveClient: false, // Do not serve socket.io client from Node (smaller attack surface + RN bundles its own client)
+  cookie: false, // Disable cookie to avoid CORS issues
 });
 
 console.log('✅ Socket.IO server initialized');
@@ -219,9 +224,44 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 }));
+
+// Security hardening (safe defaults for API-only server)
+app.use(helmet({
+  // Our clients are mobile apps; keep CSP off by default to avoid accidental breakages.
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+// Prevent NoSQL injection via $ operators in query/body
+app.use(mongoSanitize({ replaceWith: '_' }));
+// Prevent HTTP parameter pollution (keeps last value)
+app.use(hpp());
+
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
 console.log(`✅ Request body limit configured: ${REQUEST_BODY_LIMIT}`);
+
+// Rate limits (abuse / credential stuffing). Tune via env if legitimate traffic spikes.
+const authRouteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Math.min(200, Math.max(20, parseInt(String(process.env.RATE_LIMIT_AUTH_MAX || '40'), 10) || 40)),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests. Try again later.' },
+});
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Math.min(2000, Math.max(60, parseInt(String(process.env.RATE_LIMIT_API_MAX || (isProduction ? '240' : '800')), 10) || (isProduction ? 240 : 800))),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests. Slow down.' },
+  skip: (req) => {
+    if (req.method === 'OPTIONS') return true;
+    const p = String(req.path || req.originalUrl || '');
+    return p.includes('/health') || p.endsWith('/status');
+  },
+});
+app.use('/api/auth', authRouteLimiter);
+app.use('/api', apiLimiter);
 
 // Minimal security headers (kept lightweight to avoid behavior regressions)
 app.use((req, res, next) => {
@@ -954,8 +994,19 @@ app.patch('/api/posts/:postId', async (req, res, next) => {
     }
 
     // 3) Apply edits (keep non-empty string; allow clearing by sending empty string)
+    const { location, locationData, hashtags, category, taggedUserIds, visibility } = req.body || {};
+
     if (caption !== undefined) post.caption = typeof caption === 'string' ? caption : String(caption || '');
     if (content !== undefined) post.content = typeof content === 'string' ? content : String(content || '');
+    
+    // Support extended fields from create-post.tsx
+    if (location !== undefined) post.location = location;
+    if (locationData !== undefined) post.locationData = locationData;
+    if (hashtags !== undefined) post.hashtags = Array.isArray(hashtags) ? hashtags : post.hashtags;
+    if (category !== undefined) post.category = category;
+    if (taggedUserIds !== undefined) post.taggedUserIds = Array.isArray(taggedUserIds) ? taggedUserIds : post.taggedUserIds;
+    if (visibility !== undefined) post.visibility = visibility;
+
     post.updatedAt = new Date();
 
     await post.save();
