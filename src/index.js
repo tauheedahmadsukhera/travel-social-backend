@@ -982,7 +982,7 @@ app.patch('/api/posts/:postId', async (req, res, next) => {
     const postOwnerId = String(post.userId?._id || post.userId || '');
     const actorId = String(currentUserId || '');
 
-    if (__DEV__ || process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production') {
       console.log(`[PATCH] Post: ${postId}, Owner: ${postOwnerId}, Actor: ${actorId}`);
     }
 
@@ -1017,12 +1017,20 @@ app.patch('/api/posts/:postId', async (req, res, next) => {
     updateData.updatedAt = new Date();
 
     // Remove undefined fields
-    Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
+    Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[PATCH] Updating post ${postId} with data:`, JSON.stringify(updateData, null, 2));
+    }
 
     const updatedPost = await Post.findByIdAndUpdate(post._id, { $set: updateData }, { new: true, runValidators: true });
-    if (!updatedPost) return res.status(500).json({ success: false, error: 'Failed to update post' });
+    if (!updatedPost) {
+      console.error(`[PATCH] Failed to update post ${postId}: findByIdAndUpdate returned null`);
+      return res.status(500).json({ success: false, error: 'Failed to update post' });
+    }
 
-    console.log(`✅ [API] Post ${postId} updated by user ${currentUserId}`);
+    console.log(`✅ [API] Post ${postId} successfully updated. New caption: "${updatedPost.caption}"`);
     res.json({ success: true, data: updatedPost });
   } catch (err) {
     console.error('[PATCH /posts/:postId] Error:', err.message);
