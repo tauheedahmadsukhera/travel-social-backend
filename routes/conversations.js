@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+const User = require('../models/User');
 
 const { verifyToken } = require('../src/middleware/authMiddleware');
 
-console.log('📨 Loading conversations route...');
 
 // Get the Conversation model (already defined in models/Conversation.js and required in index.js)
-const Conversation = mongoose.model('Conversation');
+
 
 const findConversationByAnyId = async (id) => {
   if (!id) return null;
@@ -32,22 +34,23 @@ const isStrictLegacyPairConversationId = (value) => {
 const normalizeParticipantIds = async (ids) => {
   const User = mongoose.model('User');
   const out = new Set();
+  const rawIds = (Array.isArray(ids) ? ids : []).map(id => String(id || '').trim()).filter(Boolean);
+  
+  const objectIds = rawIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+  const otherIds = rawIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
 
-  for (const raw of (Array.isArray(ids) ? ids : [])) {
-    const id = String(raw || '').trim();
-    if (!id) continue;
+  // Add valid ObjectIds directly
+  objectIds.forEach(id => out.add(id));
 
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      out.add(id);
-      continue;
-    }
-
-    const found = await User.findOne({ $or: [{ firebaseUid: id }, { uid: id }] }).select('_id');
-    if (found?._id) {
-      out.add(String(found._id));
-    } else {
-      out.add(id);
-    }
+  if (otherIds.length > 0) {
+    const users = await User.find({
+      $or: [{ firebaseUid: { $in: otherIds } }, { uid: { $in: otherIds } }]
+    }).select('_id firebaseUid uid').lean();
+    
+    users.forEach(u => out.add(String(u._id)));
+    // Keep track of IDs that weren't found as canonical IDs
+    const foundAltIds = new Set([...users.map(u => String(u.firebaseUid)), ...users.map(u => String(u.uid))]);
+    otherIds.forEach(id => { if (!foundAltIds.has(id)) out.add(id); });
   }
 
   return Array.from(out);
@@ -57,17 +60,16 @@ const resolveUserIdVariants = async (id) => {
   const User = mongoose.model('User');
   const out = new Set([String(id)]);
   try {
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      const byId = await User.findById(id).select('_id firebaseUid uid');
-      if (byId?._id) out.add(String(byId._id));
-      if (byId?.firebaseUid) out.add(String(byId.firebaseUid));
-      if (byId?.uid) out.add(String(byId.uid));
+    const query = mongoose.Types.ObjectId.isValid(id) 
+      ? { $or: [{ _id: id }, { firebaseUid: id }, { uid: id }] }
+      : { $or: [{ firebaseUid: id }, { uid: id }] };
+      
+    const user = await User.findOne(query).select('_id firebaseUid uid').lean();
+    if (user) {
+      if (user._id) out.add(String(user._id));
+      if (user.firebaseUid) out.add(String(user.firebaseUid));
+      if (user.uid) out.add(String(user.uid));
     }
-
-    const byAlt = await User.findOne({ $or: [{ firebaseUid: id }, { uid: id }] }).select('_id firebaseUid uid');
-    if (byAlt?._id) out.add(String(byAlt._id));
-    if (byAlt?.firebaseUid) out.add(String(byAlt.firebaseUid));
-    if (byAlt?.uid) out.add(String(byAlt.uid));
   } catch {}
   return Array.from(out);
 };
@@ -129,6 +131,19 @@ router.get('/', verifyToken, async (req, res) => {
     const db = mongoose.connection.db;
     const usersCollection = db.collection('users');
 
+    const convoIds = conversations.map(c => String(c.conversationId || c._id));
+    const allUnreadCandidates = await Message.find({
+      conversationId: { $in: convoIds },
+      senderId: { $nin: idsToMatch }
+    }).select('conversationId senderId recipientId read readBy timestamp createdAt').lean().catch(() => []);
+    
+    const unreadMap = {};
+    allUnreadCandidates.forEach(m => {
+      const cid = String(m.conversationId);
+      if (!unreadMap[cid]) unreadMap[cid] = [];
+      unreadMap[cid].push(m);
+    });
+
     const enrichedConversations = await Promise.all(conversations.map(async (conversation) => {
       const convObj = conversation.toObject ? conversation.toObject() : conversation;
 
@@ -149,17 +164,15 @@ router.get('/', verifyToken, async (req, res) => {
         }
       }
 
-      const allMsgs = Array.isArray(convObj?.messages) ? convObj.messages : [];
-      const visibleMsgs = allMsgs.filter(m => {
+      const conversationIdStr = String(convObj.conversationId || convObj._id);
+      const candidates = unreadMap[conversationIdStr] || [];
+
+      const visibleMsgs = candidates.filter(m => {
         const mTime = new Date(m.timestamp || m.createdAt || 0).getTime();
         return mTime > lastCleared;
       });
 
       const unreadCount = visibleMsgs.reduce((acc, m) => {
-        const senderId = String(m?.senderId || '');
-        const isFromSelf = idsToMatch.includes(senderId);
-        if (isFromSelf) return acc;
-
         if (isGroup) {
           const readBy = Array.isArray(m?.readBy) ? m.readBy.map(String) : [];
           const readByMe = idsToMatch.some((id) => readBy.includes(String(id)));
@@ -656,11 +669,12 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
     const merged = [];
     const seen = new Set();
     for (const c of convos) {
-      for (const m of (c?.messages || [])) {
-        const mid = m?.id;
-        if (typeof mid === 'string' && mid.length > 0) {
-          if (seen.has(mid)) continue;
-          seen.add(mid);
+      const msgs = await Message.find({ conversationId: String(c.conversationId || c._id) }).lean();
+      for (const m of msgs) {
+        const mid = m?._id || m?.id;
+        if (mid) {
+          if (seen.has(String(mid))) continue;
+          seen.add(String(mid));
         }
         merged.push(m);
       }
@@ -811,7 +825,9 @@ router.patch('/:id/read', verifyToken, async (req, res) => {
     let markedCount = 0;
     for (const c of convos) {
       let changed = false;
-      for (const m of (c?.messages || [])) {
+      const msgs = await Message.find({ conversationId: String(c.conversationId || c._id) });
+      
+      for (const m of msgs) {
         if (isGroup || c?.isGroup) {
           const senderId = String(m?.senderId || '');
           const isFromSelf = idsToMatch.includes(senderId);
@@ -823,6 +839,7 @@ router.patch('/:id/read', verifyToken, async (req, res) => {
             m.readBy.push(String(userIdFromToken));
             markedCount += 1;
             changed = true;
+            await m.save();
           }
           continue;
         }
@@ -833,6 +850,7 @@ router.patch('/:id/read', verifyToken, async (req, res) => {
           m.read = true;
           markedCount += 1;
           changed = true;
+          await m.save();
         }
       }
       if (changed) {
@@ -940,11 +958,7 @@ router.post('/:id/messages', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Requires recipientId' });
     }
     
-    // Initialize messages array if it doesn't exist
-    if (!convo.messages) {
-      convo.messages = [];
-    }
-    
+    // Create the message in the standalone Message collection
     const storyPointerMatch = String(text || '').match(/story:\/\/([A-Za-z0-9_-]+)/i);
     const storyIdFromText = storyPointerMatch?.[1] || null;
 
@@ -960,7 +974,8 @@ router.post('/:id/messages', verifyToken, async (req, res) => {
       tempId 
     } = req.body;
 
-    const message = { 
+    const messageData = { 
+      conversationId: String(convo.conversationId || convo._id),
       senderId: normalizedSenderId, 
       text,
       mediaType: mediaType || (storyIdFromText ? 'story' : 'text'),
@@ -979,8 +994,8 @@ router.post('/:id/messages', verifyToken, async (req, res) => {
     };
 
     if (storyIdFromText) {
-      message.mediaType = 'story';
-      message.sharedStory = {
+      messageData.mediaType = 'story';
+      messageData.sharedStory = {
         storyId: storyIdFromText,
         id: storyIdFromText,
         userId: normalizedSenderId,
@@ -989,22 +1004,25 @@ router.post('/:id/messages', verifyToken, async (req, res) => {
     
     // Add recipientId if provided
     if (normalizedRecipientId) {
-      message.recipientId = normalizedRecipientId;
+      messageData.recipientId = normalizedRecipientId;
     }
     
     // Add replyTo if replying to a message
     if (replyTo) {
-      message.replyTo = replyTo;
+      messageData.replyTo = replyTo;
     }
     
     // Add an ID to the message for easier deletion/editing
-    message.id = new mongoose.Types.ObjectId().toString();
+    messageData.id = new mongoose.Types.ObjectId().toString();
+
+    const newMessage = new Message(messageData);
+    await newMessage.save();
+    const message = newMessage.toObject(); // for sending back in response
     
     // Atomic update using findOneAndUpdate to prevent lost updates during high concurrency
     const updatedConvo = await Conversation.findOneAndUpdate(
       { _id: convo._id },
       {
-        $push: { messages: message },
         $set: {
           lastMessage: storyIdFromText ? '[STORY]' : text,
           lastMessageAt: new Date(),
@@ -1273,10 +1291,10 @@ router.patch('/:conversationId/messages/:messageId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
 
-    // Find message in conversation.messages array
-    const message = conversation.messages?.find(m => m.id === messageId);
+    // Find message in Message collection
+    const message = await Message.findOne({ $or: [{ id: messageId }, { _id: mongoose.Types.ObjectId.isValid(messageId) ? messageId : null }] });
     if (!message) {
-      console.log('[PATCH] Message not found in conversation:', messageId);
+      console.log('[PATCH] Message not found:', messageId);
       return res.status(404).json({ success: false, error: 'Message not found' });
     }
 
@@ -1289,7 +1307,7 @@ router.patch('/:conversationId/messages/:messageId', async (req, res) => {
     // Update message
     message.text = text;
     message.editedAt = new Date();
-    await conversation.save();
+    await message.save();
 
     console.log('[PATCH] Message updated:', messageId);
     res.json({ success: true, data: message });
@@ -1328,10 +1346,10 @@ router.delete('/:conversationId/messages/:messageId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
 
-    // Find message in conversation.messages array
-    const message = conversation.messages?.find(m => m.id === messageId);
+    // Find message in Message collection
+    const message = await Message.findOne({ $or: [{ id: messageId }, { _id: mongoose.Types.ObjectId.isValid(messageId) ? messageId : null }] });
     if (!message) {
-      console.log('[DELETE] Message not found in conversation:', messageId);
+      console.log('[DELETE] Message not found:', messageId);
       return res.status(404).json({ success: false, error: 'Message not found' });
     }
 
@@ -1341,9 +1359,8 @@ router.delete('/:conversationId/messages/:messageId', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Unauthorized - you can only delete your own messages' });
     }
 
-    // Remove message from array
-    conversation.messages = conversation.messages.filter(m => m.id !== messageId);
-    await conversation.save();
+    // Delete message from collection
+    await Message.deleteOne({ _id: message._id });
 
     console.log('[DELETE] Message deleted:', messageId);
     res.json({ success: true, message: 'Message deleted' });
@@ -1386,10 +1403,10 @@ router.post('/:conversationId/messages/:messageId/reactions', async (req, res) =
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
 
-    // Find message in conversation.messages array
-    const message = conversation.messages?.find(m => m.id === messageId);
+    // Find message in Message collection
+    const message = await Message.findOne({ $or: [{ id: messageId }, { _id: mongoose.Types.ObjectId.isValid(messageId) ? messageId : null }] });
     if (!message) {
-      console.log('[POST] Message not found in conversation:', messageId);
+      console.log('[POST] Message not found:', messageId);
       return res.status(404).json({ success: false, error: 'Message not found' });
     }
 
@@ -1399,28 +1416,38 @@ router.post('/:conversationId/messages/:messageId/reactions', async (req, res) =
     }
 
     // Initialize reaction array if not exists
-    if (!message.reactions[actualReaction]) {
-      message.reactions[actualReaction] = [];
-    }
-
-    // Toggle reaction (Instagram style - add if not present, remove if present)
-    const userIndex = message.reactions[actualReaction].indexOf(userId);
-    if (userIndex === -1) {
-      message.reactions[actualReaction].push(userId);
-      console.log('[POST] Added reaction:', actualReaction, 'from user:', userId);
-    } else {
-      message.reactions[actualReaction].splice(userIndex, 1);
-      console.log('[POST] Removed reaction:', actualReaction, 'from user:', userId);
-
-      // Remove empty reaction arrays
-      if (message.reactions[actualReaction].length === 0) {
-        delete message.reactions[actualReaction];
+    if (!message.reactions.get(actualReaction) && !message.reactions[actualReaction]) {
+      if (message.reactions instanceof Map) {
+        message.reactions.set(actualReaction, []);
+      } else {
+        message.reactions[actualReaction] = [];
       }
     }
 
-    // Mark as modified for Mongoose
-    conversation.markModified('messages');
-    await conversation.save();
+    // Toggle reaction (Instagram style - add if not present, remove if present)
+    const reactionsArray = message.reactions instanceof Map ? message.reactions.get(actualReaction) : message.reactions[actualReaction];
+    const userIndex = reactionsArray.indexOf(userId);
+    
+    if (userIndex === -1) {
+      reactionsArray.push(userId);
+      console.log('[POST] Added reaction:', actualReaction, 'from user:', userId);
+    } else {
+      reactionsArray.splice(userIndex, 1);
+      console.log('[POST] Removed reaction:', actualReaction, 'from user:', userId);
+
+      // Remove empty reaction arrays
+      if (reactionsArray.length === 0) {
+        if (message.reactions instanceof Map) {
+          message.reactions.delete(actualReaction);
+        } else {
+          delete message.reactions[actualReaction];
+        }
+      }
+    }
+
+    // Save message
+    message.markModified('reactions');
+    await message.save();
 
     console.log('[POST] Reactions updated for message:', messageId);
     res.json({ success: true, data: { reactions: message.reactions } });

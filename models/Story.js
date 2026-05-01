@@ -13,7 +13,10 @@ const storySchema = new mongoose.Schema({
   likes: [String],
   comments: [Object],
   createdAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) }
+  expiresAt: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000), index: { expires: 0 } }
 });
+
+storySchema.index({ userId: 1, createdAt: -1 });
+storySchema.index({ createdAt: -1 });
 
 module.exports = mongoose.models.Story || mongoose.model('Story', storySchema);

@@ -7,6 +7,8 @@ const PostSchema = new mongoose.Schema({
   imageUrl: String,
   mediaUrls: { type: [String], default: [] },
   mediaType: { type: String, enum: ['image', 'video'], default: 'image' },
+  thumbnailUrl: String,
+  aspectRatio: Number,
   location: String,
   locationData: {
     name: String,
@@ -44,5 +46,7 @@ const PostSchema = new mongoose.Schema({
 PostSchema.index({ createdAt: -1 });
 PostSchema.index({ isPrivate: 1, createdAt: -1 });
 PostSchema.index({ userId: 1, createdAt: -1 });
+PostSchema.index({ locationKeys: 1, createdAt: -1 });
+PostSchema.index({ allowedFollowers: 1, createdAt: -1 });
 
 module.exports = mongoose.models.Post || mongoose.model('Post', PostSchema);

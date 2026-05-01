@@ -8,6 +8,13 @@ function getJwtSecret() {
   return secret;
 }
 
+/** For Socket.IO / optional paths: no throw when unset (dev). */
+exports.getJwtSecretOrNull = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !String(secret).trim()) return null;
+  return String(secret).trim();
+};
+
 /**
  * Middleware to verify JWT token from Authorization header
  * Extracts userId and attaches to req.user

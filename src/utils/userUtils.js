@@ -46,6 +46,16 @@ async function resolveUserIdentifiers(inputId) {
   }
 }
 
+const toObjectId = (id) => {
+  if (typeof id === 'object' && (id instanceof mongoose.Types.ObjectId || id?._bsontype === 'ObjectId')) return id;
+  try {
+    return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+  } catch (err) {
+    return null;
+  }
+};
+
 module.exports = {
-  resolveUserIdentifiers
+  resolveUserIdentifiers,
+  toObjectId
 };

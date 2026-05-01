@@ -57,6 +57,11 @@ const UserSchema = new mongoose.Schema({
     enum: ['user', 'admin', 'moderator'],
     default: 'user',
   },
+  status: {
+    type: String,
+    enum: ['active', 'suspended', 'banned'],
+    default: 'active',
+  },
   isVerified: {
     type: Boolean,
     default: false,
@@ -138,9 +143,23 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
+// Synchronize the 3 avatar fields for backward compatibility
+UserSchema.pre('save', function(next) {
+  const avatar = this.avatar || this.photoURL || this.profilePicture;
+  if (avatar) {
+    this.avatar = avatar;
+    this.photoURL = avatar;
+    this.profilePicture = avatar;
+  }
+  this.updatedAt = new Date();
+  next();
+});
+
 // Indexes for fast queries
 UserSchema.index({ email: 1 });
 UserSchema.index({ firebaseUid: 1 });
+UserSchema.index({ uid: 1 });
 UserSchema.index({ createdAt: -1 });
+UserSchema.index({ displayName: 'text' }); // Added for search performance
 
 module.exports = mongoose.models.User || mongoose.model('User', UserSchema);
