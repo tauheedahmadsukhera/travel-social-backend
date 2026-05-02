@@ -64,7 +64,18 @@ async function enrichPostsWithUserData(posts) {
       const author = userMap[authorRef];
 
       if (author) {
-        if (p.userId && typeof p.userId === 'object') {
+        // If userId was a string, transform it into an object to match frontend expectations
+        if (typeof p.userId === 'string' || !p.userId) {
+          p.userId = {
+            _id: authorRef,
+            id: authorRef,
+            displayName: author.displayName || author.name || 'User',
+            name: author.name || author.displayName || 'User',
+            avatar: author.avatar || author.photoURL || author.profilePicture || null,
+            photoURL: author.photoURL || author.avatar || author.profilePicture || null,
+            profilePicture: author.profilePicture || author.avatar || author.photoURL || null
+          };
+        } else if (typeof p.userId === 'object') {
           p.userId = {
             ...p.userId,
             avatar: author.avatar || p.userId.avatar || p.userId.photoURL || p.userId.profilePicture || null,
@@ -75,13 +86,13 @@ async function enrichPostsWithUserData(posts) {
           };
         }
 
+        // Maintain top-level userName/userAvatar for components that expect them flat
+        p.userName = author.displayName || author.name || p.userName || 'User';
         if (isBadAvatar(p.userAvatar)) {
           p.userAvatar = author.avatar || author.photoURL || author.profilePicture || p.userAvatar || null;
         }
-        if (!p.userName) {
-          p.userName = author.name || author.displayName || 'User';
-        }
       }
+
       
       // Enrich reactions
       if (Array.isArray(p.reactions)) {

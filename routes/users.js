@@ -67,9 +67,157 @@ router.get('/search', async (req, res) => {
 
     res.json({ success: true, data: users });
   } catch (err) {
-    next(err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// GET /api/users/:userId/passport - Get passport data
+router.get('/:userId/passport', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const User = mongoose.model('User');
+    const Post = mongoose.model('Post');
+    const Passport = mongoose.model('Passport');
+
+    const resolved = await resolveUserIdentifiers(userId);
+    let passport = await Passport.findOne({ userId: { $in: resolved.candidates } });
+    
+    if (!passport) {
+      return res.json({ success: true, data: { ticketCount: 0, stamps: [] } });
+    }
+
+    const passportObj = passport.toObject();
+    const normalizeKey = (val) => String(val || '').trim().toLowerCase();
+
+    passportObj.stamps = await Promise.all(passportObj.stamps.map(async (stamp) => {
+      const nameKey = normalizeKey(stamp.name);
+      const codeKey = stamp.countryCode ? normalizeKey(stamp.countryCode) : null;
+      const nameRegex = new RegExp(`${nameKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+      
+      let query = { 
+        $or: [
+          { locationKeys: nameKey },
+          { location: nameRegex }
+        ]
+      };
+      if (stamp.type === 'country' && codeKey) query.$or.push({ locationKeys: codeKey });
+      
+      const postCount = await Post.countDocuments(query);
+      return { ...stamp, postCount: postCount || 0 };
+    }));
+
+    res.json({ success: true, data: passportObj });
+  } catch (err) {
+    console.error('[GET /api/users/:userId/passport] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/users/:userId/passport/locations - Add location to passport
+router.post('/:userId/passport/locations', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { type, name, countryCode, lat, lon } = req.body;
+    const Passport = mongoose.model('Passport');
+
+    const resolved = await resolveUserIdentifiers(userId);
+    let passport = await Passport.findOne({ userId: { $in: resolved.candidates } });
+
+    if (!passport) {
+      passport = new Passport({ userId: resolved.canonicalId, stamps: [] });
+    }
+
+    // Check if stamp already exists
+    const existingIndex = passport.stamps.findIndex(s => 
+      s.name.toLowerCase() === name.toLowerCase() && s.type === type
+    );
+
+    if (existingIndex > -1) {
+      passport.stamps[existingIndex].count += 1;
+      passport.stamps[existingIndex].visitHistory.push({ lat, lon, visitedAt: new Date() });
+    } else {
+      passport.stamps.push({
+        type,
+        name,
+        countryCode,
+        lat,
+        lon,
+        count: 1,
+        visitHistory: [{ lat, lon, visitedAt: new Date() }]
+      });
+    }
+
+    await passport.save();
+    res.json({ success: true, data: passport });
+  } catch (err) {
+    console.error('[POST /api/users/:userId/passport/locations] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// PUT /api/users/:userId/push-token - Save push token
+router.put('/:userId/push-token', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { pushToken } = req.body;
+    const User = mongoose.model('User');
+
+    const resolved = await resolveUserIdentifiers(userId);
+    await User.findOneAndUpdate(
+      { 
+        $or: [
+          { _id: { $in: resolved.candidates.filter(c => mongoose.Types.ObjectId.isValid(c)) } },
+          { firebaseUid: { $in: resolved.candidates } },
+          { uid: { $in: resolved.candidates } }
+        ]
+      },
+      { pushToken, pushTokenUpdatedAt: new Date() },
+      { upsert: false }
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PUT /api/users/:userId/push-token] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+// GET /api/users/:userId/notifications - Get notifications for a user
+router.get('/:userId/notifications', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const Notification = mongoose.model('Notification');
+    const user = await resolveUserIdentifiers(userId);
+    const notifications = await Notification.find({ 
+      recipientId: { $in: user.candidates } 
+    }).sort({ createdAt: -1 });
+    res.json({ success: true, data: notifications });
+  } catch (err) {
+    console.error('[GET /api/users/:userId/notifications] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/users/:userId/passport/stamps/:stampId - Remove stamp from passport
+router.delete('/:userId/passport/stamps/:stampId', async (req, res) => {
+  try {
+    const { userId, stampId } = req.params;
+    const Passport = mongoose.model('Passport');
+    const user = await resolveUserIdentifiers(userId);
+
+    let passport = await Passport.findOne({ userId: { $in: user.candidates } });
+    if (passport) {
+      passport.stamps = passport.stamps.filter(s => s._id.toString() !== stampId);
+      passport.ticketCount = passport.stamps.length;
+      await passport.save();
+    }
+    res.json({ success: true, data: passport });
+  } catch (err) {
+    console.error('[DELETE /api/users/:userId/passport/stamps/:stampId] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // GET /api/users/:userId/conversations/archived - Get archived conversations for the authenticated user
 router.get('/:userId/conversations/archived', verifyToken, async (req, res) => {

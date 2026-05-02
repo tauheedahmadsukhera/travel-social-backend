@@ -131,9 +131,9 @@ router.get('/', verifyToken, async (req, res) => {
     const db = mongoose.connection.db;
     const usersCollection = db.collection('users');
 
-    const convoIds = conversations.map(c => String(c.conversationId || c._id));
+    const conversationIdStrArray = conversations.map(c => String(c.conversationId || c._id));
     const allUnreadCandidates = await Message.find({
-      conversationId: { $in: convoIds },
+      conversationId: { $in: conversationIdStrArray },
       senderId: { $nin: idsToMatch }
     }).select('conversationId senderId recipientId read readBy timestamp createdAt').lean().catch(() => []);
     
@@ -144,7 +144,32 @@ router.get('/', verifyToken, async (req, res) => {
       unreadMap[cid].push(m);
     });
 
-    const enrichedConversations = await Promise.all(conversations.map(async (conversation) => {
+    // 2. Pre-fetch all other participants to avoid N+1 queries
+    const otherParticipantIds = new Set();
+    conversations.forEach(c => {
+      if (!c.isGroup) {
+        const participants = Array.isArray(c.participants) ? c.participants.map(String) : [];
+        const otherId = participants.find(p => !idsToMatch.includes(String(p)));
+        if (otherId) otherParticipantIds.add(otherId);
+      }
+    });
+
+    const otherUsersList = await User.find({
+      $or: [
+        { _id: { $in: Array.from(otherParticipantIds).filter(id => mongoose.Types.ObjectId.isValid(id)) } },
+        { firebaseUid: { $in: Array.from(otherParticipantIds) } },
+        { uid: { $in: Array.from(otherParticipantIds) } }
+      ]
+    }).select('_id firebaseUid uid displayName name avatar profilePicture photoURL').lean().catch(() => []);
+
+    const userCache = {};
+    otherUsersList.forEach(u => {
+      if (u._id) userCache[String(u._id)] = u;
+      if (u.firebaseUid) userCache[String(u.firebaseUid)] = u;
+      if (u.uid) userCache[String(u.uid)] = u;
+    });
+
+    const enrichedConversations = conversations.map((conversation) => {
       const convObj = conversation.toObject ? conversation.toObject() : conversation;
 
       const archivedBy = Array.isArray(convObj?.archivedBy) ? convObj.archivedBy.map(String) : [];
@@ -153,7 +178,6 @@ router.get('/', verifyToken, async (req, res) => {
       const participants = Array.isArray(convObj?.participants) ? convObj.participants.map(String) : [];
       const isGroup = !!convObj?.isGroup;
 
-      // Calculate lastCleared for this user across all idsToMatch
       let lastCleared = 0;
       const clearedMap = convObj?.clearedBy || {};
       for (const uid of idsToMatch) {
@@ -185,19 +209,16 @@ router.get('/', verifyToken, async (req, res) => {
         return (!isRead && isForMe) ? acc + 1 : acc;
       }, 0);
 
-      // Update lastMessage preview if cleared
       if (lastCleared > 0) {
         const lastMsgTime = new Date(convObj.lastMessageAt || 0).getTime();
         if (lastMsgTime <= lastCleared) {
           convObj.lastMessage = '';
-          // We keep lastMessageAt for sorting, but clear the text preview
         }
       }
 
       if (isGroup) {
         return {
           ...convObj,
-          [`archived_${String(userId)}`]: isArchived,
           isArchived,
           unreadCount,
           group: {
@@ -205,41 +226,25 @@ router.get('/', verifyToken, async (req, res) => {
             name: convObj?.groupName || 'Group Chat',
             avatar: convObj?.groupAvatar || null,
             memberCount: participants.length,
-            adminIds: Array.isArray(convObj?.groupAdminIds) ? convObj.groupAdminIds.map(String) : [],
           }
         };
       }
 
       const otherParticipantId = participants.find(p => !idsToMatch.includes(String(p)));
-      if (!otherParticipantId) {
-        return {
-          ...convObj,
-          [`archived_${String(userId)}`]: isArchived,
-          isArchived,
-          unreadCount,
-        };
-      }
-
-      const otherUser = await usersCollection.findOne({
-        $or: [
-          { firebaseUid: otherParticipantId },
-          { uid: otherParticipantId },
-          { _id: mongoose.Types.ObjectId.isValid(otherParticipantId) ? new mongoose.Types.ObjectId(otherParticipantId) : null }
-        ]
-      });
+      const otherUser = otherParticipantId ? userCache[otherParticipantId] : null;
 
       return {
         ...convObj,
-        [`archived_${String(userId)}`]: isArchived,
         isArchived,
         unreadCount,
         otherParticipant: {
-          id: otherParticipantId,
+          id: otherParticipantId || '',
           name: otherUser?.displayName || otherUser?.name || 'User',
-          avatar: otherUser?.avatar || otherUser?.photoURL || null
+          avatar: otherUser?.avatar || otherUser?.profilePicture || otherUser?.photoURL || null
         }
       };
-    }));
+    });
+
 
     console.log('[GET] /conversations - Returning', enrichedConversations.length, 'enriched conversations');
     res.json({ success: true, data: enrichedConversations || [] });
@@ -1592,9 +1597,10 @@ router.post('/:conversationId/messages/media', verifyToken, async (req, res) => 
       conversation.archivedBy = (Array.isArray(conversation.archivedBy) ? conversation.archivedBy : []).filter((id) => !recipientSet.has(String(id)));
     }
 
-    // Create media message
-    const message = {
-      id: new mongoose.Types.ObjectId().toString(),
+    // Create media message in standalone collection
+    const Message = mongoose.model('Message');
+    const messageData = {
+      conversationId: String(conversation.conversationId || conversation._id),
       senderId: normalizedSenderId,
       recipientId: normalizedRecipientId,
       text: text || '',
@@ -1605,23 +1611,28 @@ router.post('/:conversationId/messages/media', verifyToken, async (req, res) => 
       thumbnailUrl,
       sharedPost,
       sharedStory,
-      tempId, // Link to client-side optimistic UI
+      tempId,
       timestamp: new Date(),
-      createdAt: new Date(), // Root creation time for sorting
+      createdAt: new Date(),
       read: false,
       delivered: false,
-      readBy: [normalizedSenderId] // Mark as read for sender
+      readBy: [normalizedSenderId]
     };
 
-    conversation.messages.push(message);
-    conversation.markModified('messages');
-    if (mediaType === 'story') {
-      conversation.lastMessage = text || '[STORY]';
-    } else {
-      conversation.lastMessage = text || `[${mediaType.toUpperCase()}]`;
-    }
+    const newMessage = new Message(messageData);
+    await newMessage.save();
+    const message = newMessage.toObject();
+
+    // Update conversation metadata
+    conversation.lastMessage = mediaType === 'story' ? (text || '[STORY]') : (text || `[${mediaType.toUpperCase()}]`);
     conversation.lastMessageAt = new Date();
     conversation.updatedAt = new Date();
+    
+    // Also keep in embedded array for legacy support if needed, but the Message collection is the source of truth now
+    if (!Array.isArray(conversation.messages)) conversation.messages = [];
+    conversation.messages.push(message);
+    conversation.markModified('messages');
+    
     await conversation.save();
 
     console.log('[POST] Media message saved:', message.id);

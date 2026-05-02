@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { resolveUserIdentifiers } = require('../src/utils/userUtils');
 const { sendPushNotification, sendEventNotification } = require('../services/pushNotificationService');
 
 const Notification = mongoose.model('Notification');
@@ -16,15 +17,20 @@ router.post('/notifications', async (req, res, next) => {
   }
 });
 
-// Get notifications for a user
-router.get('/users/:userId/notifications', async (req, res, next) => {
+// Get notifications for a user (multiple route patterns supported)
+const getNotificationsHandler = async (req, res, next) => {
   try {
-    const notifications = await Notification.find({ recipientId: req.params.userId }).sort({ createdAt: -1 });
+    const user = await resolveUserIdentifiers(req.params.userId);
+    const notifications = await Notification.find({ 
+      recipientId: { $in: user.candidates } 
+    }).sort({ createdAt: -1 });
     res.json({ success: true, data: notifications });
   } catch (err) {
     next(err);
   }
-});
+};
+
+router.get('/notifications/:userId', getNotificationsHandler);
 
 // Delete a notification
 router.delete('/notifications/:notificationId', async (req, res, next) => {
@@ -46,27 +52,19 @@ router.put('/notifications/:notificationId/read', async (req, res, next) => {
   }
 });
 
-// Save push token for user
-router.put('/users/:userId/push-token', async (req, res, next) => {
+// Alias for mark as read (some clients use PATCH)
+router.patch('/notifications/:notificationId/read', async (req, res, next) => {
   try {
-    const { pushToken } = req.body;
-    const User = mongoose.model('User');
-
-    await User.findOneAndUpdate(
-      { userId: req.params.userId },
-      {
-        pushToken: pushToken,
-        pushTokenUpdatedAt: new Date()
-      },
-      { upsert: true }
-    );
-
-    console.log(`✅ Saved push token for user ${req.params.userId}`);
+    await Notification.findByIdAndUpdate(req.params.notificationId, { read: true });
     res.json({ success: true });
   } catch (err) {
     next(err);
   }
 });
+
+// Notification routes are now focused on individual notification management.
+// User-specific notification listings and token management have been moved to routes/users.js.
+
 
 // Send push notification directly
 router.post('/notifications/send-push', async (req, res, next) => {
@@ -82,7 +80,14 @@ router.post('/notifications/send-push', async (req, res, next) => {
 
     // Get user's push token
     const User = mongoose.model('User');
-    const user = await User.findOne({ userId: userId });
+    const resolved = await resolveUserIdentifiers(userId);
+    const user = await User.findOne({ 
+      $or: [
+        { _id: { $in: resolved.candidates.filter(c => mongoose.Types.ObjectId.isValid(c)) } },
+        { firebaseUid: { $in: resolved.candidates } },
+        { uid: { $in: resolved.candidates } }
+      ]
+    });
 
     if (!user || !user.pushToken) {
       return res.status(404).json({
@@ -112,10 +117,28 @@ router.post('/notifications/trigger', async (req, res, next) => {
 
     const User = mongoose.model('User');
 
+    // Resolve users to handle all ID variants
+    const [recipientRes, senderRes] = await Promise.all([
+      resolveUserIdentifiers(recipientId),
+      resolveUserIdentifiers(senderId)
+    ]);
+
     // Get recipient and sender info
     const [recipient, sender] = await Promise.all([
-      User.findOne({ userId: recipientId }),
-      User.findOne({ userId: senderId })
+      User.findOne({ 
+        $or: [
+          { _id: { $in: recipientRes.candidates.filter(c => mongoose.Types.ObjectId.isValid(c)) } },
+          { firebaseUid: { $in: recipientRes.candidates } },
+          { uid: { $in: recipientRes.candidates } }
+        ]
+      }),
+      User.findOne({ 
+        $or: [
+          { _id: { $in: senderRes.candidates.filter(c => mongoose.Types.ObjectId.isValid(c)) } },
+          { firebaseUid: { $in: senderRes.candidates } },
+          { uid: { $in: senderRes.candidates } }
+        ]
+      })
     ]);
 
     if (!recipient) {
@@ -158,8 +181,8 @@ router.post('/notifications/trigger', async (req, res, next) => {
     }
 
     const notification = new Notification({
-      recipientId,
-      senderId,
+      recipientId: recipientRes.canonicalId,
+      senderId: senderRes.canonicalId,
       type,
       message,
       senderName,
@@ -188,7 +211,5 @@ router.post('/notifications/trigger', async (req, res, next) => {
     next(err);
   }
 });
-
-module.exports = router;
 
 module.exports = router;

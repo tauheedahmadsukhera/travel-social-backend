@@ -61,6 +61,14 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Debug Middleware
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api')) {
+    console.log(`📡 [API Request] ${req.method} ${req.url}`);
+  }
+  next();
+});
+
 // Static Assets
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/stamps', express.static(path.join(__dirname, '../stamps')));
@@ -137,34 +145,6 @@ app.post('/api/auth/login-firebase', async (req, res) => {
   }
 });
 
-// CRITICAL INLINE GET ROUTES (FROM index.js.good)
-app.get('/api/posts', async (req, res) => {
-  try {
-    const posts = await mongoose.model('Post').find().sort({ createdAt: -1 }).limit(50).catch(() => []);
-    res.status(200).json({ success: true, data: Array.isArray(posts) ? posts : [] });
-  } catch (err) {
-    res.status(200).json({ success: true, data: [] });
-  }
-});
-
-app.get('/api/categories', async (req, res) => {
-  try {
-    const categories = await mongoose.model('Category').find().catch(() => []);
-    res.status(200).json({ success: true, data: Array.isArray(categories) ? categories : [] });
-  } catch (err) {
-    res.status(200).json({ success: true, data: [] });
-  }
-});
-
-app.get('/api/live-streams', async (req, res) => {
-  try {
-    const streams = await mongoose.model('LiveStream').find({ isActive: true }).catch(() => []);
-    res.status(200).json({ success: true, data: Array.isArray(streams) ? streams : [] });
-  } catch (err) {
-    res.status(200).json({ success: true, data: [] });
-  }
-});
-
 // --- API Routes ---
 console.log('🔧 Loading API routes...');
 app.use('/api/auth', require('../routes/auth'));
@@ -174,15 +154,20 @@ app.use('/api/comments', require('../routes/comments'));
 app.use('/api/conversations', require('../routes/conversations'));
 app.use('/api/messages', require('../routes/messages'));
 app.use('/api/notifications', require('../routes/notification'));
+app.use('/api/passport', require('../routes/passport'));
 app.use('/api/stories', require('../routes/stories'));
 app.use('/api/live-streams', require('../routes/live'));
 app.use('/api/feed', require('../routes/feed'));
 app.use('/api/upload', require('../routes/upload'));
-app.use('/api/passport', require('../routes/passport'));
 app.use('/api/groups', require('../routes/groups'));
 app.use('/api/moderation', require('../routes/moderation'));
 app.use('/api/admin', require('../routes/admin'));
 app.use('/api/public', require('../routes/public'));
+app.use('/api/sections', require('../routes/sections'));
+app.use('/api/saved', require('../routes/saved'));
+app.use('/api/follow', require('../routes/follow'));
+app.use('/api/highlights', require('../routes/highlights'));
+app.use('/api/categories', require('../routes/categories'));
 
 app.get('/', (req, res) => {
   res.send(`

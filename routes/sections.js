@@ -93,36 +93,52 @@ router.get('/users/:userId/sections', async (req, res) => {
       return false;
     });
 
-    // 5. Populate collaborators with basic user info
+    // 5. Populate collaborators with basic user info (BATCHED)
     const User = mongoose.models.User || mongoose.model('User');
-    const populatedSections = await Promise.all(filteredSections.map(async (section) => {
-      const s = section.toObject();
-      if (s.collaborators && s.collaborators.length > 0) {
-        const collabIds = s.collaborators
-          .map(entry => {
-            if (entry && typeof entry === 'object') {
-              return String(entry.userId || entry._id || entry.id || entry.uid || entry.firebaseUid || '');
-            }
-            return String(entry || '');
-          })
-          .filter(Boolean);
-        const collabUsers = await User.find({ 
-          $or: [
-            { _id: { $in: collabIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
-            { uid: { $in: collabIds } },
-            { firebaseUid: { $in: collabIds } }
-          ]
-        }, 'name displayName username avatar uid firebaseUid _id');
+    
+    // Collect all unique collaborator IDs across all sections
+    const allCollabIds = new Set();
+    filteredSections.forEach(s => {
+      if (Array.isArray(s.collaborators)) {
+        s.collaborators.forEach(entry => {
+          const id = entry && typeof entry === 'object'
+            ? String(entry.userId || entry._id || entry.id || entry.uid || entry.firebaseUid || '')
+            : String(entry || '');
+          if (id) allCollabIds.add(id);
+        });
+      }
+    });
+
+    const collabIdsArray = Array.from(allCollabIds);
+    const collabUsers = await User.find({ 
+      $or: [
+        { _id: { $in: collabIdsArray.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
+        { uid: { $in: collabIdsArray } },
+        { firebaseUid: { $in: collabIdsArray } }
+      ]
+    }, 'name displayName username avatar uid firebaseUid _id').lean();
+
+    const collabCache = {};
+    collabUsers.forEach(u => {
+      if (u._id) collabCache[String(u._id)] = u;
+      if (u.uid) collabCache[u.uid] = u;
+      if (u.firebaseUid) collabCache[u.firebaseUid] = u;
+    });
+
+    const populatedSections = filteredSections.map((section) => {
+      const s = section.toObject ? section.toObject() : section;
+      if (Array.isArray(s.collaborators)) {
         s.collaborators = s.collaborators.map(entry => {
           const idStr = entry && typeof entry === 'object'
             ? String(entry.userId || entry._id || entry.id || entry.uid || entry.firebaseUid || '')
             : String(entry || '');
-          const u = collabUsers.find(user => String(user._id) === idStr || user.uid === idStr || user.firebaseUid === idStr);
-          return u ? { ...u.toObject(), id: u._id } : entry;
+          const u = collabCache[idStr];
+          return u ? { ...u, id: u._id } : entry;
         });
       }
       return s;
-    }));
+    });
+
 
     res.json({ success: true, data: populatedSections });
   } catch (err) {

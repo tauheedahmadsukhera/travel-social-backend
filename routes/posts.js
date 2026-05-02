@@ -158,6 +158,99 @@ router.get('/locations/suggest', async (req, res) => {
   }
 });
 
+// GET /by-location - Get posts filtered by location name or keys
+router.get('/by-location', async (req, res) => {
+  try {
+    const location = (req.query.location || '').trim();
+    const limit = Math.min(parseInt(req.query.limit || '20'), 100);
+    const skip = parseInt(req.query.skip || '0');
+    const viewerId = req.query.viewerId || null;
+
+    if (!location) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const Post = mongoose.model('Post');
+    const regex = new RegExp(escapeRegExp(location), 'i');
+
+    // Search by exact key first (for regions/countries), then by regex in location name/address
+    const query = {
+      $and: [
+        {
+          $or: [
+            { locationKeys: { $in: [location.toLowerCase(), location] } },
+            { location: regex },
+            { 'locationData.name': regex },
+            { 'locationData.city': regex },
+            { 'locationData.country': regex }
+          ]
+        },
+        // Only show public posts or viewer's own posts if we don't have full visibility logic here
+        // (For simplicity in discovery, we usually show public content)
+        { $or: [{ isPrivate: { $ne: true } }, { visibility: 'Everyone' }] }
+      ]
+    };
+
+    const posts = await Post.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate')
+      .lean();
+
+    const enriched = await enrichPostsWithUserData(posts);
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('[GET /by-location] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message, data: [] });
+  }
+});
+
+// GET /location-count - Get total number of unique locations
+router.get('/location-count', async (req, res) => {
+  try {
+    const Post = mongoose.model('Post');
+    const count = await Post.distinct('locationData.name').then(arr => arr.length);
+    res.json({ success: true, data: { count } });
+  } catch (err) {
+    res.json({ success: true, data: { count: 0 } });
+  }
+});
+
+// GET /locations/meta - Get metadata for a location (visit counts, etc.)
+router.get('/locations/meta', async (req, res) => {
+  try {
+    const location = (req.query.location || '').trim();
+    if (!location) return res.status(400).json({ success: false, error: 'location required' });
+
+    const Post = mongoose.model('Post');
+    const regex = new RegExp(escapeRegExp(location), 'i');
+
+    const query = {
+      $or: [
+        { locationKeys: { $in: [location.toLowerCase(), location] } },
+        { location: regex },
+        { 'locationData.name': regex }
+      ]
+    };
+
+    const count = await Post.countDocuments(query);
+    const verifiedCount = await Post.countDocuments({ ...query, 'locationData.verified': true });
+
+    res.json({
+      success: true,
+      data: {
+        location,
+        visits: count,
+        postCount: count,
+        verifiedVisits: verifiedCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- Post CRUD & Actions ---
 
 // POST / - Create post
