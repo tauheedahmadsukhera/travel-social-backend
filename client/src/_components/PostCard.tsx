@@ -119,32 +119,42 @@ const PostCard: React.FC<PostCardProps> = ({
       <PostMedia 
         media={useMemo(() => {
           const mediaArr: any[] = [];
-          const rawMedia = post?.media || post?.mediaUrls || post?.imageUrls;
           
-          // 1. Handle arrays (either strings or objects)
-          if (Array.isArray(rawMedia) && rawMedia.length > 0) {
-            rawMedia.forEach((item: any) => {
-              if (typeof item === 'string' && item.trim()) {
-                mediaArr.push({ url: item.trim(), type: post?.mediaType || 'image' });
-              } else if (item && typeof item === 'object' && (item.url || item.uri)) {
-                mediaArr.push({ 
-                  url: item.url || item.uri, 
-                  type: item.type || post?.mediaType || 'image' 
-                });
-              }
-            });
-          } 
-          
-          // 2. Fallback to single imageUrl or url fields if array was empty/missing
-          if (mediaArr.length === 0) {
-            const singleUrl = post?.imageUrl || post?.url || post?.mediaUrl;
-            if (typeof singleUrl === 'string' && singleUrl.trim()) {
-              mediaArr.push({ url: singleUrl.trim(), type: post?.mediaType || 'image' });
+          // Helper to add a URL to the array with normalization
+          const addUrl = (url: any, type?: string) => {
+            if (typeof url === 'string' && url.trim()) {
+              mediaArr.push({ 
+                url: url.trim(), 
+                type: type || (url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov') ? 'video' : 'image') 
+              });
+            } else if (url && typeof url === 'object' && (url.url || url.uri)) {
+              mediaArr.push({
+                url: url.url || url.uri,
+                type: url.type || type || 'image'
+              });
             }
+          };
+
+          // 1. Try arrays first
+          const arrayFields = [post?.media, post?.mediaUrls, post?.imageUrls, post?.videoUrls];
+          for (const field of arrayFields) {
+            if (Array.isArray(field) && field.length > 0) {
+              field.forEach(item => addUrl(item));
+              if (mediaArr.length > 0) break; // Use the first non-empty array found
+            }
+          }
+          
+          // 2. Try single URL fields if no array found
+          if (mediaArr.length === 0) {
+            const singleFields = [post?.imageUrl, post?.url, post?.mediaUrl, post?.videoUrl];
+            singleFields.forEach(field => {
+              if (field) addUrl(field);
+            });
           }
           
           return mediaArr;
         }, [post])}
+
 
         mediaHeight={400}
         activeIndex={activeIndex}
