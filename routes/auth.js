@@ -4,11 +4,12 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const path = require('path');
+const { generateToken } = require('../src/middleware/authMiddleware');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Use centralized User model from models directory
-const User = require('../models/User');
+// Use centralized User model
+const User = mongoose.model('User');
 
 // Simple in-memory user storage (for testing/demo - fallback)
 let users = {};
@@ -53,11 +54,7 @@ router.post('/register-firebase', async (req, res) => {
     }
 
     // Generate JWT token (for backend use)
-    const token = jwt.sign(
-      { userId: user._id, firebaseUid, email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = generateToken(user._id, email);
 
     res.json({
       success: true,
@@ -117,11 +114,7 @@ router.post('/login-firebase', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id, firebaseUid, email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = generateToken(user._id, email);
 
     res.json({
       success: true,
@@ -188,11 +181,7 @@ router.post('/register', async (req, res) => {
     };
 
     // Generate JWT token
-    const token = jwt.sign(
-      { userId, email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = generateToken(userId, email);
 
     console.log(`✅ User registered: ${email}`);
 
@@ -249,11 +238,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = generateToken(user.id, email);
 
     console.log(`✅ User logged in: ${email}`);
 

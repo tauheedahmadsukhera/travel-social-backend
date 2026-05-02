@@ -27,10 +27,11 @@ async function uploadToCloudinary(fileBuffer, folder, resourceType = 'auto', opt
       {
         folder: folder,
         resource_type: resourceType,
-        transformation: resourceType === 'image' ? [
-          { quality: 'auto:good' },
+        upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET || undefined,
+        transformation: [
+          { quality: 'auto' },
           { fetch_format: 'auto' }
-        ] : undefined
+        ]
       },
       (error, result) => {
         if (error) {

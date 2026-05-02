@@ -222,6 +222,15 @@ router.post('/posts/:postId/comments/:commentId/replies', async (req, res) => {
     );
 
     if (!result) return res.status(404).json({ success: false, error: 'Comment not found' });
+
+    // Update post count
+    try {
+      const Post = mongoose.model('Post');
+      await Post.findByIdAndUpdate(req.params.postId, { $inc: { commentsCount: 1, commentCount: 1 } });
+    } catch (e) {
+      console.warn('Post count update failed:', e.message);
+    }
+
     res.status(201).json({ success: true, id: reply._id, data: reply });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -231,7 +240,7 @@ router.post('/posts/:postId/comments/:commentId/replies', async (req, res) => {
 // DELETE /api/posts/:postId/comments/:commentId/replies/:replyId - Delete reply
 router.delete('/posts/:postId/comments/:commentId/replies/:replyId', async (req, res) => {
   try {
-    const { commentId, replyId } = req.params;
+    const { commentId, replyId, postId } = req.params;
     const { userId } = req.body;
 
     const updated = await Comment.findByIdAndUpdate(
@@ -240,6 +249,15 @@ router.delete('/posts/:postId/comments/:commentId/replies/:replyId', async (req,
       { new: true }
     );
     if (!updated) return res.status(404).json({ success: false, error: 'Comment not found' });
+
+    // Update post count
+    try {
+      const Post = mongoose.model('Post');
+      await Post.findByIdAndUpdate(postId, { $inc: { commentsCount: -1, commentCount: -1 } });
+    } catch (e) {
+      console.warn('Post count update failed:', e.message);
+    }
+
     res.json({ success: true, message: 'Reply deleted' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

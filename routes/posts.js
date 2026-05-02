@@ -23,11 +23,19 @@ function resolvePostQuery(postId) {
 
 // --- Feed & Discovery Routes ---
 
-// GET /feed - Optimized personalized feed
-router.get('/feed', async (req, res) => {
+/**
+ * GET /feed - Optimized personalized feed
+ * Uses a single database query with visibility filtering logic.
+ */
+router.get('/feed', async (req, res, next) => {
   try {
     const currentUserId = req.headers.userid || req.query.viewerId || req.query.requesterUserId || null;
-    const { candidates: viewerVariants } = currentUserId ? await resolveUserIdentifiers(currentUserId) : { candidates: [] };
+    let viewerVariants = [];
+    
+    if (currentUserId) {
+      const { candidates } = await resolveUserIdentifiers(currentUserId);
+      viewerVariants = candidates.map(id => String(id));
+    }
 
     const limit = Math.min(parseInt(req.query.limit || '20'), 100);
     const skip = parseInt(req.query.skip || '0');
@@ -35,60 +43,88 @@ router.get('/feed', async (req, res) => {
     const Post = mongoose.model('Post');
     const Group = mongoose.model('Group');
 
-    // Fetch posts with a base query (Public OR Owner OR Directly Allowed)
-    const baseQuery = (viewerVariants.length > 0)
-      ? { $or: [{ isPrivate: { $ne: true } }, { userId: { $in: viewerVariants } }, { allowedFollowers: { $in: viewerVariants } }] }
-      : { isPrivate: { $ne: true } };
+    // 1. If viewer is logged in, find which groups they belong to
+    let viewerGroups = [];
+    if (viewerVariants.length > 0) {
+      // Find groups where the viewer is a member
+      viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+    }
 
-    const posts = await Post.find(baseQuery)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit * 2) // Over-fetch for visibility filtering
-      .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate followers')
-      .lean();
+    // Map author IDs to group types for this viewer
+    const authorGroupTypes = {};
+    viewerGroups.forEach(g => {
+      const authorId = String(g.userId);
+      if (!authorGroupTypes[authorId]) authorGroupTypes[authorId] = new Set();
+      authorGroupTypes[authorId].add(g.type); // 'friends' or 'family'
+    });
 
-    // Batch fetch author groups to avoid N+1 visibility checks
-    const authorIds = [...new Set(posts.map(p => String(p.userId?._id || p.userId || '')))].filter(Boolean);
-    const authorGroupsMap = {};
-    if (authorIds.length > 0) {
-      const authorGroups = await Group.find({ userId: { $in: authorIds } }).lean();
-      for (const g of authorGroups) {
-        const uid = String(g.userId);
-        if (!authorGroupsMap[uid]) authorGroupsMap[uid] = { friendIds: [], familyMemberIds: [] };
-        if (g.type === 'friends') authorGroupsMap[uid].friendIds = [...authorGroupsMap[uid].friendIds, ...g.members];
-        if (g.type === 'family') authorGroupsMap[uid].familyMemberIds = [...authorGroupsMap[uid].familyMemberIds, ...g.members];
+    const authorsWithFriendsGroup = Object.keys(authorGroupTypes).filter(id => authorGroupTypes[id].has('friends'));
+    const authorsWithFamilyGroup = Object.keys(authorGroupTypes).filter(id => authorGroupTypes[id].has('family'));
+
+    // 2. Construct optimized query
+    const visibilityQuery = {
+      $or: [
+        { isPrivate: { $ne: true } }, // Public posts
+        { visibility: 'Everyone' },   // Explicitly public
+        { userId: { $in: viewerVariants } }, // Owner
+        { allowedFollowers: { $in: viewerVariants } } // Explicitly allowed
+      ]
+    };
+
+    if (viewerVariants.length > 0) {
+      if (authorsWithFriendsGroup.length > 0) {
+        visibilityQuery.$or.push({ 
+          userId: { $in: authorsWithFriendsGroup }, 
+          visibility: { $in: ['Friends', 'friends'] } 
+        });
+      }
+      if (authorsWithFamilyGroup.length > 0) {
+        visibilityQuery.$or.push({ 
+          userId: { $in: authorsWithFamilyGroup }, 
+          visibility: { $in: ['Family', 'family'] } 
+        });
       }
     }
 
-    const visiblePosts = posts.filter(post => {
-      const authorId = String(post.userId?._id || post.userId || '');
-      const groups = authorGroupsMap[authorId] || { friendIds: [], familyMemberIds: [] };
-      return isPostVisibleToViewer(post, viewerVariants, groups.friendIds, groups.familyMemberIds);
-    }).slice(0, limit);
+    // 3. Execute query with pagination
+    const posts = await Post.find(visibilityQuery)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate followers')
+      .lean();
 
-    const finalPosts = await enrichPostsWithUserData(visiblePosts);
+    const finalPosts = await enrichPostsWithUserData(posts);
     res.json({ success: true, data: finalPosts });
   } catch (err) {
-    res.status(200).json({ success: true, data: [] });
+    next(err); // Pass to central error handler instead of swallowing
   }
 });
 
 // GET /recommended - Randomized discovery feed
-router.get('/recommended', async (req, res) => {
+router.get('/recommended', async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit || '20'), 50);
     const Post = mongoose.model('Post');
     
-    // Simple random sampling for public posts
+    // Aggregation for random public posts
     const posts = await Post.aggregate([
-      { $match: { isPrivate: { $ne: true } } },
-      { $sample: { size: limit } }
+      { 
+        $match: { 
+          $or: [
+            { isPrivate: { $ne: true } },
+            { visibility: 'Everyone' }
+          ]
+        } 
+      },
+      { $sample: { size: limit } },
+      { $sort: { createdAt: -1 } }
     ]);
 
     const finalPosts = await enrichPostsWithUserData(posts);
     res.json({ success: true, data: finalPosts });
   } catch (err) {
-    res.json({ success: true, data: [] });
+    next(err);
   }
 });
 
