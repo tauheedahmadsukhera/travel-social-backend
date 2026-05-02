@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Dimensions, StyleSheet, InteractionManager } from "react-native";
+import { View, Dimensions, StyleSheet, InteractionManager, Alert, Modal, Pressable } from "react-native";
+
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -112,9 +113,31 @@ const PostCard: React.FC<PostCardProps> = ({
             } as any);
           }
         }}
-        onMenuPress={() => {}}
+        onMenuPress={() => {
+          const isOwner = user?.uid === (post?.userId?._id || post?.userId || post?.user?.uid);
+          const options = isOwner 
+            ? ['Edit Post', 'Delete Post', 'Cancel']
+            : ['Report Post', 'Copy Link', 'Cancel'];
+          
+          Alert.alert(
+            'Post Options',
+            '',
+            options.map(opt => ({
+              text: opt,
+              style: opt === 'Delete Post' || opt === 'Report Post' ? 'destructive' : 'default',
+              onPress: () => {
+                if (opt === 'Delete Post') {
+                  // handle delete
+                } else if (opt === 'Edit Post') {
+                  router.push(`/create-post?postId=${post._id}`);
+                }
+              }
+            }))
+          );
+        }}
         showMenu={showMenu}
       />
+
 
       <PostMedia 
         media={useMemo(() => {
@@ -157,11 +180,14 @@ const PostCard: React.FC<PostCardProps> = ({
         mediaHeight={400}
         activeIndex={activeIndex}
         onScroll={onScroll}
-        onMediaPress={(index) => {}}
+        onMediaPress={(index) => {
+          handleLike();
+        }}
         isMuted={isMuted}
         toggleMute={() => setIsMuted(!isMuted)}
         videoRef={videoRef}
       />
+
 
 
       <PostActions 
@@ -181,16 +207,47 @@ const PostCard: React.FC<PostCardProps> = ({
         hashtags={post?.hashtags || []}
         isExpanded={isExpanded}
         onToggleExpand={() => setIsExpanded(!isExpanded)}
+        onHashtagPress={(tag) => {
+          router.push(`/search?q=${encodeURIComponent(tag)}`);
+        }}
       />
 
-      {showComments && (
-        <CommentSection 
-          postId={post._id}
-          postOwnerId={post?.userId?._id || post?.userId}
-          currentAvatar={currentUser?.avatar || currentUser?.photoURL || ''}
-          currentUser={currentUser}
+
+      <Modal
+        visible={showComments}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowComments(false)}
+      >
+        <Pressable 
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} 
+          onPress={() => setShowComments(false)} 
         />
-      )}
+        <View style={{ 
+          height: '80%', 
+          backgroundColor: '#fff', 
+          borderTopLeftRadius: 20, 
+          borderTopRightRadius: 20,
+          overflow: 'hidden'
+        }}>
+          <View style={{ 
+            height: 5, 
+            width: 40, 
+            backgroundColor: '#ddd', 
+            borderRadius: 3, 
+            alignSelf: 'center', 
+            marginVertical: 10 
+          }} />
+          <CommentSection 
+            postId={post._id}
+            postOwnerId={post?.userId?._id || post?.userId}
+            currentAvatar={currentUser?.avatar || currentUser?.photoURL || ''}
+            currentUser={currentUser}
+            maxHeight={Dimensions.get('window').height * 0.7}
+          />
+        </View>
+      </Modal>
+
 
       {showShare && (
         <ShareModal 

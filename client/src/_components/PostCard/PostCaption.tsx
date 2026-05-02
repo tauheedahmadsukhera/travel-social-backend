@@ -8,7 +8,9 @@ interface PostCaptionProps {
   hashtags: string[];
   isExpanded: boolean;
   onToggleExpand: () => void;
+  onHashtagPress?: (tag: string) => void;
 }
+
 
 const PostCaption: React.FC<PostCaptionProps> = ({
   postUserName,
@@ -37,12 +39,17 @@ const PostCaption: React.FC<PostCaptionProps> = ({
       {hashtags && hashtags.length > 0 && (
         <View style={styles.hashtags}>
           {hashtags.map((tag, idx) => (
-            <View key={idx} style={styles.hashtag}>
+            <TouchableOpacity 
+              key={idx} 
+              onPress={() => onHashtagPress?.(tag)}
+              style={styles.hashtag}
+            >
               <Text style={styles.hashtagText}>#{tag}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       )}
+
     </View>
   );
 };
