@@ -1,21 +1,26 @@
 import React from 'react';
-import { View, FlatList, TouchableOpacity, Dimensions } from 'react-native';
-import { ExpoImage } from 'expo-image';
+import { View, FlatList, TouchableOpacity, Dimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, Feather } from "@expo/vector-icons";
 import { styles } from './PostCard.styles';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+interface MediaItem {
+  url: string;
+  type?: 'image' | 'video' | string;
+}
+
 interface PostMediaProps {
-  media: any[];
+  media: MediaItem[];
   mediaHeight: number;
   activeIndex: number;
-  onScroll: (event: any) => void;
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onMediaPress: (index: number) => void;
   isMuted: boolean;
   toggleMute: () => void;
-  videoRef: React.RefObject<any>;
+  videoRef: React.RefObject<Video>;
 }
 
 const PostMedia: React.FC<PostMediaProps> = ({
@@ -28,7 +33,7 @@ const PostMedia: React.FC<PostMediaProps> = ({
   toggleMute,
   videoRef,
 }) => {
-  const renderItem = ({ item, index }: { item: any; index: number }) => {
+  const renderItem = ({ item, index }: { item: MediaItem; index: number }) => {
     const isVideo = item.type === 'video' || item.url?.includes('.mp4') || item.url?.includes('video/upload');
 
     if (isVideo) {
@@ -46,14 +51,16 @@ const PostMedia: React.FC<PostMediaProps> = ({
             isLooping
             shouldPlay={activeIndex === index}
             isMuted={isMuted}
+            useNativeControls={false}
           />
           <TouchableOpacity 
             style={styles.muteButton} 
             onPress={toggleMute}
+            activeOpacity={0.7}
           >
-            <Ionicons 
-              name={isMuted ? "volume-mute" : "volume-high"} 
-              size={20} 
+            <Feather 
+              name={isMuted ? "volume-x" : "volume-2"} 
+              size={18} 
               color="#fff" 
             />
           </TouchableOpacity>

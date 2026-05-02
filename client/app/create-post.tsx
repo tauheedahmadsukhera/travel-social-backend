@@ -1061,38 +1061,8 @@ export default function CreatePostScreen() {
 
       const trace = await startTrace('create_post_flow');
 
-      // Compress images before upload using optimized compression
-      let uploadImages = selectedImages;
-      if (mediaType === 'image') {
-        const compressedImages: string[] = [];
-        for (const imgUri of selectedImages) {
-          try {
-            // Use optimized compression with 75% quality & 1080px max width
-            const compressed = await compressImage(imgUri, 0.75, 1080);
-            compressedImages.push(compressed.uri);
-            console.log(`✅ Image compressed: ${(compressed.size / 1024).toFixed(0)}KB`);
-          } catch (error) {
-            console.warn(`âš ï¸ Compression failed, using original: ${error}`);
-            compressedImages.push(imgUri);
-          }
-        }
-        uploadImages = compressedImages;
-      } else if (mediaType === 'video') {
-        const compressedVideos: string[] = [];
-        for (const vidUri of selectedImages) {
-          try {
-            console.log('[CreatePost] Compressing video...');
-            // Use safe utility that won't crash if native module is missing
-            const compressed = await compressVideoSafe(vidUri);
-            compressedVideos.push(compressed);
-            console.log('✅ Video compressed or using original!');
-          } catch (error) {
-            console.warn('[CreatePost] Video compression failed, using original:', error);
-            compressedVideos.push(vidUri);
-          }
-        }
-        uploadImages = compressedVideos;
-      }
+      // Offloading compression to Cloudinary server-side to save user battery
+      const uploadImages = selectedImages;
 
 
       // Get userId from user context or AsyncStorage

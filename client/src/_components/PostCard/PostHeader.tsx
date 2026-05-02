@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { ExpoImage } from 'expo-image';
+import { Image as ExpoImage } from 'expo-image';
 import { Feather } from "@expo/vector-icons";
 import { styles } from './PostCard.styles';
 import { DEFAULT_AVATAR_URL } from '../../../lib/api';

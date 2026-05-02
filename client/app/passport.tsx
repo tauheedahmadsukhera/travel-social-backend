@@ -830,18 +830,25 @@ export default function PassportScreen() {
 
         {/* Tabs */}
         {!loading && (
-          <View style={styles.tabBar}>
-            {(['All', 'Countries', 'Cities', 'Places'] as FilterTab[])
-              .filter(tab => !selectedCountry || tab !== 'Countries')
-              .map(tab => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.tabItem, activeFilter === tab && styles.tabItemActive]}
-                onPress={() => setActiveFilter(tab)}
-              >
-                <Text style={[styles.tabText, activeFilter === tab && styles.tabTextActive]}>{tab}</Text>
-              </TouchableOpacity>
-            ))}
+          <View>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.tabBar}
+              contentContainerStyle={styles.tabBarContent}
+            >
+              {(['All', 'Countries', 'Cities', 'Places'] as FilterTab[])
+                .filter(tab => !selectedCountry || tab !== 'Countries')
+                .map(tab => (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.tabItem, activeFilter === tab && styles.tabItemActive]}
+                  onPress={() => setActiveFilter(tab)}
+                >
+                  <Text style={[styles.tabText, activeFilter === tab && styles.tabTextActive]}>{tab}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
 
@@ -1278,11 +1285,13 @@ const styles = StyleSheet.create({
   statLab: { fontSize: 12, color: '#888', marginTop: 2 },
 
   tabBar: {
+    marginTop: 25,
+    marginBottom: 15,
+  },
+  tabBarContent: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     gap: 8,
-    marginTop: 25,
-    marginBottom: 15,
   },
   tabItem: {
     paddingHorizontal: 20,

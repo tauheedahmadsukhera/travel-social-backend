@@ -8,7 +8,7 @@ import PostHeader from './PostCard/PostHeader';
 import PostMedia from './PostCard/PostMedia';
 import PostActions from './PostCard/PostActions';
 import PostCaption from './PostCard/PostCaption';
-import CommentSection from "./CommentSection";
+import { CommentSection } from "./CommentSection";
 import ShareModal from "./ShareModal";
 import { useUser } from "./UserContext";
 import { likePost, unlikePost } from "../../lib/firebaseHelpers";

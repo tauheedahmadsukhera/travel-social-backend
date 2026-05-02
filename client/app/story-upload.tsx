@@ -353,27 +353,9 @@ const DraggableOverlay = ({
         setUploadProgress(0);
 
         try {
+            // Offloading compression to Cloudinary server-side to save user battery
             let uploadUri = uri;
             const mediaType = type === 'video' ? 'video' : 'image';
-
-            // Compress assets safely (fallback to original if native library is missing)
-            if (mediaType === 'image') {
-                try {
-                    console.log('[StoryUpload] Compressing image...');
-                    uploadUri = await compressImageSafe(uri, 1080, 0.75);
-                    console.log('✅ Image compressed or using original!');
-                } catch (e) {
-                    console.warn('[StoryUpload] Compression fallback failed');
-                }
-            } else if (mediaType === 'video') {
-                try {
-                    console.log('[StoryUpload] Compressing video...');
-                    uploadUri = await compressVideoSafe(uri);
-                    console.log('✅ Video compressed or using original!');
-                } catch (e) {
-                    console.warn('[StoryUpload] Video compression fallback failed:', e);
-                }
-            }
 
 
             const loc = locationData ?? undefined;

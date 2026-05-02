@@ -244,7 +244,7 @@ function GroupCard({ group, onGroupUpdated, onGroupDeleted }: { group: Group; on
     };
 
     const handleDelete = () => {
-        Alert.alert('Delete Group', `"${group.name}" group delete ho jaayega.`, [
+        Alert.alert('Delete Group', `Are you sure you want to delete "${group.name}"? This action cannot be undone.`, [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Delete', style: 'destructive', onPress: async () => { const ok = await deleteGroup(group._id); if (ok) onGroupDeleted(group._id); } }
         ]);
