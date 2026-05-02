@@ -48,10 +48,23 @@ const PostCard: React.FC<PostCardProps> = ({
   const videoRef = useRef<any>(null);
 
   // Derived data
-  const postUserName = post?.user?.displayName || post?.user?.name || 'Traveler';
-  const postUserAvatar = post?.user?.profilePicture || post?.user?.avatar || post?.user?.photoURL;
-  const locationName = post?.locationData?.name || post?.locationName || '';
-  const postTimeText = 'Just now'; // Simplified for demo, should use dayjs/date-fns
+  const postUserName = post?.userName || post?.user?.displayName || post?.user?.name || post?.userId?.displayName || post?.userId?.name || 'User';
+  const postUserAvatar = post?.userAvatar || post?.user?.profilePicture || post?.user?.avatar || post?.user?.photoURL || post?.userId?.avatar || post?.userId?.profilePicture;
+  const locationName = post?.locationData?.name || post?.locationName || post?.location || '';
+  
+  const getPostTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const diff = (Date.now() - date.getTime()) / 1000;
+    if (diff < 60) return 'now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
+    if (diff < 2419200) return `${Math.floor(diff / 604800)}w`;
+    return date.toLocaleDateString();
+  };
+  const postTimeText = useMemo(() => getPostTime(post?.createdAt || post?.timestamp), [post?.createdAt, post?.timestamp]);
+
 
   const handleLike = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -83,14 +96,47 @@ const PostCard: React.FC<PostCardProps> = ({
         postUserAvatar={postUserAvatar}
         locationName={locationName}
         postTimeText={postTimeText}
-        onProfilePress={() => router.push({ pathname: '/user/[userId]', params: { userId: post?.userId } } as any)}
-        onLocationPress={() => {}}
+        onProfilePress={() => {
+          const uid = post?.userId?._id || post?.userId?.id || post?.userId || post?.user?.uid;
+          if (uid) router.push(`/user-profile?uid=${uid}`);
+        }}
+        onLocationPress={() => {
+          if (post?.locationData?.placeId) {
+            router.push({
+              pathname: '/location/[placeId]',
+              params: {
+                placeId: post.locationData.placeId,
+                locationName: post.locationData.name || locationName,
+                locationAddress: post.locationData.address || locationName
+              }
+            } as any);
+          }
+        }}
         onMenuPress={() => {}}
         showMenu={showMenu}
       />
 
       <PostMedia 
-        media={post?.media || []}
+        media={useMemo(() => {
+          const mediaArr: any[] = [];
+          
+          // 1. Check dedicated media array
+          if (Array.isArray(post?.media) && post.media.length > 0) {
+            mediaArr.push(...post.media);
+          } 
+          // 2. Check mediaUrls string array
+          else if (Array.isArray(post?.mediaUrls) && post.mediaUrls.length > 0) {
+            post.mediaUrls.forEach((url: string) => {
+              if (url) mediaArr.push({ url, type: post.mediaType || 'image' });
+            });
+          }
+          // 3. Fallback to single imageUrl or url
+          else if (post?.imageUrl || post?.url) {
+            mediaArr.push({ url: post.imageUrl || post.url, type: post.mediaType || 'image' });
+          }
+          
+          return mediaArr;
+        }, [post])}
         mediaHeight={400}
         activeIndex={activeIndex}
         onScroll={onScroll}
@@ -99,6 +145,7 @@ const PostCard: React.FC<PostCardProps> = ({
         toggleMute={() => setIsMuted(!isMuted)}
         videoRef={videoRef}
       />
+
 
       <PostActions 
         isLiked={isLiked}

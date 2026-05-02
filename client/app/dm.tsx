@@ -26,7 +26,11 @@ import {
   toTimestampMs,
   normalizeMessage,
   mergeMessages,
+  createTempId,
+  dedupeById,
+  getMessageId,
 } from '../src/_services/dmHelpers';
+import { apiService } from '../src/_services/apiService';
 import DMHeader from '../src/_components/dm/DMHeader';
 import DMInput from '../src/_components/dm/DMInput';
 
