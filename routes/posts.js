@@ -21,7 +21,33 @@ function resolvePostQuery(postId) {
   return { $or: or };
 }
 
+// --- Basic CRUD ---
+
+/**
+ * GET / - Get all posts (generic list)
+ */
+router.get('/', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '20'), 100);
+    const skip = parseInt(req.query.skip || '0');
+    const Post = mongoose.model('Post');
+
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', 'displayName name avatar profilePicture photoURL isPrivate')
+      .lean();
+
+    const enriched = await enrichPostsWithUserData(posts);
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- Feed & Discovery Routes ---
+
 
 /**
  * GET /feed - Optimized personalized feed
