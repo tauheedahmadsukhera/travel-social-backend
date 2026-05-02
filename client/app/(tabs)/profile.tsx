@@ -534,8 +534,13 @@ export default function Profile({ userIdProp }: any) {
               if (!prev) return prev;
               const base = typeof prev.followersCount === 'number'
                 ? prev.followersCount
-                : (Array.isArray(prev.followers) ? prev.followers.length : 0);
-              return { ...prev, followersCount: Math.max(0, base - 1) };
+                : (typeof prev.followers === 'number' ? prev.followers : 0);
+              return { 
+                ...prev, 
+                followersCount: Math.max(0, base - 1),
+                followers: Math.max(0, base - 1)
+              };
+
             });
             // Refresh profile data from backend to get updated counts
             const profileRes = await getUserProfileAPI(viewedUserId, currentUserId || undefined);
@@ -555,8 +560,13 @@ export default function Profile({ userIdProp }: any) {
               if (!prev) return prev;
               const base = typeof prev.followersCount === 'number'
                 ? prev.followersCount
-                : (Array.isArray(prev.followers) ? prev.followers.length : 0);
-              return { ...prev, followersCount: base + 1 };
+                : (typeof prev.followers === 'number' ? prev.followers : 0);
+              return { 
+                ...prev, 
+                followersCount: base + 1,
+                followers: base + 1
+              };
+
             });
             // Refresh profile data from backend to get updated counts
             const profileRes = await getUserProfileAPI(viewedUserId, currentUserId || undefined);
@@ -1066,8 +1076,9 @@ export default function Profile({ userIdProp }: any) {
         <ProfileStats 
           locationsCount={passportLocationsCount}
           postsCount={posts.length}
-          followersCount={Math.max(0, Number(profile?.followersCount ?? (profile?.followers?.length || 0)) || 0)}
-          followingCount={Math.max(0, Number(profile?.followingCount ?? (profile?.following?.length || 0)) || 0)}
+          followersCount={Math.max(0, Number(profile?.followersCount ?? profile?.followers ?? 0))}
+          followingCount={Math.max(0, Number(profile?.followingCount ?? profile?.following ?? 0))}
+
           onPressLocations={() => {
             if (!viewedUserId) return;
             router.push({

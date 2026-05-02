@@ -18,7 +18,9 @@ const PostCaption: React.FC<PostCaptionProps> = ({
   hashtags,
   isExpanded,
   onToggleExpand,
+  onHashtagPress,
 }) => {
+
   if (!caption && (!hashtags || hashtags.length === 0)) return null;
 
   return (
