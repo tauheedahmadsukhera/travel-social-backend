@@ -1,105 +1,93 @@
-/**
- * Professional Socket.IO Service for Real-time Messaging
- * Instagram-like features: delivery status, read receipts, typing indicators
- */
-
 import io, { Socket } from 'socket.io-client';
 import { getAPIBaseURL } from '../../config/environment';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 let socket: Socket | null = null;
 let currentUserId: string | null = null;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 20;
+const MAX_RECONNECT_ATTEMPTS = 15;
 
 /**
- * Initialize socket connection (JWT in handshake — server verifies identity).
+ * Professional Socket.IO Service for Real-time Messaging
+ * Hardened for production environments with token refresh and platform tracking.
  */
 export async function initializeSocket(userId: string): Promise<Socket> {
+  // If already connected for the same user, just return existing socket
   if (socket && socket.connected && currentUserId === userId) {
-    console.log('[Socket] Already connected for user:', userId);
     return socket;
   }
 
-  if (socket && currentUserId === userId && !socket.connected) {
-    console.log('[Socket] Recreating disconnected socket for user:', userId);
+  // Cleanup old state if switching users or forced re-init
+  if (socket) {
     socket.disconnect();
     socket = null;
-    currentUserId = null;
-  }
-
-  // Disconnect existing socket if different user
-  if (socket && currentUserId !== userId) {
-    console.log('[Socket] Disconnecting previous user:', currentUserId);
-    socket.disconnect();
   }
 
   const API_BASE = getAPIBaseURL();
-  const SOCKET_URL = API_BASE.replace('/api', ''); // Remove /api suffix
+  const SOCKET_URL = API_BASE.replace('/api', '');
+  const token = await AsyncStorage.getItem('token');
 
-  const token = (await AsyncStorage.getItem('token')) || '';
-
-  console.log('[Socket] Connecting to:', SOCKET_URL, 'for user:', userId);
+  console.log('[Socket] 🔄 Initializing connection for user:', userId);
 
   socket = io(SOCKET_URL, {
-    // Prefer WebSocket first (less HTTP long-poll overhead, closer to production chat apps).
     transports: ['websocket', 'polling'],
-    auth: { token },
+    auth: { 
+      token: token || '',
+      platform: Platform.OS,
+      version: '1.2.0-industrial',
+    },
     reconnection: true,
-    reconnectionAttempts: 20,
+    reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
     reconnectionDelay: 1000,
-    reconnectionDelayMax: 10000,
-    timeout: 30000,
+    reconnectionDelayMax: 5000,
+    timeout: 20000,
     autoConnect: true,
-    forceNew: true,
-    rememberUpgrade: true,
-    withCredentials: false,
   });
 
   currentUserId = userId;
 
   // Connection events
   socket.on('connect', () => {
-    console.log('[Socket] ✅ Connected:', socket?.id);
+    console.log('[Socket] ✅ Connected (ID: %s)', socket?.id);
     reconnectAttempts = 0;
-
-    // Join with userId
     socket?.emit('join', userId);
   });
 
-  socket.on('connected', (data) => {
-    console.log('[Socket] 👤 Joined as:', data.userId);
+  socket.on('connect_error', async (error) => {
+    console.warn('[Socket] ⚠️ Connection error:', error.message);
+    reconnectAttempts++;
+
+    // Critical: If auth failed, try to refresh the token for the next attempt
+    if (error.message === 'Unauthorized' || error.message.includes('auth')) {
+      console.log('[Socket] 🔑 Auth error detected, refreshing token metadata...');
+      const newToken = await AsyncStorage.getItem('token');
+      if (socket && newToken) {
+        socket.auth = { ...socket.auth, token: newToken };
+      }
+    }
+
+    if (reconnectAttempts === 5) {
+      console.log('[Socket] 📉 Switching to polling fallback...');
+      if (socket) socket.io.opts.transports = ['polling', 'websocket'];
+    }
   });
 
   socket.on('disconnect', (reason) => {
     console.log('[Socket] ❌ Disconnected:', reason);
+    if (reason === 'io server disconnect') {
+      // Server kicked us, try to reconnect manually
+      socket?.connect();
+    }
   });
 
-  socket.on('connect_error', (error) => {
-    console.error('[Socket] Connection error:', error.message);
-    reconnectAttempts++;
-
-    // After failures, allow polling-first fallback (some networks block WS).
-    if (socket && reconnectAttempts === 4) {
-      try {
-        socket.io.opts.transports = ['polling', 'websocket'];
-      } catch {
-        // best effort
-      }
-    }
-
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.error('[Socket] Max reconnection attempts reached');
-    }
+  socket.on('reconnect_attempt', (attempt) => {
+    console.log('[Socket] 🔄 Reconnect attempt #%d', attempt);
   });
 
   socket.on('socketAuthError', (payload) => {
-    console.warn('[Socket] Auth rejected:', payload?.message || payload);
-  });
-
-  socket.on('reconnect', (attemptNumber) => {
-    console.log('[Socket] 🔄 Reconnected after', attemptNumber, 'attempts');
-    socket?.emit('join', userId);
+    console.error('[Socket] 🚫 Auth Rejected:', payload?.message || payload);
+    // You could trigger a logout here if the token is permanently invalid
   });
 
   return socket;
@@ -319,6 +307,33 @@ export function subscribeToTyping(
     socket?.off('userTyping', typingHandler);
     socket?.off('userStoppedTyping', stopTypingHandler);
   };
+}
+
+/**
+ * Subscribe to user status updates (online/offline)
+ */
+export function subscribeToUserStatus(
+  onStatusUpdate: (data: { userId: string; status: 'online' | 'offline'; lastSeen?: string }) => void
+): () => void {
+  if (!socket) return () => {};
+
+  const handler = (data: any) => {
+    onStatusUpdate(data);
+  };
+
+  socket.on('userStatusUpdate', handler);
+
+  return () => {
+    socket?.off('userStatusUpdate', handler);
+  };
+}
+
+/**
+ * Explicitly request a user's current status
+ */
+export function requestUserStatus(userId: string) {
+  if (!socket || !socket.connected) return;
+  socket.emit('requestUserStatus', userId);
 }
 
 export function subscribeToLiveStream(streamId: string, onUserJoined: (data: any) => void, onUserLeft: (data: any) => void, onLiveComment: (comment: any) => void) {

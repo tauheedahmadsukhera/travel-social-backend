@@ -95,9 +95,12 @@ async function requestLikeFallback(method: 'POST' | 'DELETE', postId: string, us
 /**
  * Get a post by its ID
  */
-export async function getPostById(postId: string) {
+export async function getPostById(postId: string, viewerId?: string | null) {
   try {
-    const data = await apiService.get(`/posts/${postId}`);
+    const params: any = {};
+    if (viewerId) params.requesterUserId = viewerId;
+    
+    const data = await apiService.get(`/posts/${postId}`, { params });
     return data;
   } catch (error: any) {
     return { success: false, error: error.message };

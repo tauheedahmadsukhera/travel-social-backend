@@ -1,0 +1,39 @@
+name: Trave Social Backend CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+        cache-dependency-path: backend/package.json
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm install
+
+    - name: Run Tests
+      working-directory: ./backend
+      run: npm test
+      env:
+        MONGO_URI: mongodb://localhost:27017/trave_test
+        JWT_SECRET: test_secret
+        NODE_ENV: test

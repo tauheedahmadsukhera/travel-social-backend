@@ -91,50 +91,28 @@ export default function HashtagDetailsScreen() {
     setLoading(true);
     try {
       const tagString = Array.isArray(tag) ? tag[0] : tag;
-      console.log(`[Hashtag] Fetching posts for #${tagString}`);
+      const cleanTag = tagString.replace(/^#/, '');
+      console.log(`[Hashtag] Fetching posts for #${cleanTag}`);
 
-      // Try the API first
-      try {
-        const response = await apiService.get('/hashtags/posts', { hashtag: tagString });
-        if (response?.success && Array.isArray(response?.data)) {
-          const normalizedPosts = response.data.map((post: any) => ({
-            ...post,
-            id: post.id || post._id,
-          }));
-          setPosts(normalizedPosts);
-          setLoading(false);
-          return;
-        }
-      } catch (apiError) {
-        console.log('[Hashtag] API endpoint not available, using local search:', apiError);
-      }
+      // Use the new dedicated hashtag posts endpoint
+      const response = await apiService.get('/posts/hashtags/posts', { 
+        hashtag: cleanTag,
+        viewerId: currentUserId || undefined 
+      });
 
-      // Fallback: fetch all posts and filter by hashtag locally
-      try {
-        const feedRes: any = await apiService.getPosts({
-          skip: 0,
-          limit: 300,
-          viewerId: currentUserId || undefined,
-          requesterUserId: currentUserId || undefined,
-        });
-        const allPosts = feedRes?.success && Array.isArray(feedRes?.data) ? feedRes.data : [];
+      if (response?.success && Array.isArray(response?.data)) {
+        // Ensure uniqueness just in case
+        const uniquePosts = response.data.filter((post: any, index: number, self: any[]) =>
+          index === self.findIndex((p) => (p.id || p._id) === (post.id || post._id))
+        );
 
-        const normalize = (str: string) => String(str || '').toLowerCase().trim();
-        const normalizedTag = normalize(tagString.replace(/^#/, ''));
-
-        const filteredPosts = allPosts.filter((post: any) => {
-          const postHashtags = Array.isArray(post?.hashtags) ? post.hashtags : [];
-          return postHashtags.some((ht: any) => normalize(String(ht)) === normalizedTag);
-        });
-
-        const normalized = filteredPosts.map((post: any) => ({
+        const normalizedPosts = uniquePosts.map((post: any) => ({
           ...post,
           id: post.id || post._id,
         }));
 
-        setPosts(normalized);
-      } catch (error) {
-        console.log('[Hashtag] Fallback search error:', error);
+        setPosts(normalizedPosts);
+      } else {
         setPosts([]);
       }
     } catch (error) {

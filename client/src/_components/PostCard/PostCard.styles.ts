@@ -3,15 +3,18 @@ import { StyleSheet, Dimensions } from 'react-native';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
+  cardContainer: {
+    backgroundColor: '#fff',
+    marginBottom: 0,
+  },
+
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 10,
-    paddingRight: 10,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     backgroundColor: '#fff',
-    gap: 10,
+    gap: 12,
   },
   cardHeaderAvatar: {
     width: 40,
@@ -73,19 +76,42 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: 'space-between',
     paddingHorizontal: 11,
-    paddingTop: 9,
+    paddingTop: 4,
     paddingBottom: 0,
   },
   iconRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 16,
   },
   iconRowRightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 'auto',
     gap: 4,
+  },
+  reactionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  currentEmoji: {
+    fontSize: 20,
+    marginRight: 6,
+  },
+  starTrigger: {
+    marginRight: 6,
+  },
+  reactionTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
   },
   iconRowRight: {
     flexDirection: 'row',
@@ -98,7 +124,7 @@ export const styles = StyleSheet.create({
   },
   captionWrap: {
     paddingHorizontal: 11,
-    paddingTop: 2,
+    marginTop: 0,
     paddingBottom: 0,
   },
   caption: {
@@ -108,6 +134,12 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.14,
     textAlign: 'left',
     color: '#111',
+  },
+  captionMore: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 2,
+    fontWeight: '500',
   },
   hashtags: {
     flexDirection: 'row',
@@ -168,6 +200,33 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  muteButtonMini: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 20,
+  },
+  videoProgressBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    zIndex: 30,
+  },
+  videoProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#fff',
+  },
   videoControlsBar: {
     position: 'absolute',
     bottom: 0,
@@ -198,5 +257,11 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     minWidth: 35,
+  },
+  centralIconOverlay: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 40,
   },
 });

@@ -1,8 +1,10 @@
 const { withAndroidManifest } = require('expo/config-plugins');
 
 /**
- * Config plugin to fix AndroidManifest.xml
- * Replaces ${appAuthRedirectScheme} placeholder with actual value
+ * Config plugin to fix AndroidManifest.xml:
+ * 1. Replaces ${appAuthRedirectScheme} placeholder with actual value
+ * 2. Forces windowSoftInputMode=adjustResize on MainActivity so keyboard
+ *    shrinks the window instead of panning the entire UI off-screen.
  */
 const withAndroidManifestFix = (config) => {
   return withAndroidManifest(config, (config) => {
@@ -19,8 +21,17 @@ const withAndroidManifestFix = (config) => {
       (activity) => activity.$['android:name'] === '.MainActivity'
     );
 
-    if (!mainActivity || !mainActivity['intent-filter']) {
-      console.warn('⚠️ Could not find MainActivity or intent-filter');
+    if (!mainActivity) {
+      console.warn('⚠️ Could not find MainActivity');
+      return config;
+    }
+
+    // ✅ FIX 1: Force adjustResize so keyboard shrinks the window instead of panning
+    // This prevents the header from being pushed off-screen when keyboard opens.
+    mainActivity.$['android:windowSoftInputMode'] = 'adjustResize';
+    console.log('✅ Set windowSoftInputMode=adjustResize on MainActivity');
+
+    if (!mainActivity['intent-filter']) {
       return config;
     }
 
@@ -36,7 +47,7 @@ const withAndroidManifestFix = (config) => {
       return config;
     }
 
-    // Replace ${appAuthRedirectScheme} with actual value
+    // ✅ FIX 2: Replace ${appAuthRedirectScheme} with actual value
     let fixed = false;
     browsableFilter.data = browsableFilter.data.map((dataItem) => {
       if (dataItem.$['android:scheme'] === '${appAuthRedirectScheme}') {
@@ -53,11 +64,9 @@ const withAndroidManifestFix = (config) => {
     if (fixed) {
       console.log('✅ Fixed ${appAuthRedirectScheme} placeholder in AndroidManifest.xml');
     } else {
-      // Add trave-social scheme if not exists
       const hasTraveScheme = browsableFilter.data.some(
         (dataItem) => dataItem.$['android:scheme'] === 'trave-social'
       );
-      
       if (!hasTraveScheme) {
         browsableFilter.data.unshift({
           $: {

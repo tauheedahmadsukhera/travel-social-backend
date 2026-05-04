@@ -111,7 +111,7 @@ export default function NotificationsScreen() {
         alert('Notification missing postId. Cannot open post.');
         return;
       }
-      navRoute = `/post-detail?id=${item.postId}&commentId=${item.commentId || ''}`;
+      navRoute = `/post-detail?id=${item.postId}&openComments=true&commentId=${item.commentId || ''}`;
     } else if (item.type === 'dm' || item.type === 'message') {
       navRoute = `/dm?otherUserId=${item.senderId}`;
     } else if (item.type === 'live') {

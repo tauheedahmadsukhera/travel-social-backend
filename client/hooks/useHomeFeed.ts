@@ -1,0 +1,257 @@
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { InteractionManager, Platform } from 'react-native';
+import { apiService } from '../src/_services/apiService';
+import { getUserProfile } from '../lib/firebaseHelpers/index';
+import { getCachedData, setCachedData } from '../hooks/useOffline';
+
+export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [allLoadedPosts, setAllLoadedPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  
+  const nextPageRef = useRef(0);
+  const avatarHydrateReqIdRef = useRef(0);
+  const avatarHydrateTaskRef = useRef<any>(null);
+  const allLoadedPostsRef = useRef<any[]>([]);
+  const hasFetchedRef = useRef(false);
+
+  useEffect(() => {
+    allLoadedPostsRef.current = Array.isArray(allLoadedPosts) ? allLoadedPosts : [];
+  }, [allLoadedPosts]);
+
+  const HOME_CACHE_KEY = useMemo(() => `home_feed_v1_${String(currentUserId || 'anon')}`, [currentUserId]);
+
+  const shufflePosts = useCallback((postsArray: any[]) => {
+    if (Platform.OS === 'ios') return [...postsArray];
+    const shuffled = [...postsArray];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }, []);
+
+  const createMixedFeed = useCallback((postsArray: any[]) => {
+    if (postsArray.length === 0) return [];
+    if (Platform.OS === 'ios') {
+      const getPostTimestamp = (createdAt: any): number => {
+        if (!createdAt) return 0;
+        if (typeof createdAt.toMillis === 'function') return createdAt.toMillis();
+        if (typeof createdAt === 'string') return new Date(createdAt).getTime();
+        if (typeof createdAt === 'number') return createdAt;
+        return 0;
+      };
+      return [...postsArray].sort((a: any, b: any) => getPostTimestamp(b?.createdAt) - getPostTimestamp(a?.createdAt));
+    }
+    
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000;
+
+    const getPostTimestamp = (createdAt: any): number => {
+      if (!createdAt) return 0;
+      if (typeof createdAt.toMillis === 'function') return createdAt.toMillis();
+      if (typeof createdAt === 'string') return new Date(createdAt).getTime();
+      if (typeof createdAt === 'number') return createdAt;
+      return 0;
+    };
+
+    const recentPosts = postsArray.filter(p => getPostTimestamp(p.createdAt) > oneDayAgo);
+    const mediumPosts = postsArray.filter(p => {
+      const t = getPostTimestamp(p.createdAt);
+      return t <= oneDayAgo && t > threeDaysAgo;
+    });
+    const olderPosts = postsArray.filter(p => getPostTimestamp(p.createdAt) <= threeDaysAgo);
+
+    const shuffledRecent = shufflePosts(recentPosts);
+    const shuffledMedium = shufflePosts(mediumPosts);
+    const shuffledOlder = shufflePosts(olderPosts);
+
+    const mixed: any[] = [];
+    const recentCount = Math.min(5, shuffledRecent.length);
+    mixed.push(...shuffledRecent.slice(0, recentCount));
+
+    const remaining = [...shuffledRecent.slice(recentCount), ...shuffledMedium, ...shuffledOlder];
+    mixed.push(...shufflePosts(remaining));
+    return mixed;
+  }, [shufflePosts]);
+
+  const normalizeAvatar = useCallback((value: any): string => {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const lower = trimmed.toLowerCase();
+    if (['null', 'undefined', 'n/a', 'na'].includes(lower)) return '';
+    if (lower.includes('via.placeholder.com/200x200.png?text=profile')) return '';
+    if (lower.includes('/default%2fdefault-pic.jpg') || lower.includes('/default/default-pic.jpg')) return '';
+    return trimmed;
+  }, []);
+
+  const getPostAuthorId = useCallback((post: any): string => {
+    const raw = post?.userId;
+    if (typeof raw === 'string') return raw;
+    if (raw && typeof raw === 'object') return String(raw._id || raw.id || raw.uid || raw.firebaseUid || '');
+    return '';
+  }, []);
+
+  const loadInitialFeed = async (pageNum = 0, options?: { silent?: boolean, [key: string]: any }) => {
+    if (pageNum === 0 && !options?.silent) setLoading(true);
+    try {
+      const limit = 20;
+      const skip = pageNum * limit;
+      const response = await apiService.getPosts({ 
+        skip, 
+        limit, 
+        requesterUserId: currentUserId || undefined,
+        ...options
+      });
+
+      let postsData: any[] = [];
+      if (response?.success && Array.isArray(response.data)) {
+        postsData = response.data;
+      } else if (Array.isArray(response)) {
+        postsData = response;
+      }
+
+      if (pageNum > 0 && postsData.length === 0) {
+        const excludeIds = (allLoadedPostsRef.current || [])
+          .map((p: any) => String(p?.id || p?._id || ''))
+          .filter(Boolean)
+          .slice(-180);
+        try {
+          const recRes = await apiService.getRecommendedPosts({
+            limit,
+            excludeIds: excludeIds.join(','),
+            requesterUserId: currentUserId || undefined,
+          });
+          if (recRes?.success && Array.isArray(recRes.data)) {
+            postsData = recRes.data;
+          }
+        } catch {}
+      }
+
+      const normalizedPosts = postsData.map(p => ({
+        ...p,
+        id: p.id || p._id,
+        isPrivate: p.isPrivate ?? false,
+        allowedFollowers: p.allowedFollowers || [],
+      }));
+
+      if (pageNum === 0) {
+        try { await setCachedData(HOME_CACHE_KEY, normalizedPosts, { ttl: 24 * 60 * 60 * 1000 }); } catch {}
+        setAllLoadedPosts(normalizedPosts);
+        setPosts(createMixedFeed(normalizedPosts));
+        nextPageRef.current = 0;
+
+        avatarHydrateReqIdRef.current += 1;
+        const reqId = avatarHydrateReqIdRef.current;
+        try { avatarHydrateTaskRef.current?.cancel?.(); } catch {}
+        avatarHydrateTaskRef.current = InteractionManager.runAfterInteractions(() => {
+          (async () => {
+            if (reqId !== avatarHydrateReqIdRef.current) return;
+            const authorIds = Array.from(new Set(normalizedPosts.map(p => getPostAuthorId(p)).filter(Boolean)));
+            const avatarMap: Record<string, string> = {};
+            const idsToFetch = authorIds.slice(0, 10);
+            await Promise.all(idsToFetch.map(async (authorId) => {
+              try {
+                const profileRes: any = await getUserProfile(authorId);
+                if (profileRes?.success && profileRes?.data) {
+                  const resolved = normalizeAvatar(profileRes.data.avatar || profileRes.data.photoURL || profileRes.data.profilePicture);
+                  if (resolved) avatarMap[authorId] = resolved;
+                }
+              } catch {}
+            }));
+            if (reqId !== avatarHydrateReqIdRef.current) return;
+            const apply = (p: any) => {
+              const authorId = getPostAuthorId(p);
+              const directAvatar = normalizeAvatar(p.userAvatar || p.avatar || p.photoURL || p.profilePicture || p?.userId?.avatar || p?.userId?.photoURL || p?.userId?.profilePicture);
+              const hydratedAvatar = directAvatar || avatarMap[authorId] || '';
+              if (!hydratedAvatar) return p;
+              const hydratedUserObj = (p.userId && typeof p.userId === 'object') ? { ...p.userId, avatar: p.userId.avatar || hydratedAvatar, photoURL: p.userId.photoURL || hydratedAvatar, profilePicture: p.userId.profilePicture || hydratedAvatar } : p.userId;
+              return { ...p, userAvatar: p.userAvatar || hydratedAvatar, avatar: p.avatar || hydratedAvatar, photoURL: p.photoURL || hydratedAvatar, profilePicture: p.profilePicture || hydratedAvatar, userId: hydratedUserObj };
+            };
+            setAllLoadedPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
+            setPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
+          })();
+        });
+      } else {
+        setAllLoadedPosts(prev => {
+          const updated = [...(Array.isArray(prev) ? prev : []), ...normalizedPosts];
+          return Array.from(new Map(updated.map((p: any) => [String(p?.id || p?._id || ''), p])).values()).filter((p: any) => p && (p.id || p._id));
+        });
+        setPosts(prev => {
+          const cur = Array.isArray(prev) ? prev : [];
+          const seen = new Set(cur.map((p: any) => String(p?.id || p?._id || '')));
+          const toAdd = normalizedPosts.filter(p => {
+            const id = String(p?.id || p?._id || '');
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+          return [...cur, ...toAdd];
+        });
+      }
+      return postsData;
+    } catch (error: any) {
+      console.error('[HomeFeed] Error loading posts:', error);
+      return [];
+    } finally {
+      if (pageNum === 0 && !options?.silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cached = await getCachedData<any[]>(HOME_CACHE_KEY);
+        if (Array.isArray(cached) && cached.length > 0) {
+          setAllLoadedPosts(cached);
+          setPosts(createMixedFeed(cached));
+          setLoading(false);
+        }
+      } catch {}
+
+      if (!currentUserId) return;
+      if (hasFetchedRef.current) return;
+      hasFetchedRef.current = true;
+
+      if (isOnline) {
+        await loadInitialFeed(0);
+      } else {
+        setLoading(prev => (prev ? false : prev));
+      }
+    })();
+  }, [HOME_CACHE_KEY, createMixedFeed, isOnline, currentUserId]);
+
+  const loadMorePosts = useCallback(() => {
+    if (loadingMore || loading || !hasMorePosts) return;
+    const nextPage = nextPageRef.current + 1;
+    setLoadingMore(true);
+    loadInitialFeed(nextPage).then((res: any) => {
+      const newData = Array.isArray(res) ? res : (res?.data || []);
+      if (newData.length > 0) {
+        nextPageRef.current = nextPage;
+        if (newData.length < 20) setHasMorePosts(false);
+      } else {
+        setHasMorePosts(false);
+      }
+    }).finally(() => setLoadingMore(false));
+  }, [loadingMore, loading, hasMorePosts, loadInitialFeed]);
+
+  return {
+    posts,
+    setPosts,
+    allLoadedPosts,
+    setAllLoadedPosts,
+    loading,
+    loadingMore,
+    hasMorePosts,
+    setHasMorePosts,
+    loadInitialFeed,
+    loadMorePosts,
+    createMixedFeed,
+    HOME_CACHE_KEY
+  };
+}

@@ -99,21 +99,24 @@ export async function signInWithEmailPassword(
     });
 
     if (response.success) {
-      // Step 3: Store token
+      // Step 3: Store token and UNIFIED userId (MongoDB _id)
       const canonicalUserId = String(response.user?.id ?? response.user?._id ?? firebaseUser.uid);
-      const firebaseUid = String(response.user?.firebaseUid ?? firebaseUser.uid);
+      
       // iOS Fix: Store all avatar variants from backend response
       const avatarToStore = response.user?.avatar || response.user?.photoURL || response.user?.profilePicture || firebaseUser.photoURL || '';
+      
       await AsyncStorage.multiSet([
         ['token', response.token],
         ['userId', canonicalUserId],
-        ['uid', firebaseUid],
-        ['firebaseUid', firebaseUid],
         ['userEmail', firebaseUser.email || ''],
-        ['userAvatar', avatarToStore],  // iOS Fix: Cache avatar in storage for profile fallback
+        ['userAvatar', avatarToStore],
       ]);
 
-      console.log('[signInWithEmailPassword] ✅ Firebase + MongoDB sync successful');
+      // Compatibility: Also keep 'uid' but mark for future removal
+      await AsyncStorage.setItem('uid', canonicalUserId); 
+      await AsyncStorage.setItem('firebaseUid', String(response.user?.firebaseUid || firebaseUser.uid));
+
+      console.log('[signInWithEmailPassword] ✅ Unified Identity stored:', canonicalUserId);
       return { success: true, user: firebaseUser };
     } else {
       console.error('[signInWithEmailPassword] ❌ MongoDB sync failed:', response.error);
@@ -181,21 +184,24 @@ export async function registerWithEmailPassword(
     }
 
     if (response.success) {
-      // Step 3: Store token
+      // Step 3: Store token and UNIFIED userId (MongoDB _id)
       const canonicalUserId = String(response.user?.id ?? response.user?._id ?? firebaseUser.uid);
-      const firebaseUid = String(response.user?.firebaseUid ?? firebaseUser.uid);
+      
       // iOS Fix: Store all avatar variants from backend response
       const avatarToStore = response.user?.avatar || response.user?.photoURL || response.user?.profilePicture || firebaseUser.photoURL || '';
+      
       await AsyncStorage.multiSet([
         ['token', response.token],
         ['userId', canonicalUserId],
-        ['uid', firebaseUid],
-        ['firebaseUid', firebaseUid],
         ['userEmail', firebaseUser.email || ''],
-        ['userAvatar', avatarToStore],  // iOS Fix: Cache avatar in storage for profile fallback
+        ['userAvatar', avatarToStore],
       ]);
 
-      console.log('[registerWithEmailPassword] ✅ Firebase + MongoDB sync successful');
+      // Compatibility: Also keep 'uid' but mark for future removal
+      await AsyncStorage.setItem('uid', canonicalUserId);
+      await AsyncStorage.setItem('firebaseUid', String(response.user?.firebaseUid || firebaseUser.uid));
+
+      console.log('[registerWithEmailPassword] ✅ Unified Identity stored:', canonicalUserId);
       return { success: true, user: firebaseUser };
     } else {
       console.error('[registerWithEmailPassword] ❌ MongoDB sync failed:', response.error);

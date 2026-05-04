@@ -73,6 +73,46 @@ export function setupNotificationListeners() {
         console.error('[NotificationHandler] Error handling notification response:', e);
       }
     });
+
+    // --- PUSH TOKEN REGISTRATION ---
+    (async () => {
+      try {
+        const { resolveCanonicalUserId } = require('../lib/currentUser');
+        const { registerPushToken } = require('../lib/firebaseHelpers/user');
+        const Constants = require('expo-constants').default;
+        
+        const userId = await resolveCanonicalUserId();
+        if (!userId) return;
+
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+          console.warn('[NotificationHandler] Permission not granted for push notifications');
+          return;
+        }
+
+        const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
+        if (!projectId) {
+          console.warn('[NotificationHandler] No EAS Project ID found, using legacy token fetch');
+        }
+
+        const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        const token = tokenData.data;
+        
+        console.log('🎫 Expo Push Token:', token);
+        if (token) {
+          await registerPushToken(userId, token);
+          console.log('✅ Push token registered with backend');
+        }
+      } catch (err) {
+        console.error('[NotificationHandler] Token registration failed:', err);
+      }
+    })();
+
   } catch (e) {
     console.warn('[NotificationHandler] Failed to setup notification listeners:', e);
   }

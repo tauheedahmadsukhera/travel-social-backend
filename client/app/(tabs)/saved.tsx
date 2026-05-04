@@ -40,7 +40,7 @@ import { apiService } from '@/src/_services/apiService';
 import { feedEventEmitter } from '../../lib/feedEventEmitter';
 import { sharePost } from '../../lib/postShare';
 import { useHeaderHeight } from './_layout';
-import { resolveCanonicalUserId } from '../../lib/currentUser';
+import { resolveCanonicalUserId, getAuthenticatedUserId } from '../../lib/currentUser';
 import { hapticLight } from '../../lib/haptics';
 import { getCachedData, setCachedData, useOfflineBanner, useNetworkStatus } from '../../hooks/useOffline';
 import { OfflineBanner } from '@/src/_components/OfflineBanner';
@@ -93,10 +93,11 @@ export default function SavedScreen() {
   // Modals
   const [collDropdownOpen, setCollDropdownOpen] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [queuedCreateModalOpen, setQueuedCreateModalOpen] = useState(false);
+  const [createModalInitialScreen, setCreateModalInitialScreen] = useState<'list' | 'new'>('list');
   const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
-  const [queuedEditTarget, setQueuedEditTarget] = useState<Collection | null>(null);
-  const [queuedDeleteTarget, setQueuedDeleteTarget] = useState<Collection | null>(null);
+  const pendingModalRef = useRef<'create' | 'edit' | 'delete' | null>(null);
+  const pendingEditTargetRef = useRef<Collection | null>(null);
+  const pendingDeleteTargetRef = useRef<Collection | null>(null);
 
   // Edit sheet state
   const [editTarget, setEditTarget] = useState<Collection | null>(null);
@@ -177,75 +178,39 @@ export default function SavedScreen() {
       return;
     }
     try {
-      const [uidAlias, firebaseAlias] = await Promise.all([
-        AsyncStorage.getItem('uid'),
-        AsyncStorage.getItem('firebaseUid'),
+      const requesterId = currentUserId || (await getAuthenticatedUserId());
+      if (!requesterId) {
+        setLoading(false);
+        isLoadingDataRef.current = false;
+        return;
+      }
+
+      const [sectRes, postsRes] = await Promise.all([
+        apiService.get(`/users/${requesterId}/sections`, {
+          viewerId: requesterId,
+          requesterUserId: requesterId,
+        }),
+        apiService.get(`/users/${requesterId}/saved`, {
+          viewerId: requesterId,
+          requesterUserId: requesterId,
+        }),
       ]);
 
-      const idCandidates = Array.from(new Set([
-        activeUid,
-        requesterId,
-        targetUserId || null,
-        uidAlias,
-        firebaseAlias,
-      ].filter(Boolean).map((v) => String(v))));
-      const cappedCandidates = idCandidates.slice(0, 3);
-
-      if (__DEV__) {
-        console.log('[saved.tsx] loadData id candidates:', cappedCandidates);
-      }
+      const sectionsData = sectRes?.success && Array.isArray(sectRes.data) ? sectRes.data : [];
+      const savedData = Array.isArray(postsRes?.data) ? postsRes.data : (Array.isArray(postsRes) ? postsRes : []);
 
       const sectionsById = new Map<string, any>();
       const savedById = new Map<string, any>();
 
-      let hasSections = false;
-      let hasSaved = false;
+      sectionsData.forEach((section: any) => {
+        const sectionKey = String(section?._id || section?.id || '');
+        if (sectionKey) sectionsById.set(sectionKey, section);
+      });
 
-      for (const candidateId of cappedCandidates) {
-        const [sectRes, postsRes] = await Promise.all([
-          apiService.get(`/users/${candidateId}/sections`, {
-            viewerId: requesterId || undefined,
-            requesterId: requesterId || undefined,
-            requesterUserId: requesterId || undefined,
-          }),
-          apiService.get(`/users/${candidateId}/saved`, {
-            viewerId: requesterId || undefined,
-            requesterId: requesterId || undefined,
-            requesterUserId: requesterId || undefined,
-          }),
-        ]);
-
-        const sectionsData = sectRes?.success && Array.isArray(sectRes.data) ? sectRes.data : [];
-        const savedData = Array.isArray(postsRes?.data) ? postsRes.data : (Array.isArray(postsRes) ? postsRes : []);
-
-        if (__DEV__) {
-          console.log('[saved.tsx] candidate result:', {
-            candidateId,
-            sectionsCount: sectionsData.length,
-            savedCount: savedData.length,
-            sectionsSuccess: !!sectRes?.success,
-            savedSuccess: !!postsRes?.success,
-          });
-        }
-
-        sectionsData.forEach((section: any) => {
-          const sectionKey = String(section?._id || section?.id || `${section?.userId || 'u'}:${section?.name || 'section'}`);
-          if (sectionKey && !sectionsById.has(sectionKey)) {
-            sectionsById.set(sectionKey, section);
-          }
-        });
-
-        savedData.forEach((post: any) => {
-          const postKey = String(post?._id || post?.id || '');
-          if (postKey && !savedById.has(postKey)) {
-            savedById.set(postKey, post);
-          }
-        });
-
-        if (sectionsData.length > 0) hasSections = true;
-        if (savedData.length > 0) hasSaved = true;
-        if (hasSections && hasSaved) break;
-      }
+      savedData.forEach((post: any) => {
+        const postKey = String(post?._id || post?.id || '');
+        if (postKey) savedById.set(postKey, post);
+      });
 
       const mergedSections = Array.from(sectionsById.values());
       const mergedSavedRaw = Array.from(savedById.values());
@@ -438,72 +403,119 @@ export default function SavedScreen() {
   }, [loadGroups, loadFollowers]);
 
   const openEdit = (col: Collection) => {
-    setQueuedDeleteTarget(null);
-
-    if ((Platform.OS as any) === 'ios') {
-      setQueuedEditTarget(col);
-      setCollDropdownOpen(false);
-      return;
-    }
-
-    if (collDropdownOpen) {
-      setCollDropdownOpen(false);
-      setTimeout(() => applyEditState(col), 40);
-      return;
-    }
-
-    applyEditState(col);
+    hapticLight();
+    pendingEditTargetRef.current = col;
+    pendingModalRef.current = 'edit';
+    setCollDropdownOpen(false);
   };
-
   const openDelete = (col: Collection) => {
-    setQueuedEditTarget(null);
-
-    if ((Platform.OS as any) === 'ios') {
-      setQueuedDeleteTarget(col);
-      setCollDropdownOpen(false);
-      return;
-    }
-
-    if (collDropdownOpen) {
-      setCollDropdownOpen(false);
-      setTimeout(() => setDeleteTarget(col), 40);
-      return;
-    }
-
-    setDeleteTarget(col);
+    hapticLight();
+    pendingDeleteTargetRef.current = col;
+    pendingModalRef.current = 'delete';
+    setCollDropdownOpen(false);
   };
 
   useEffect(() => {
-    if ((Platform.OS as any) === 'ios') return;
-    if (collDropdownOpen || !queuedEditTarget) return;
+    // Robust modal queuing: trigger the next modal ONLY after the dropdown has fully closed
+    if (collDropdownOpen) return;
+    if (!pendingModalRef.current) return;
+
+    const modalToOpen = pendingModalRef.current;
+    pendingModalRef.current = null; // Clear it immediately
+
+    if (__DEV__) console.log('[Saved] Triggering pending modal:', modalToOpen);
 
     const timer = setTimeout(() => {
-      setQueuedEditTarget(null);
-      applyEditState(queuedEditTarget);
-    }, (Platform.OS as any) === 'ios' ? 120 : 40);
+      if (modalToOpen === 'create') {
+        setCreateModalInitialScreen('new');
+        setCreateModalVisible(true);
+      } else if (modalToOpen === 'edit' && pendingEditTargetRef.current) {
+        applyEditState(pendingEditTargetRef.current);
+        pendingEditTargetRef.current = null;
+      } else if (modalToOpen === 'delete' && pendingDeleteTargetRef.current) {
+        setDeleteTarget(pendingDeleteTargetRef.current);
+        pendingDeleteTargetRef.current = null;
+      }
+    }, 400); // 400ms is safer for Android transitions
 
     return () => clearTimeout(timer);
-  }, [collDropdownOpen, queuedEditTarget, applyEditState]);
+  }, [collDropdownOpen, applyEditState]);
 
   useEffect(() => {
-    if ((Platform.OS as any) === 'ios') return;
-    if (collDropdownOpen || !queuedDeleteTarget) return;
-
-    const timer = setTimeout(() => {
-      setQueuedDeleteTarget(null);
-      setDeleteTarget(queuedDeleteTarget);
-    }, 40);
-
-    return () => clearTimeout(timer);
-  }, [collDropdownOpen, queuedDeleteTarget]);
-
-  useEffect(() => {
-    const subscription = feedEventEmitter.addListener('feedUpdated', () => {
+    const subRefresh = feedEventEmitter.addListener('feedUpdated', () => {
       if (uid) loadData(uid);
     });
 
+    const subDelete = feedEventEmitter.onFeedUpdate((event) => {
+      if (event.type === 'POST_DELETED' && event.postId) {
+        if (__DEV__) console.log('[Saved] Post deleted event received:', event.postId);
+        const targetId = String(event.postId).split('-loop')[0];
+
+        const filterFn = (prev: any[]) => (Array.isArray(prev) ? prev.filter(p => {
+          const pid = String(p?.id || p?._id || '').split('-loop')[0];
+          return pid !== targetId;
+        }) : []);
+
+        // 1. Update local states
+        setAllSavedPosts(prev => filterFn(prev));
+        setCollections(prev => prev.map(col => ({
+          ...col,
+          postIds: Array.isArray(col.postIds) ? col.postIds.filter(id => String(id).split('-loop')[0] !== targetId) : []
+        })));
+
+        // 2. Aggressively update all related saved caches
+        (async () => {
+          try {
+            const allKeys = await AsyncStorage.getAllKeys();
+            const savedKeys = allKeys.filter(k => k.includes('saved_v1_'));
+
+            for (const fullKey of savedKeys) {
+              try {
+                const cached = await AsyncStorage.getItem(fullKey);
+                if (cached) {
+                  let entry = JSON.parse(cached);
+                  let snap = entry.data || entry;
+                  let changed = false;
+
+                  if (snap && Array.isArray(snap.allSavedPosts)) {
+                    const originalLen = snap.allSavedPosts.length;
+                    snap.allSavedPosts = snap.allSavedPosts.filter((p: any) => {
+                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
+                      return pid !== targetId;
+                    });
+                    if (snap.allSavedPosts.length !== originalLen) changed = true;
+                  }
+
+                  if (snap && Array.isArray(snap.collections)) {
+                    snap.collections = snap.collections.map((col: any) => {
+                      if (Array.isArray(col.postIds)) {
+                        const originalLen = col.postIds.length;
+                        col.postIds = col.postIds.filter((id: any) => String(id).split('-loop')[0] !== targetId);
+                        if (col.postIds.length !== originalLen) changed = true;
+                      }
+                      return col;
+                    });
+                  }
+
+                  if (changed) {
+                    if (entry.data) entry.data = snap; else entry = snap;
+                    await AsyncStorage.setItem(fullKey, JSON.stringify(entry));
+                  }
+                }
+              } catch (e) {
+                await AsyncStorage.removeItem(fullKey);
+              }
+            }
+          } catch (e) {
+            if (__DEV__) console.warn('[Saved] Failed to aggressively clear caches:', e);
+          }
+        })();
+      }
+    });
+
     return () => {
-      subscription.remove();
+      subRefresh.remove();
+      subDelete();
     };
   }, [uid, loadData]);
 
@@ -674,10 +686,28 @@ export default function SavedScreen() {
     if (loading) return <ActivityIndicator color="#0A3D62" style={{ marginTop: 60 }} size="large" />;
     if (displayedPosts.length === 0) return (
       <View style={styles.emptyWrap}>
-        <Feather name="bookmark" size={48} color="#ddd" />
-        <Text style={styles.emptyText}>
-          {activeCollection ? 'No posts in this collection.' : 'No saved posts yet.'}
+        <View style={styles.emptyIconContainer}>
+          <Ionicons name="bookmark-outline" size={42} color="#0A3D62" />
+        </View>
+        <Text style={styles.emptyTitle}>
+          {activeCollection ? 'No posts in this collection' : 'No saved posts yet'}
         </Text>
+        <Text style={styles.emptySubtitle}>
+          {activeCollection 
+            ? 'When you save posts to this collection, they will appear here.' 
+            : 'Tap the bookmark icon on any post to save it to your collections.'}
+        </Text>
+        {!activeCollection && isProfileOwner && (
+          <TouchableOpacity 
+            style={styles.emptyBtn}
+            onPress={() => {
+              hapticLight();
+              setCollDropdownOpen(true);
+            }}
+          >
+            <Text style={styles.emptyBtnText}>Browse Collections</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
     return (
@@ -711,26 +741,6 @@ export default function SavedScreen() {
       transparent
       animationType="slide"
       onRequestClose={() => setCollDropdownOpen(false)}
-      onDismiss={() => {
-        if (queuedCreateModalOpen) {
-          setQueuedCreateModalOpen(false);
-          setTimeout(() => setCreateModalVisible(true), (Platform.OS as any) === 'ios' ? 140 : 50);
-          return;
-        }
-
-        if (queuedDeleteTarget) {
-          const target = queuedDeleteTarget;
-          setQueuedDeleteTarget(null);
-          setTimeout(() => setDeleteTarget(target), (Platform.OS as any) === 'ios' ? 140 : 50);
-          return;
-        }
-
-        if (queuedEditTarget) {
-          const target = queuedEditTarget;
-          setQueuedEditTarget(null);
-          setTimeout(() => applyEditState(target), (Platform.OS as any) === 'ios' ? 140 : 50);
-        }
-      }}
       statusBarTranslucent
       presentationStyle="overFullScreen"
     >
@@ -759,13 +769,15 @@ export default function SavedScreen() {
           <Text style={styles.collSectionTitle}>Collections</Text>
           {isProfileOwner && (
             <TouchableOpacity
+              style={styles.newCollBtn}
               onPress={() => {
                 hapticLight();
-                setQueuedCreateModalOpen(true);
+                pendingModalRef.current = 'create';
                 setCollDropdownOpen(false);
               }}
             >
-              <Text style={styles.newCollText}>New collection</Text>
+              <Feather name="plus" size={14} color="#0A3D62" />
+              <Text style={styles.newCollText}>New</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1097,6 +1109,7 @@ export default function SavedScreen() {
       <SaveToCollectionModal
         visible={createModalVisible}
         onClose={handleModalClose}
+        initialScreen={createModalInitialScreen}
         postId=""
         postImageUrl={undefined}
         currentUserId={currentUserId || uid || undefined}
@@ -1231,8 +1244,51 @@ const styles = StyleSheet.create({
   },
   gridImg: { width: '100%', height: '100%', resizeMode: 'cover' },
 
-  emptyWrap: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
-  emptyText: { fontSize: 15, color: '#bbb', marginTop: 12, textAlign: 'center' },
+  emptyWrap: { 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    paddingTop: SCREEN_H * 0.15, 
+    paddingHorizontal: 40 
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F0F7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#111', 
+    marginBottom: 8,
+    textAlign: 'center' 
+  },
+  emptySubtitle: { 
+    fontSize: 14, 
+    color: '#888', 
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  emptyBtn: {
+    backgroundColor: '#0A3D62',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    shadowColor: '#0A3D62',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  emptyBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
   // Bottom sheet
   sheetBackdrop: {
@@ -1281,8 +1337,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  collSectionTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
-  newCollText: { fontSize: 14, color: '#0A3D62', fontWeight: '600' },
+  collSectionTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
+  newCollBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F7FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 4,
+  },
+  newCollText: { fontSize: 13, color: '#0A3D62', fontWeight: '700' },
 
   // Collection row inside sheet
   collRow: {

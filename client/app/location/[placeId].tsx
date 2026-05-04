@@ -92,12 +92,51 @@ export default function LocationDetailsScreen() {
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
   const [selectedSubLocation, setSelectedSubLocation] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [totalVisits, setTotalVisits] = useState(0);
   const [verifiedVisits, setVerifiedVisits] = useState(0);
   const [mostLikedPostImage, setMostLikedPostImage] = useState<string>('');
   const [showStoriesViewer, setShowStoriesViewer] = useState(false);
   const [selectedStories, setSelectedStories] = useState<Story[]>([]);
   const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
+
+  // --- NEW: PAGINATION & SKELETON STATES ---
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const LIMIT = 12;
+
+  // Load current user
+  useEffect(() => {
+    const loadUser = async () => {
+      const uid = await AsyncStorage.getItem('userId');
+      if (uid) {
+        setViewerId(uid);
+        setCurrentUser({ uid, id: uid });
+      }
+    };
+    loadUser();
+  }, []);
+
+  // Optimized Image Helper
+  const getOptimizedUrl = (url: string, width = 800) => {
+    if (!url || !url.includes('cloudinary.com')) return url;
+    return url.replace('/upload/', `/upload/w_${width},c_limit,q_auto,f_auto/`);
+  };
+
+  // Premium Skeleton Component
+  const LocationSkeleton = () => (
+    <View style={{ padding: 20, marginBottom: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+        <View style={{ width: 80, height: 80, backgroundColor: '#f2f2f2', borderRadius: 28 }} />
+        <View style={{ marginLeft: 15, flex: 1 }}>
+          <View style={{ height: 20, width: '70%', backgroundColor: '#f2f2f2', borderRadius: 4, marginBottom: 8 }} />
+          <View style={{ height: 15, width: '40%', backgroundColor: '#f2f2f2', borderRadius: 4 }} />
+        </View>
+      </View>
+      <View style={{ height: 300, backgroundColor: '#f2f2f2', borderRadius: 16, width: '100%' }} />
+    </View>
+  );
 
   // Scroll animation state
   const safeTop = Math.max(insets.top, 12);
@@ -219,21 +258,7 @@ export default function LocationDetailsScreen() {
     [inferRegionKey, regionKey]
   );
 
-  // Load current user when component mounts
-  useEffect(() => {
-    const loadCurrentUser = async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        if (userId) {
-          setCurrentUser({ uid: userId, id: userId });
-          console.log('[Location] Current user loaded:', userId);
-        }
-      } catch (error) {
-        console.log('[Location] Failed to load current user:', error);
-      }
-    };
-    loadCurrentUser();
-  }, []);
+
 
   // Listen for feed updates (like post deletion)
   useEffect(() => {
@@ -250,32 +275,32 @@ export default function LocationDetailsScreen() {
 
   useEffect(() => {
     async function fetchDetails() {
+      if (!locationName) return;
       setLoading(true);
       try {
-        // Use the location data passed from navigation params
-        // This avoids CORS issues with Google Places Details API
-        const placeDetails = {
+        const placeDetailsData = {
           name: locationName as string,
-          formatted_address: locationAddress as string || locationName as string,
+          formatted_address: (locationAddress as string) || (locationName as string),
         };
-        setPlaceDetails(placeDetails);
+        setPlaceDetails(placeDetailsData);
 
+        // 1. Fetch Posts (Main content - blocking)
         if (isRegionScope) {
           await fetchRegionPosts(regionIdStr, locationName as string);
         } else {
-          // Fetch posts from backend that match this location
           await fetchLocationPosts(locationName as string);
         }
 
-        // Fetch stories from Firebase that match this location
-        await fetchLocationStories(locationName as string);
+        // 2. Fetch Stories (Side content - NON-blocking)
+        fetchLocationStories(locationName as string);
+
       } catch (e) {
         console.error('Error fetching location details:', e);
-        setPlaceDetails(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
-    if (locationName) fetchDetails();
+    fetchDetails();
   }, [placeId, locationName, locationAddress, isRegionScope, regionIdStr]);
 
   const extractSubLocationName = (locationName: string, locationAddress: string): string => {
@@ -297,311 +322,137 @@ export default function LocationDetailsScreen() {
     return locationName;
   };
 
-  const fetchLocationPosts = async (searchLocationName: string) => {
+  const fetchLocationPosts = async (searchLocationName: string, isLoadMore = false) => {
+    if (!searchLocationName) return;
+
     try {
-      const viewerId = await AsyncStorage.getItem('userId');
-      const locationAddressValue = Array.isArray(locationAddress) ? locationAddress[0] : locationAddress;
-      const routePlaceIdRaw = typeof placeId === 'string' ? placeId : Array.isArray(placeId) ? placeId[0] : '';
-      const routePlaceId = String(routePlaceIdRaw || '').trim();
+      if (isLoadMore) setLoadingMore(true);
+      else setLoading(true);
 
-      let metaHasVerifiedVisits = false;
+      const skip = isLoadMore ? (page + 1) * LIMIT : 0;
+      const response = await apiService.getPostsByLocation(searchLocationName, skip, LIMIT, viewerId || undefined);
+      let locationPosts = response?.success && Array.isArray(response?.data) ? response.data : [];
 
-      const normalize = (v: any) => String(v || '').trim().toLowerCase();
-      const primarySearchPart =
-        String(searchLocationName || '')
-          .split(',')
-          .map((p) => p.trim())
-          .filter(Boolean)[0] || String(searchLocationName || '');
-      const primaryAddressPart =
-        String(locationAddressValue || '')
-          .split(',')
-          .map((p) => p.trim())
-          .filter(Boolean)[0] || String(locationAddressValue || '');
-      const rawNeedles = [searchLocationName, primarySearchPart, primaryAddressPart];
-      const needles = Array.from(new Set(rawNeedles.map(normalize).filter((v) => v.length >= 3)));
+      if (locationPosts.length < LIMIT) setHasMore(false);
 
-      const postMatchesLocationQuery = (post: any) => {
-        if (routePlaceId) {
-          const sp = String(post?.locationData?.placeId || '').trim();
-          if (sp && sp === routePlaceId) return true;
+      const normalized = locationPosts.map((p: any) => ({ ...p, id: p.id || p._id }));
+      
+      let finalPosts = normalized;
+      if (isLoadMore) {
+        finalPosts = [...allPosts, ...normalized];
+        setAllPosts(finalPosts);
+        setFilteredPosts(finalPosts);
+        setPage(p => p + 1);
+      } else {
+        setAllPosts(normalized);
+        setFilteredPosts(normalized);
+        setPage(0);
+        setHasMore(locationPosts.length === LIMIT);
+
+        // --- NEW: Set Most Liked Image for Region Header ---
+        if (normalized.length > 0) {
+          const mostLiked = normalized.reduce((prev: any, curr: any) =>
+            (curr.likesCount || 0) > (prev.likesCount || 0) ? curr : prev
+          );
+          if (mostLiked?.imageUrl) setMostLikedPostImage(mostLiked.imageUrl);
         }
-        if (!needles.length) return false;
-        const haystack = [
-          post?.location,
-          post?.locationName,
-          post?.locationData?.name,
-          post?.locationData?.address,
-          post?.locationData?.city,
-          post?.locationData?.country,
-          ...(Array.isArray(post?.locationKeys) ? post.locationKeys : []),
-        ]
-          .map(normalize)
-          .filter(Boolean);
-        return needles.some((needle) => haystack.some((hay) => hay.includes(needle)));
-      };
-
-      const all: any[] = [];
-      const pageSize = 50;
-      const MAX_LOCATION_API_PAGES = 300;
-      for (let page = 0; page < MAX_LOCATION_API_PAGES; page++) {
-        const skip = page * pageSize;
-        const response = await apiService.getPostsByLocation(searchLocationName, skip, pageSize, viewerId || undefined);
-        const next = response?.success && Array.isArray(response?.data) ? response.data : [];
-        all.push(...next);
-        if (next.length < pageSize) break;
       }
 
-      const byId = new Map<string, any>();
-      const addPost = (post: any) => {
-        const id = String(post?.id || post?._id || '').trim();
-        if (!id) return;
-        if (!byId.has(id)) byId.set(id, { ...post, id: post.id || post._id });
-      };
-      for (const post of all) addPost(post);
-
-      const FEED_PAGE = 100;
-      const MAX_FEED_PAGES = 50;
-      for (let fp = 0; fp < MAX_FEED_PAGES; fp++) {
-        const feedRes: any = await apiService.getPosts({
-          skip: fp * FEED_PAGE,
-          limit: FEED_PAGE,
-          viewerId: viewerId || undefined,
-          requesterUserId: viewerId || undefined,
-        });
-        const batch =
-          feedRes?.success && Array.isArray(feedRes?.data) ? feedRes.data : Array.isArray(feedRes) ? feedRes : [];
-        if (!batch.length) break;
-        for (const post of batch) {
-          if (postMatchesLocationQuery(post)) addPost(post);
-        }
-        if (batch.length < FEED_PAGE) break;
-      }
-
-      let locationPosts = Array.from(byId.values());
-      locationPosts.sort((a: any, b: any) => {
-        const ta =
-          a?.createdAt && typeof a.createdAt === 'string'
-            ? Date.parse(a.createdAt)
-            : a?.createdAt?.toDate?.()
-              ? a.createdAt.toDate().getTime()
-              : 0;
-        const tb =
-          b?.createdAt && typeof b.createdAt === 'string'
-            ? Date.parse(b.createdAt)
-            : b?.createdAt?.toDate?.()
-              ? b.createdAt.toDate().getTime()
-              : 0;
-        return (tb || 0) - (ta || 0);
-      });
-
-      console.log(
-        `[Location] "${searchLocationName}": API pages ~${Math.ceil(all.length / pageSize)}, merged ${locationPosts.length} posts (API rows ${all.length})`
-      );
-
-      setAllPosts(locationPosts);
-      setFilteredPosts(locationPosts);
-
-      try {
-        const metaRes = await apiService.getLocationMeta(searchLocationName, viewerId || undefined);
-        const meta = metaRes?.success ? metaRes?.data : null;
-        if (meta && typeof meta === 'object') {
-          if (typeof meta.visits === 'number') setTotalVisits(meta.visits);
-          else if (typeof meta.postCount === 'number') setTotalVisits(meta.postCount);
-          if (typeof meta.verifiedVisits === 'number') {
-            metaHasVerifiedVisits = true;
-            setVerifiedVisits(meta.verifiedVisits);
+      // --- Meta & Sub-Location Logic ---
+      if (!isLoadMore) {
+        try {
+          const metaRes = await apiService.getLocationMeta(searchLocationName, viewerId || undefined);
+          if (metaRes?.success && metaRes?.data) {
+            setTotalVisits(metaRes.data.visits || normalized.length);
+            setVerifiedVisits(metaRes.data.verifiedVisits || 0);
+          } else {
+            setTotalVisits(normalized.length);
           }
-        } else {
-          setTotalVisits(locationPosts.length);
-        }
-      } catch {
-        setTotalVisits(locationPosts.length);
+        } catch { setTotalVisits(normalized.length); }
+
+        const subMap = new Map<string, any[]>();
+        normalized.forEach((post: any) => {
+          const locStr = post?.locationData?.name || post?.locationName || post?.location || '';
+          const subName = extractSubLocationName(locStr, post?.locationData?.address || '');
+          if (!subMap.has(subName)) subMap.set(subName, []);
+          subMap.get(subName)?.push(post);
+        });
+
+        const subs = Array.from(subMap.entries()).map(([name, posts]) => ({
+          name,
+          count: posts.length,
+          thumbnail: posts[0]?.imageUrl || 'https://via.placeholder.com/60',
+          posts,
+        }));
+        setSubLocations(subs);
       }
-
-      // Extract sub-locations from posts
-      const subLocationMap = new Map<string, any[]>();
-      locationPosts.forEach((post: Post) => {
-        const locStr =
-          post?.locationData?.name ||
-          post?.locationName ||
-          (typeof post?.location === 'string' ? post.location : post?.location?.name) ||
-          '';
-        const subLocName = extractSubLocationName(
-          locStr,
-          post?.locationData?.address || ''
-        );
-        if (!subLocationMap.has(subLocName)) {
-          subLocationMap.set(subLocName, []);
-        }
-        subLocationMap.get(subLocName)?.push(post);
-      });
-
-      const subLocations = Array.from(subLocationMap.entries()).map(([name, posts]) => ({
-        name,
-        count: posts.length,
-        thumbnail: posts[0]?.imageUrl || 'https://via.placeholder.com/60',
-        posts
-      }));
-
-      subLocations.sort((a: any, b: any) => {
-        const diff = (b?.count || 0) - (a?.count || 0);
-        if (diff !== 0) return diff;
-        return String(a?.name || '').localeCompare(String(b?.name || ''));
-      });
-
-      setSubLocations(subLocations);
-
-      // Count verified visits (if meta not available)
-      if (!metaHasVerifiedVisits) {
-        const verifiedCount = locationPosts.filter((p: any) => p?.locationData?.verified).length;
-        setVerifiedVisits(verifiedCount);
-      }
-
-      // Set most liked post image for header
-      if (locationPosts.length > 0) {
-        const mostLiked = locationPosts.reduce((prev: any, curr: any) =>
-          (curr.likesCount || 0) > (prev.likesCount || 0) ? curr : prev
-        );
-        if (mostLiked?.imageUrl) {
-          setMostLikedPostImage(mostLiked.imageUrl);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching location posts:', error);
-      setAllPosts([]);
-      setFilteredPosts([]);
+    } catch (err) {
+      console.error('[fetchLocationPosts] Error:', err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
   };
 
-  const fetchRegionPosts = async (rid: string, regionName: string) => {
+  const fetchRegionPosts = async (rid: string, regionName: string, isLoadMore = false) => {
+    const searchLocationName = regionName || rid;
+    if (!searchLocationName) return;
+
     try {
-      const viewerId = await AsyncStorage.getItem('userId');
-      const countries = await getCountriesForRegion(rid, regionName);
+      if (isLoadMore) setLoadingMore(true);
+      else setLoading(true);
 
-      if (countries.length === 0) {
-        await fetchLocationPosts(regionName);
-        return;
-      }
+      const skip = isLoadMore ? (page + 1) * LIMIT : 0;
+      const response = await apiService.getPostsByLocation(searchLocationName, skip, LIMIT, viewerId || undefined);
+      let locationPosts = response?.success && Array.isArray(response?.data) ? response.data : [];
 
-      const pageSize = 50;
-      const MAX_PAGES_PER_COUNTRY = 300;
-      const maxCountries = 25; // protect device/network (increase if needed)
+      if (locationPosts.length < LIMIT) setHasMore(false);
 
-      const expandCountryAliases = (name: string): string[] => {
-        const n = String(name || '').trim();
-        const nl = n.toLowerCase();
-        if (!n) return [];
-        if (nl === 'united states' || nl === 'united states of america' || nl === 'usa') {
-          return ['United States', 'United States of America', 'USA'];
-        }
-        if (nl === 'united kingdom' || nl === 'uk' || nl === 'great britain') {
-          return ['United Kingdom', 'UK', 'Great Britain'];
-        }
-        return [n];
-      };
+      const normalized = locationPosts.map((p: any) => ({ ...p, id: p.id || p._id }));
 
-      const pickedRaw = countries.slice(0, maxCountries);
-      const picked: string[] = [];
-      const seenPick = new Set<string>();
-      for (const c of pickedRaw) {
-        for (const alias of expandCountryAliases(c)) {
-          const key = alias.trim().toLowerCase();
-          if (!key || seenPick.has(key)) continue;
-          seenPick.add(key);
-          picked.push(alias);
-        }
-      }
-      const allPostsOut: any[] = [];
+      let finalPosts = normalized;
+      if (isLoadMore) {
+        finalPosts = [...allPosts, ...normalized];
+        setAllPosts(finalPosts);
+        setFilteredPosts(finalPosts);
+        setPage(p => p + 1);
+      } else {
+        setAllPosts(normalized);
+        setFilteredPosts(normalized);
+        setPage(0);
+        setHasMore(locationPosts.length === LIMIT);
 
-      // small concurrency cap (avoid flooding)
-      const chunkSize = 3;
-      for (let i = 0; i < picked.length; i += chunkSize) {
-        const chunk = picked.slice(i, i + chunkSize);
-        const settled = await Promise.allSettled(
-          chunk.map(async (countryName) => {
-            const all: any[] = [];
-            for (let page = 0; page < MAX_PAGES_PER_COUNTRY; page++) {
-              const skip = page * pageSize;
-              const response = await apiService.getPostsByLocation(countryName, skip, pageSize, viewerId || undefined);
-              const next = response?.success && Array.isArray(response?.data) ? response.data : [];
-              all.push(...next);
-              if (next.length < pageSize) break;
-            }
-            return all;
-          })
-        );
-        for (const r of settled) {
-          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-            allPostsOut.push(...r.value);
-          }
+        // --- NEW: Set Most Liked Image for Header ---
+        if (normalized.length > 0) {
+          const mostLiked = normalized.reduce((prev: any, curr: any) =>
+            (curr.likesCount || 0) > (prev.likesCount || 0) ? curr : prev
+          );
+          if (mostLiked?.imageUrl) setMostLikedPostImage(mostLiked.imageUrl);
         }
       }
 
-      const seen = new Set<string>();
-      const normalized: any[] = [];
-      for (const post of allPostsOut) {
-        const id = String(post?.id || post?._id || '');
-        if (!id) continue;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        normalized.push({ ...post, id });
+      if (!isLoadMore) {
+        const subMap = new Map<string, any[]>();
+        normalized.forEach((post: any) => {
+          const locStr = post?.locationData?.name || post?.locationName || post?.location || '';
+          const subName = extractSubLocationName(locStr, post?.locationData?.address || '');
+          if (!subMap.has(subName)) subMap.set(subName, []);
+          subMap.get(subName)?.push(post);
+        });
+        const subs = Array.from(subMap.entries()).map(([name, posts]) => ({
+          name,
+          count: posts.length,
+          thumbnail: posts[0]?.imageUrl || 'https://via.placeholder.com/60',
+          posts,
+        }));
+        setSubLocations(subs);
+        setTotalVisits(normalized.length);
       }
-
-      normalized.sort((a: any, b: any) => {
-        const ta = (a?.createdAt && typeof a.createdAt === 'string') ? Date.parse(a.createdAt) : (a?.createdAt?.toDate?.() ? a.createdAt.toDate().getTime() : 0);
-        const tb = (b?.createdAt && typeof b.createdAt === 'string') ? Date.parse(b.createdAt) : (b?.createdAt?.toDate?.() ? b.createdAt.toDate().getTime() : 0);
-        return (tb || 0) - (ta || 0);
-      });
-
-      setAllPosts(normalized as any);
-      setFilteredPosts(normalized as any);
-      setTotalVisits(normalized.length);
-
-      const verifiedCount = normalized.filter((p: any) => p?.locationData?.verified).length;
-      setVerifiedVisits(verifiedCount);
-
-      // Sub locations (same as single location)
-      const subLocationMap = new Map<string, any[]>();
-      (normalized as any[]).forEach((post: any) => {
-        const locStr =
-          post?.locationData?.name ||
-          post?.locationName ||
-          (typeof post?.location === 'string' ? post.location : post?.location?.name) ||
-          '';
-        const subLocName = extractSubLocationName(
-          locStr,
-          post?.locationData?.address || ''
-        );
-        if (!subLocationMap.has(subLocName)) subLocationMap.set(subLocName, []);
-        subLocationMap.get(subLocName)?.push(post);
-      });
-
-      const subs = Array.from(subLocationMap.entries()).map(([name, posts]) => ({
-        name,
-        count: posts.length,
-        thumbnail: posts[0]?.imageUrl || 'https://via.placeholder.com/60',
-        posts,
-      }));
-      subs.sort((a: any, b: any) => {
-        const diff = (b?.count || 0) - (a?.count || 0);
-        if (diff !== 0) return diff;
-        return String(a?.name || '').localeCompare(String(b?.name || ''));
-      });
-      setSubLocations(subs as any);
-
-      if ((normalized as any[]).length > 0) {
-        const mostLiked = (normalized as any[]).reduce((prev: any, curr: any) =>
-          (curr.likesCount || 0) > (prev.likesCount || 0) ? curr : prev
-        );
-        if (mostLiked?.imageUrl) setMostLikedPostImage(mostLiked.imageUrl);
-      }
-    } catch (error) {
-      console.error('Error fetching region posts:', error);
-      setAllPosts([]);
-      setFilteredPosts([]);
-      setSubLocations([]);
-      setTotalVisits(0);
-      setVerifiedVisits(0);
+    } catch (err) {
+      console.error('[fetchRegionPosts] Error:', err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -675,13 +526,7 @@ export default function LocationDetailsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#0A3D62" style={{ marginTop: 40 + insets.top }} />
-      </View>
-    );
-  }
+
 
   if (!placeDetails) {
     return (
@@ -745,129 +590,155 @@ export default function LocationDetailsScreen() {
         </View>
       </Animated.View>
 
-      <FlatList
-        data={filteredPosts}
-        scrollEventThrottle={16}
-        onScroll={(e) => {
-          const y = e.nativeEvent.contentOffset?.y ?? 0;
-          const prevY = lastScrollYRef.current;
-          lastScrollYRef.current = y;
+      {loading && allPosts.length === 0 ? (
+        <View style={{ flex: 1, paddingTop: totalHeaderHeight }}>
+          <LocationSkeleton />
+          <LocationSkeleton />
+          <LocationSkeleton />
+        </View>
+      ) : (
+        <FlatList
+          data={selectedSubLocation ? filteredPosts : allPosts}
+          scrollEventThrottle={16}
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset?.y ?? 0;
+            const prevY = lastScrollYRef.current;
+            lastScrollYRef.current = y;
 
-          const delta = y - prevY;
-          if (Math.abs(delta) < 6) return; // ignore jitters
+            const delta = y - prevY;
+            if (Math.abs(delta) < 6) return; // ignore jitters
 
-          // Hysteresis: avoids rapid show/hide when rubber-banding at the top (blink).
-          if (y <= 8) {
-            applyHeaderState(false);
-          } else if (y > 56) {
-            applyHeaderState(true);
-          }
-        }}
-        keyExtractor={(item, index) => {
-          const id = String(item?.id || item?._id || '').trim();
-          return id || `post-${index}`;
-        }}
-        ListHeaderComponent={
-          <>
-            {/* Location Header Card */}
-            <View style={styles.locationHeaderCard}>
-              <Image
-                source={{ uri: mostLikedPostImage || 'https://via.placeholder.com/80' }}
-                style={styles.locationImage}
-              />
-              <View style={styles.locationTextContainer}>
-                <View style={styles.locationRow}>
-                  <Ionicons name="location-outline" size={16} color="#000" />
-                  <Text style={styles.locationNameText} numberOfLines={1}>
-                    {placeDetails.name}
-                  </Text>
-                </View>
-                <View style={[styles.locationRow, { marginTop: 4 }]}>
-                  <Ionicons name="people-outline" size={16} color="#000" />
-                  <Text style={styles.visitsText}>{totalVisits} Visits</Text>
-                </View>
-                {verifiedVisits > 0 && (
-                  <View style={[styles.locationRow, { marginTop: 4 }]}>
-                    <VerifiedBadge size={15} color="#000" />
-                    <Text style={styles.verifiedText}>{verifiedVisits} Verified visits</Text>
+            if (y <= 8) {
+              applyHeaderState(false);
+            } else if (y > 56) {
+              applyHeaderState(true);
+            }
+          }}
+          keyExtractor={(item, index) => {
+            const id = String(item?.id || item?._id || '').trim();
+            return id || `post-${index}`;
+          }}
+          ListHeaderComponent={
+            <>
+              {/* Location Header Card */}
+              <View style={styles.locationHeaderCard}>
+                <Image
+                  source={{ uri: getOptimizedUrl(mostLikedPostImage || 'https://via.placeholder.com/80', 400) }}
+                  style={styles.locationImage}
+                />
+                <View style={styles.locationTextContainer}>
+                  <View style={styles.locationRow}>
+                    <Ionicons name="location-outline" size={16} color="#000" />
+                    <Text style={styles.locationNameText} numberOfLines={1}>
+                      {placeDetails?.name || locationName}
+                    </Text>
                   </View>
-                )}
+                  <View style={[styles.locationRow, { marginTop: 4 }]}>
+                    <Ionicons name="people-outline" size={16} color="#000" />
+                    <Text style={styles.visitsText}>{totalVisits} Visits</Text>
+                  </View>
+                  {verifiedVisits > 0 && (
+                    <View style={[styles.locationRow, { marginTop: 4 }]}>
+                      <VerifiedBadge size={15} color="#000" />
+                      <Text style={styles.verifiedText}>{verifiedVisits} Verified visits</Text>
+                    </View>
+                  )}
+                </View>
               </View>
+
+              {/* Stories/People Section */}
+              {stories.length > 0 && (
+                <View style={styles.storiesSection}>
+                  <Text style={styles.sectionTitle}>STORIES</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.storiesScroll}
+                  >
+                    {stories.map((story, index) => (
+                      <TouchableOpacity
+                        key={story.id || story._id || `story - ${index} `}
+                        style={styles.storyCard}
+                        onPress={() => onStoryPress && onStoryPress(stories, index)}
+                      >
+                        <Image
+                          source={{ uri: getOptimizedUrl(story.imageUrl || story.userAvatar || '', 200) }}
+                          style={styles.storyAvatar}
+                        />
+                        <Text style={styles.storyUserName} numberOfLines={1}>
+                          {(story.userName || 'user').toLowerCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Sub Locations Section */}
+              {subLocations.length > 0 && (
+                <View style={styles.subLocationsSection}>
+                  <Text style={styles.sectionTitle}>PLACES</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.subLocationsScroll}
+                  >
+                    {subLocations.map((subLoc) => (
+                      <TouchableOpacity
+                        key={subLoc.name}
+                        style={[
+                          styles.subLocationCard,
+                          selectedSubLocation === subLoc.name && styles.subLocationCardSelected
+                        ]}
+                        onPress={() => handleSubLocationFilter(subLoc.name)}
+                      >
+                        <Image
+                          source={{ uri: getOptimizedUrl(subLoc.thumbnail || 'https://via.placeholder.com/100', 200) }}
+                          style={styles.subLocationImage}
+                        />
+                        <Text style={styles.subLocationName} numberOfLines={2}>
+                          {subLoc.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </>
+          }
+          renderItem={({ item }) => (
+            <PostCard 
+              post={{
+                ...item,
+                imageUrl: getOptimizedUrl(item.imageUrl, 800)
+              }} 
+              currentUser={currentUser} 
+              showMenu={false} 
+            />
+          )}
+          onEndReached={() => {
+            if (hasMore && !loadingMore && !loading) {
+              if (isRegionScope) fetchRegionPosts(regionIdStr, locationName as string, true);
+              else fetchLocationPosts(locationName as string, true);
+            }
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={() => (
+            loadingMore ? (
+              <View style={{ paddingVertical: 20 }}>
+                <ActivityIndicator size="small" color="#007AFF" />
+              </View>
+            ) : null
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Feather name="map-pin" size={64} color="#ccc" />
+              <Text style={styles.emptyText}>No posts from this location</Text>
             </View>
-
-            {/* Stories/People Section */}
-            {stories.length > 0 && (
-              <View style={styles.storiesSection}>
-                <Text style={styles.sectionTitle}>STORIES</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.storiesScroll}
-                >
-                  {stories.map((story, index) => (
-                    <TouchableOpacity
-                      key={story.id || story._id || `story - ${index} `}
-                      style={styles.storyCard}
-                      onPress={() => onStoryPress && onStoryPress(stories, index)}
-                    >
-                      <Image
-                        source={{ uri: story.imageUrl || story.userAvatar || '' }}
-                        style={styles.storyAvatar}
-                      />
-                      <Text style={styles.storyUserName} numberOfLines={1}>
-                        {(story.userName || 'user').toLowerCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Sub Locations Section */}
-            {subLocations.length > 0 && (
-              <View style={styles.subLocationsSection}>
-                <Text style={styles.sectionTitle}>PLACES</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.subLocationsScroll}
-                >
-                  {subLocations.map((subLoc) => (
-                    <TouchableOpacity
-                      key={subLoc.name}
-                      style={[
-                        styles.subLocationCard,
-                        selectedSubLocation === subLoc.name && styles.subLocationCardSelected
-                      ]}
-                      onPress={() => handleSubLocationFilter(subLoc.name)}
-                    >
-                      <Image
-                        source={{ uri: subLoc.thumbnail || 'https://via.placeholder.com/100' }}
-                        style={styles.subLocationImage}
-                      />
-                      <Text style={styles.subLocationName} numberOfLines={2}>
-                        {subLoc.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-
-          </>
-        }
-        renderItem={({ item }) => (
-          <PostCard post={item} currentUser={currentUser} showMenu={false} />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Feather name="map-pin" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No posts from this location</Text>
-          </View>
-        }
-        showsVerticalScrollIndicator={false}
-      />
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Stories Viewer Modal */}
       {showStoriesViewer && selectedStories.length > 0 && (

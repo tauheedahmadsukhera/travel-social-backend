@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { AppState, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Image, StyleSheet, Text, TouchableOpacity, View, Animated, Easing } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
@@ -81,6 +81,24 @@ function MessageBubbleInner({
   const [resolvedStory, setResolvedStory] = React.useState<any>(sharedStory || null);
   const [storyExpired, setStoryExpired] = React.useState(false);
   const [storyLoading, setStoryLoading] = React.useState(false);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const scaleAnim = React.useRef(new Animated.Value(0.95)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
   const displayText = typeof text === 'string'
     ? text.trim().replace(/(^|\s)#([\p{L}\p{N}_]+)/gu, '$1$2')
     : text;
@@ -407,7 +425,13 @@ function MessageBubbleInner({
   };
 
   return (
-    <View style={[styles.container, isSelf ? styles.containerSelf : styles.containerOther]}>
+    <Animated.View 
+      style={[
+        styles.container, 
+        isSelf ? styles.containerSelf : styles.containerOther,
+        { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }
+      ]}
+    >
       {!isSelf && (
         <ExpoImage
           source={{ uri: avatarUrl || DEFAULT_AVATAR_URL }}
@@ -661,7 +685,7 @@ function MessageBubbleInner({
           )}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -708,21 +732,23 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   msgBubble: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
+    borderRadius: 22,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    minWidth: 60,
+    minWidth: 40,
   },
   msgBubbleLeft: {
     backgroundColor: '#efefef',
+    borderBottomLeftRadius: 4,
   },
   msgBubbleRight: {
-    backgroundColor: '#3797f0',
+    backgroundColor: '#0095f6',
+    borderBottomRightRadius: 4,
   },
   msgBubbleCompact: {
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   msgText: {
     fontSize: 15,
@@ -864,16 +890,16 @@ const styles = StyleSheet.create({
   },
   premiumPostContainer: {
     backgroundColor: '#fff',
-    width: 250,
-    borderRadius: 18,
+    width: 260,
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e7e7e7',
+    borderWidth: 0.5,
+    borderColor: '#eee',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   sharedPostAuthor: {
     flexDirection: 'row',

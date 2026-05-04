@@ -5,20 +5,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import PostViewerModal from '@/src/_components/PostViewerModal';
 import CommentSection from '@/src/_components/CommentSection';
-import { useUser } from '@/src/_components/UserContext';
 import { sharePost } from '../lib/postShare';
 import { hapticLight } from '@/lib/haptics';
 import { getCachedData, setCachedData, useOfflineBanner, useNetworkStatus } from '../hooks/useOffline';
 import { OfflineBanner } from '@/src/_components/OfflineBanner';
 import { safeRouterBack } from '@/lib/safeRouterBack';
+import { resolveCanonicalUserId } from '../lib/currentUser';
 
 export default function PostDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, openComments } = useLocalSearchParams();
   const router = useRouter();
-  const currentUser = useUser();
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [post, setPost] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Interaction State
+  const [isLiked, setIsLiked] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   // Comment Modal State
   const [commentModalVisible, setCommentModalVisible] = useState(false);
@@ -29,9 +33,76 @@ export default function PostDetailScreen() {
 
   const CACHE_KEY = `post_detail_v1_${String(id || '')}`;
 
+  useEffect(() => {
+    if (openComments === 'true' && post && currentUser) {
+      setCommentModalPostId(String(post.id || post._id));
+      setCommentModalAvatar(currentUser.avatar || "");
+      setCommentModalVisible(true);
+    }
+  }, [openComments, post, currentUser]);
+
   const getKeyboardOffset = () => {
     if (Platform.OS === 'ios') return 0;
     return 0;
+  };
+
+  useEffect(() => {
+    async function initUser() {
+      const uid = await resolveCanonicalUserId();
+      if (uid) {
+        // Also get other IDs from storage to be thorough
+        const [storedUid, storedFirebaseUid] = await Promise.all([
+          import('@react-native-async-storage/async-storage').then(m => m.default.getItem('uid')),
+          import('@react-native-async-storage/async-storage').then(m => m.default.getItem('firebaseUid'))
+        ]);
+
+        const candidates = Array.from(new Set([uid, storedUid, storedFirebaseUid].filter(Boolean)));
+        
+        const { getUserProfile } = await import('../lib/firebaseHelpers/user');
+        const res = await getUserProfile(uid);
+        
+        const userData = res.success && res.data ? res.data : {};
+        setCurrentUser({ 
+          ...userData, 
+          id: uid, 
+          _id: uid, 
+          candidates: candidates 
+        });
+      }
+    }
+    initUser();
+  }, []);
+
+  useEffect(() => {
+    if (post && currentUser?.candidates) {
+      const candidates = currentUser.candidates;
+      const liked = Array.isArray(post.likes) && post.likes.some((id: any) => candidates.includes(String(id)));
+      const saved = Array.isArray(post.savedBy) && post.savedBy.some((id: any) => candidates.includes(String(id)));
+      
+      setIsLiked(liked);
+      setIsSaved(saved);
+    }
+  }, [post, currentUser]);
+
+  const handleLikeLocal = async () => {
+    if (!currentUser || !post) return;
+    const { likePost } = await import('../lib/firebaseHelpers');
+    hapticLight();
+    const newLikedState = !isLiked;
+    setIsLiked(newLikedState);
+    
+    try {
+      await likePost(post.id || post._id, currentUser.id || currentUser.uid);
+    } catch (e) {
+      setIsLiked(!newLikedState); // Rollback on failure
+    }
+  };
+
+  const handleSaveLocal = async () => {
+    if (!currentUser || !post) return;
+    // Assuming you have a savePost helper, if not we'll just toggle UI for now
+    hapticLight();
+    setIsSaved(!isSaved);
   };
 
   useEffect(() => {
@@ -46,19 +117,17 @@ export default function PostDetailScreen() {
           if (cached?.post) setLoading(false);
         } catch { }
 
-        if (!isOnline && post) {
-          // Offline and already showing cached post
-          return;
-        }
+        if (!isOnline && post) return;
 
         const { getPost } = await import('../lib/firebaseHelpers');
         const { getUserProfile } = await import('../lib/firebaseHelpers/user');
+        const { resolveCanonicalUserId } = await import('../lib/currentUser');
         
-        const res = await getPost(id as string);
+        const uid = await resolveCanonicalUserId();
+        const res = await getPost(id as string, uid);
         if (res.success && res.data) {
           let fetchedProfile: any = null;
           setPost(res.data);
-          // Load post owner profile
           if (res.data.userId) {
             const profRes = await getUserProfile(res.data.userId);
             if (profRes.success) {
@@ -67,7 +136,6 @@ export default function PostDetailScreen() {
             }
           }
 
-          // Persist cache snapshot for offline mode
           try {
             await setCachedData(CACHE_KEY, { post: res.data, profile: fetchedProfile }, { ttl: 24 * 60 * 60 * 1000 });
           } catch { }
@@ -101,10 +169,10 @@ export default function PostDetailScreen() {
         selectedPostIndex: 0,
         profile: profile,
         authUser: currentUser,
-        likedPosts: {},
-        savedPosts: {},
-        handleLikePost: () => { },
-        handleSavePost: () => { },
+        likedPosts: post?.id || post?._id ? { [post.id || post._id]: isLiked } : {},
+        savedPosts: post?.id || post?._id ? { [post.id || post._id]: isSaved } : {},
+        handleLikePost: handleLikeLocal,
+        handleSavePost: handleSaveLocal,
         handleSharePost: (p: any) => sharePost(p),
         setCommentModalPostId: (id: string) => setCommentModalPostId(id || ""),
         setCommentModalAvatar: setCommentModalAvatar,

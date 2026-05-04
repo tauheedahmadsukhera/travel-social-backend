@@ -41,8 +41,14 @@ export default function SaveButton({ post, currentUser }: any) {
   const [resolvedUserId, setResolvedUserId] = useState<string>(userId || "");
 
   useEffect(() => {
-    setSaved(post.savedBy?.includes(userId) ?? false);
-  }, [post.savedBy, userId]);
+    // Priority 1: Direct flags from backend (most reliable)
+    const backendSaved = post.isSaved || post.saved || false;
+    // Priority 2: ID match in savedBy array
+    const idMatch = post.savedBy?.includes(userId) ?? false;
+    
+    console.log(`[SaveButton] Debug: userId=${userId}, backendSaved=${backendSaved}, idMatch=${idMatch}`);
+    setSaved(backendSaved || idMatch);
+  }, [post.savedBy, userId, post.isSaved, post.saved]);
 
   // Ensure we always have the userId from storage as fallback
   useEffect(() => {
@@ -54,6 +60,17 @@ export default function SaveButton({ post, currentUser }: any) {
       setResolvedUserId(userId || "");
     }
   }, [userId]);
+
+  useEffect(() => {
+    const pid = post.id || post._id;
+    if (!pid) return;
+    const { feedEventEmitter } = require("../../lib/feedEventEmitter");
+    const sub = feedEventEmitter.onPostUpdated(pid, (id: string, data: any) => {
+      if (data.isSaved !== undefined) setSaved(data.isSaved);
+      else if (data.saved !== undefined) setSaved(data.saved);
+    });
+    return () => sub.remove();
+  }, [post.id, post._id]);
 
   async function handleSavePress() {
     const uid = resolvedUserId || userId;

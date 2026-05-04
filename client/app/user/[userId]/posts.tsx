@@ -160,8 +160,8 @@ export default function UserPostsScreen() {
       }
 
       if (single && postId) {
-        // Fetch only the specific post
-        const res = await apiService.get(`/posts/${postId}`);
+        // Fetch only the specific post - PASS viewerId so we get heart/bookmark status!
+        const res = await apiService.get(`/posts/${postId}`, { viewerId: viewerId || undefined });
         const data = res?.success && res?.data ? [res.data] : [];
         const normalized = normalizePosts(data);
         setPosts(normalized);

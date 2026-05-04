@@ -282,6 +282,7 @@ export default function PassportScreen() {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [stampSearchVisible, setStampSearchVisible] = useState(false);
   const [stampSearchQuery, setStampSearchQuery] = useState('');
+  const [showTravelHint, setShowTravelHint] = useState(true);
 
   // Location modal state
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -331,6 +332,15 @@ export default function PassportScreen() {
           setSuggestion(sugg);
         }
       }
+ 
+      // Check if location permission is already granted
+      try {
+        const { getForegroundPermissionsAsync } = await import('expo-location');
+        const { status } = await getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          setShowTravelHint(false);
+        }
+      } catch (e) {}
     };
     init();
   }, []);
@@ -797,12 +807,35 @@ export default function PassportScreen() {
           </View>
         </View>
 
-        {isOwner && !selectedCountry && (
+        {isOwner && !selectedCountry && showTravelHint && (
           <View style={styles.travelHintBox} accessibilityLabel="Background travel detection for passport stamps">
             <Feather name="navigation" size={14} color="#0A3D62" style={{ marginRight: 8, marginTop: 2 }} />
-            <Text style={styles.travelHintText}>
-              Allow location while using Trips and notifications (optional): we can detect when you enter a new country and suggest a stamp—while the app is open. Open Home once while signed in so we can refresh your position.
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.travelHintText}>
+                Allow location while using Trips and notifications (optional): we can detect when you enter a new country and suggest a stamp—while the app is open. Open Home once while signed in so we can refresh your position.
+              </Text>
+              <TouchableOpacity 
+                style={styles.enableLocBtn}
+                onPress={async () => {
+                  hapticLight();
+                  const { requestLocationPermissions } = await import('../services/locationService');
+                  const granted = await requestLocationPermissions();
+                  if (granted) {
+                    setShowTravelHint(false);
+                  } else {
+                    Alert.alert('Permission Denied', 'Please enable Location in your device Settings > Apps > Trips.');
+                  }
+                }}
+              >
+                <Text style={styles.enableLocBtnText}>Enable Location</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity 
+              onPress={() => { hapticLight(); setShowTravelHint(false); }}
+              style={{ marginLeft: 8, padding: 4 }}
+            >
+              <Ionicons name="close" size={18} color="#0A3D62" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -814,16 +847,20 @@ export default function PassportScreen() {
             activeOpacity={0.9}
           >
             <View style={styles.suggestionInner}>
-              <View style={styles.suggestionLeft}>
+              <View style={[styles.suggestionLeft, { flex: 1 }]}>
                 <View style={styles.stampIconContainer}>
                   <Feather name="map" size={20} color="#000" />
                 </View>
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.suggestionTitle}>Welcome to {getSuggestionLocationLabel(suggestion)}!</Text>
-                  <Text style={styles.suggestionSub}>Adds your country stamp only — use “Add a stamp” for city or place.</Text>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={styles.suggestionTitle} numberOfLines={2}>
+                    Welcome to {getSuggestionLocationLabel(suggestion)}!
+                  </Text>
+                  <Text style={styles.suggestionSub}>
+                    Adds your country stamp only — use “Add a stamp” for city or place.
+                  </Text>
                 </View>
               </View>
-              <Feather name="chevron-right" size={20} color="#CCC" />
+              <Feather name="chevron-right" size={20} color="#CCC" style={{ marginLeft: 8 }} />
             </View>
           </TouchableOpacity>
         )}
@@ -1262,13 +1299,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  travelHintText: { flex: 1, fontSize: 12, color: '#334', lineHeight: 17 },
+  travelHintText: {
+    color: '#0A3D62',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  enableLocBtn: {
+    marginTop: 8,
+    backgroundColor: '#0A3D62',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  enableLocBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
   suggestionBox: { marginHorizontal: 20, marginTop: 15, borderRadius: 16, overflow: 'hidden' },
   suggestionGradient: { padding: 16, backgroundColor: '#F8F9FA', borderRadius: 16 },
   suggestionContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  suggestionSub: { color: '#888', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  suggestionTitle: { color: '#000', fontSize: 16, fontWeight: '700', marginTop: 2 },
+  suggestionSub: { color: '#666', fontSize: 11, fontWeight: '500', lineHeight: 15, marginTop: 4 },
+  suggestionTitle: { color: '#000', fontSize: 16, fontWeight: '700' },
   addCircle: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#000', alignItems: 'center', justifyContent: 'center',

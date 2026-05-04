@@ -229,3 +229,16 @@ export async function getUserStories(userId: string, requesterUserId?: string) {
     return { success: false, error: error.message };
   }
 }
+/**
+ * Register push token for a user
+ */
+export async function registerPushToken(userId: string, pushToken: string) {
+  try {
+    const { apiService } = await import('@/src/_services/apiService');
+    const res = await apiService.put(`/users/${userId}/push-token`, { pushToken });
+    return res;
+  } catch (error: any) {
+    console.error('❌ registerPushToken error:', error);
+    return { success: false, error: error.message };
+  }
+}

@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { hapticLight } from '@/lib/haptics';
 
 interface ProfileTabsProps {
-  activeTab: 'grid' | 'map' | 'tagged';
-  onChangeTab: (tab: 'grid' | 'map' | 'tagged') => void;
+  activeTab: 'grid' | 'map' | 'tagged' | 'saved';
+  onChangeTab: (tab: 'grid' | 'map' | 'tagged' | 'saved') => void;
   mapEnabled?: boolean;
 }
 

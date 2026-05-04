@@ -43,12 +43,6 @@ const DMHeader: React.FC<DMHeaderProps> = ({
       </TouchableOpacity>
 
       <View style={styles.headerActions}>
-        <TouchableOpacity style={styles.actionBtn} onPress={onCall}>
-          <Feather name="phone" size={20} color="#000" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={onVideoCall}>
-          <Feather name="video" size={22} color="#000" />
-        </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={onInfo}>
           <Feather name="info" size={22} color="#000" />
         </TouchableOpacity>
@@ -64,8 +58,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     backgroundColor: '#fff',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#dbdbdb',
+    borderBottomWidth: 0,
   },
   backBtn: {
     padding: 4,

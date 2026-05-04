@@ -15,6 +15,7 @@ import { DEFAULT_AVATAR_URL } from '@/lib/api';
 import { hapticLight } from '@/lib/haptics';
 import { safeRouterBack } from '@/lib/safeRouterBack';
 import ConversationItem from '../src/_components/inbox/ConversationItem';
+import { subscribeToUserStatus } from '../src/_services/socketService';
 
 
 const INBOX_BUILD_TAG = 'inbox-group-fix-2026-03-28-2';
@@ -104,7 +105,7 @@ function Inbox() {
 
   // Use optimized polling instead of real-time listeners (saves 70-80% on costs)
   const { conversations: polledConversations, loading: polledLoading, ready: polledReady } = useInboxPolling(userId || null, {
-    pollingInterval: 8000,
+    pollingInterval: 6000,
     // PERF: poll only while Inbox is focused.
     autoStart: inFocus
   });
@@ -258,7 +259,11 @@ function Inbox() {
       deduped.set(key, preferred);
     }
 
-    return Array.from(deduped.values()).sort((a, b) => Number(b?.lastMessageAt || 0) - Number(a?.lastMessageAt || 0));
+    return Array.from(deduped.values()).sort((a, b) => {
+      const timeB = Number(b?.lastMessageAt || 0);
+      const timeA = Number(a?.lastMessageAt || 0);
+      return timeB - timeA;
+    });
   }, [coerceToEpochMs, optimisticReadByOtherId, userId]);
 
   // Global warm cache so Inbox can render instantly even before userId is loaded.
@@ -444,6 +449,29 @@ function Inbox() {
       cancelAnimationFrame(task);
     };
   }, [conversations]);
+
+  // Real-time Presence Listener
+  useEffect(() => {
+    if (!userId) return;
+    
+    const unsub = subscribeToUserStatus((data) => {
+      setProfilesById((prev) => {
+        const id = String(data.userId);
+        const existing = prev?.[id];
+        if (!existing) return prev;
+        return {
+          ...prev,
+          [id]: {
+            ...existing,
+            isOnline: data.status === 'online',
+            lastSeen: data.lastSeen || existing.lastSeen
+          }
+        };
+      });
+    });
+
+    return () => unsub();
+  }, [userId]);
 
   const filteredSortedConversations = useMemo(() => {
     const safeConversations = Array.isArray(conversations) ? conversations : [];
@@ -652,15 +680,22 @@ function Inbox() {
 
     // Normalize IDs and apply optimistic unread suppression.
     // If we already have something on screen, defer normalization to keep navigation instant.
-    const shouldDefer = Array.isArray(conversationsRef.current) && (conversationsRef.current as any[]).length > 0;
     const apply = () => {
+      // PERF: If we already have local cache and polling hasn't returned anything yet, 
+      // do NOT clear the screen with an empty array.
+      if (Array.isArray(polledConversations) && polledConversations.length === 0 && Array.isArray(conversationsRef.current) && conversationsRef.current.length > 0) {
+        if (__DEV__) console.log('🟡 Polling returned empty but cache is full, skipping update to prevent flicker');
+        return;
+      }
+
       const normalizedConvos = normalizeConversations(polledConversations);
       if (__DEV__) {
         console.log('🟢 SETTING CONVERSATIONS:', normalizedConvos?.length, 'convos');
-        console.log('📋 First convo sample:', normalizedConvos?.[0]);
       }
       setConversations(normalizedConvos);
     };
+
+    const shouldDefer = Array.isArray(conversationsRef.current) && conversationsRef.current.length > 0;
     // Prefer a short defer over runAfterInteractions — the latter can wait on unrelated
     // animations and makes inbox / handoff to DM feel sluggish.
     if (shouldDefer) {
@@ -730,7 +765,7 @@ function Inbox() {
   // Additionally, if the data hasn't synced from the hook yet, we wait.
   const hasAnyConversations = Array.isArray(conversations) && conversations.length > 0;
   // Block UI only when we have nothing to show yet.
-  if (!hasAnyConversations && (polledLoading || !polledReady || (loading && conversations === null))) {
+  if (!hasAnyConversations && (polledLoading || !polledReady)) {
     return (
       <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color="#007aff" />
@@ -773,18 +808,20 @@ function Inbox() {
         </TouchableOpacity>
       </View>
 
-      {/* Instagram-style search bar */}
-      <View style={styles.igSearchBar}>
-        <Feather name="search" size={16} color="#8e8e8e" style={{ marginRight: 8 }} />
-        <TextInput
-          style={[styles.igSearchText, { flex: 1, padding: 0 }]}
-          placeholder="Search"
-          placeholderTextColor="#8e8e8e"
-          value={inboxSearch}
-          onChangeText={setInboxSearch}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
+      {/* Premium modern search bar */}
+      <View style={styles.igSearchBarWrapper}>
+        <View style={styles.igSearchBar}>
+          <Feather name="search" size={16} color="#8e8e8e" style={{ marginRight: 8 }} />
+          <TextInput
+            style={[styles.igSearchText, { flex: 1, padding: 0 }]}
+            placeholder="Search messages"
+            placeholderTextColor="#8e8e8e"
+            value={inboxSearch}
+            onChangeText={setInboxSearch}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+        </View>
       </View>
 
       <View style={styles.tabsWrap}>
@@ -1014,25 +1051,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  headerRow: {
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#dbdbdb',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'center',
-    color: '#000',
-  },
-  backBtn: { padding: 6 },
   iconBtn: { padding: 6 },
   topActions: {
     flexDirection: 'row',
@@ -1142,34 +1160,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
-  },
-  tabsWrap: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    backgroundColor: '#fff',
-  },
-  tabBtn: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#dbdbdb',
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    backgroundColor: '#fff',
-  },
-  tabBtnActive: {
-    backgroundColor: '#262626',
-    borderColor: '#262626',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#262626',
-  },
-  tabTextActive: {
-    color: '#fff',
   },
   groupSheet: {
     backgroundColor: '#fff',
@@ -1517,21 +1507,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   // ── Instagram DM-style conversation row ──
-  igSearchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#efefef',
-    borderRadius: 10,
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  igSearchText: {
-    color: '#8e8e8e',
-    fontSize: 15,
-  },
   chatRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1597,4 +1572,48 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#3797f0',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    height: 56,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#efefef',
+    backgroundColor: '#fff',
+  },
+  title: { fontSize: 17, fontWeight: '700', color: '#000' },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  igSearchBarWrapper: {
+    paddingHorizontal: 16,
+    marginVertical: 4,
+    backgroundColor: '#fff',
+  },
+  igSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F2',
+    height: 44,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+  },
+  igSearchText: { fontSize: 16, color: '#8e8e8e' },
+  tabsWrap: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F2',
+    height: 48,
+    backgroundColor: '#fff',
+  },
+  tabBtn: {
+    marginRight: 24,
+    height: '100%',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabBtnActive: { borderBottomColor: '#000' },
+  tabText: { fontSize: 14, fontWeight: '600', color: '#8E8E8E' },
+  tabTextActive: { color: '#000', fontWeight: '700' },
 });

@@ -58,7 +58,7 @@ const PostHeader: React.FC<PostHeaderProps> = ({
       </View>
       {showMenu && (
         <TouchableOpacity onPress={onMenuPress} style={{ padding: 4 }}>
-          <Feather name="more-horizontal" size={20} color="#666" />
+          <Feather name="more-vertical" size={20} color="#666" />
         </TouchableOpacity>
       )}
     </View>

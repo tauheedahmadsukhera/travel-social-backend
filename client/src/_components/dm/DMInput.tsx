@@ -88,9 +88,6 @@ const DMInput: React.FC<DMInputProps> = ({
               <TouchableOpacity style={styles.innerIcon} onPress={onMediaPress}>
                 <Feather name="image" size={20} color="#000" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.innerIcon}>
-                <Feather name="plus-circle" size={20} color="#000" />
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -114,43 +111,46 @@ const DMInput: React.FC<DMInputProps> = ({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     backgroundColor: '#fff',
+    borderTopWidth: 0.5,
+    borderTopColor: '#efefef',
   },
   replyBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f8f8',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderLeftWidth: 3,
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderLeftWidth: 4,
     borderLeftColor: '#0095f6',
   },
   replyContent: {
     flex: 1,
   },
   replyLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
     color: '#0095f6',
     marginBottom: 2,
+    textTransform: 'uppercase',
   },
   replyText: {
     fontSize: 13,
-    color: '#8e8e8e',
+    color: '#666',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   iconBtn: {
-    marginRight: 8,
+    marginRight: 10,
   },
   cameraCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#0095f6',
     alignItems: 'center',
     justifyContent: 'center',
@@ -160,25 +160,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f2f2f2',
-    borderRadius: 22,
-    paddingHorizontal: 12,
-    minHeight: 40,
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    minHeight: 44,
   },
   textInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     color: '#000',
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   rightIcons: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   innerIcon: {
-    marginLeft: 12,
+    marginLeft: 14,
   },
   sendBtn: {
     marginLeft: 12,
+    paddingHorizontal: 4,
   },
   sendBtnText: {
     color: '#0095f6',

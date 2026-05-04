@@ -64,11 +64,12 @@ interface Props {
     onSaveChange?: (saved: boolean) => void;
     initialGloballySaved?: boolean;
     onCollectionCreated?: (collection: Collection) => void;
+    initialScreen?: Screen;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function SaveToCollectionModal({ visible, onClose, postId, postImageUrl, currentUserId, onSaveChange, initialGloballySaved = true, onCollectionCreated }: Props) {
+export default function SaveToCollectionModal({ visible, onClose, postId, postImageUrl, currentUserId, onSaveChange, initialGloballySaved = true, onCollectionCreated, initialScreen = 'list' }: Props) {
     const insets = useSafeAreaInsets();
     const sheetTranslateY = useRef(new Animated.Value(0)).current;
     // Ref so PanResponder (created once) always calls the latest close handler
@@ -261,7 +262,7 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
 
     useEffect(() => {
         if (visible) {
-            setScreen('list');
+            setScreen(initialScreen);
             setNewName('');
             setNewVisibility('private');
             setNewCollaborators([]);
@@ -360,8 +361,14 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
 
     const handleGlobalToggle = async () => {
         if (!currentUid || isUpdating) return;
-        setIsUpdating(true);
+        
         const nextState = !isGloballySaved;
+        // Optimistic UI update
+        setIsGloballySaved(nextState);
+        syncGlobalState(nextState, collections);
+        feedEventEmitter.emit('feedUpdated');
+        
+        setIsUpdating(true);
         try {
             if (nextState) {
                 // Add to global saved
@@ -372,10 +379,11 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
                 await apiService.delete(`/users/${currentUid}/saved/${postId}`);
                 showToast('Removed from Saved');
             }
-            setIsGloballySaved(nextState);
-            syncGlobalState(nextState, collections);
         } catch (e) {
             console.error('[SaveToCollectionModal] handleGlobalToggle error', e);
+            // Revert on error
+            setIsGloballySaved(!nextState);
+            syncGlobalState(!nextState, collections);
         } finally {
             setIsUpdating(false);
         }

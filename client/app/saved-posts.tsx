@@ -119,7 +119,7 @@ export default function SavedPostsScreen() {
           if (ownerId && tappedPostId) {
             router.push({
               pathname: '/user/[userId]/posts',
-              params: { userId: String(ownerId), postId: tappedPostId }
+              params: { userId: String(ownerId), postId: tappedPostId, single: 'true' }
             } as any);
             return;
           }

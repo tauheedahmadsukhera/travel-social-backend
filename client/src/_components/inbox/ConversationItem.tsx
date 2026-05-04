@@ -23,14 +23,15 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   const isGroup = !!item?.isGroup;
   const otherUserId = item?.otherUserId || item.participants?.find((uid: string) => uid !== userId);
   const profile = otherUserId ? profilesById?.[String(otherUserId)] : null;
+  const embeddedUser = item?.otherUser || item?.otherUserProfile;
 
   const displayName = isGroup
     ? (item?.groupName || 'Group chat')
-    : (profile?.displayName || profile?.username || item?.otherUserName || 'User');
+    : (profile?.displayName || profile?.username || embeddedUser?.displayName || embeddedUser?.name || item?.otherUserName || 'User');
 
   const avatar = isGroup
     ? (item?.groupAvatar || DEFAULT_AVATAR_URL)
-    : (profile?.avatar || profile?.photoURL || item?.otherUserAvatar || DEFAULT_AVATAR_URL);
+    : (profile?.avatar || profile?.photoURL || embeddedUser?.avatar || embeddedUser?.photoURL || item?.otherUserAvatar || DEFAULT_AVATAR_URL);
 
   const hasUnread = typeof item?.unreadCount === 'number' && item.unreadCount > 0;
   const lastMsg = item.lastMessage || 'No messages yet';
@@ -46,6 +47,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         <View style={[styles.avatarRing, hasUnread && styles.avatarRingUnread]}>
           <Image source={{ uri: avatar }} style={styles.avatar} />
         </View>
+        {profile?.isOnline && <View style={styles.onlineDot} />}
       </View>
 
       <View style={styles.chatContent}>
@@ -125,6 +127,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#0095f6',
     marginRight: 12,
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
 });
 

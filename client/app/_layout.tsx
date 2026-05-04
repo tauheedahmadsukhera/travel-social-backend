@@ -9,9 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SystemUI from 'expo-system-ui';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ErrorBoundary } from "../components/ErrorBoundary";
+import { ErrorBoundary } from "@/src/_components/ErrorBoundary";
 // import { auth } from "../config/firebase";
-// import { initSentry } from "../lib/sentry";
+import { initSentry } from "../lib/sentry";
 import { UserProvider } from "@/src/_components/UserContext";
 import { Audio } from 'expo-av';
 import { disconnectSocket, getSocket, initializeSocket } from '@/src/_services/socketService';
@@ -71,7 +71,7 @@ if (!__DEV__) {
   console.timeEnd = noop as any;
 }
 
-// initSentry();
+initSentry();
 
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);

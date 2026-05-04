@@ -34,15 +34,18 @@ export function useInboxPolling(
 
   const cacheKey = userId ? `inboxConversationsCache_v1_${userId}` : null;
 
-  // If userId changes (common: null -> real id), reset readiness for the new session.
+  // Reset state when userId truly changes
   useEffect(() => {
     if (!userId) {
       setReady(false);
       setLoading(false);
       return;
     }
-    setReady(false);
-    setLoading(true);
+    // Only reset if we don't have conversations yet (to avoid flicker)
+    if (conversations.length === 0) {
+      setReady(false);
+      setLoading(true);
+    }
     setError(null);
   }, [userId]);
 

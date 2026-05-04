@@ -294,24 +294,23 @@ export function getAPIBaseURL(): string {
 
   if (__DEV__) {
     console.log('📡 [environment] EXPO_PUBLIC_API_BASE_URL from env:', envUrl || 'Not set');
-    if (derivedLocalUrl && envLooksLocal && envUrl && String(envUrl).trim() !== derivedLocalUrl) {
-      console.log('📡 [environment] Detected stale local env URL, using derived host URL instead:', derivedLocalUrl);
-      return derivedLocalUrl;
-    }
-    if (envUrl) {
-      console.log('📡 [environment] Using env URL in dev:', envUrl);
-      return envUrl;
-    }
+    
+    // Always prefer local backend in development to test new backend code!
+    // If we have a derived host IP (Expo Go / physical device on same wifi), use it.
     if (derivedLocalUrl) {
-      console.log('📡 [environment] Using derived local URL in dev:', derivedLocalUrl);
+      console.log('📡 [environment] Dev mode: Overriding with derived host URL:', derivedLocalUrl);
       return derivedLocalUrl;
     }
-    if (envLooksLocal) {
-      console.log('📡 [environment] Using fallback local env URL in dev:', envUrl);
-      return envUrl;
+    
+    // Fallback for Android Emulator
+    if (Platform.OS === 'android') {
+      console.log('📡 [environment] Dev mode: Overriding with Android Emulator URL');
+      return 'http://10.0.2.2:5000/api';
     }
-    console.log('📡 [environment] Falling back to hardcoded local IP in dev:', localIp);
-    return localIp || prodUrl;
+
+    // Fallback for iOS Simulator / Web
+    console.log('📡 [environment] Dev mode: Overriding with localhost URL');
+    return 'http://localhost:5000/api';
   }
 
   // Production safety: never allow a local/LAN URL to ship by accident.

@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { PostLocationModal } from '../components/PostLocationModal';
+import { PostLocationModal } from '@/src/_components/PostLocationModal';
 import { useUser } from '@/src/_components/UserContext';
 import PostCard from '@/src/_components/PostCard';
 

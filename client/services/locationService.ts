@@ -181,6 +181,7 @@ export async function processLocationUpdate(userId: string, latitude: number, lo
     console.log(`📍 Processing location: ${latitude}, ${longitude}`);
 
     const locationInfo = await reverseGeocode(latitude, longitude);
+    console.log('🌍 Geocoding result:', locationInfo);
     if (!locationInfo) return;
 
     const { city, country, countryCode, place } = locationInfo;
@@ -241,6 +242,7 @@ export async function processLocationUpdate(userId: string, latitude: number, lo
 
       const { status: notifStatus } = await Notifications.getPermissionsAsync();
       if (notifStatus === 'granted') {
+        console.log('🔔 Scheduling local passport notification for:', welcomeLabel);
         await Notifications.scheduleNotificationAsync({
           content: {
             title: `🎫 New Country Detected!`,
@@ -249,6 +251,9 @@ export async function processLocationUpdate(userId: string, latitude: number, lo
           },
           trigger: null,
         });
+        console.log('✅ Local notification scheduled');
+      } else {
+        console.warn('⚠️ Cannot schedule local notification: permission status is', notifStatus);
       }
 
       lastPassportNotifKey = key;

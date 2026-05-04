@@ -3,7 +3,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, Pressable } from "react-native";
+import { ActivityIndicator, Alert, Animated, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, Pressable, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 import { Audio } from 'expo-av';
@@ -41,7 +41,10 @@ import { useOfflineBanner } from '../hooks/useOffline';
 import { OfflineBanner } from '@/src/_components/OfflineBanner';
 import { 
   subscribeToMessages as socketSubscribeToMessages,
-  initializeSocket
+  initializeSocket,
+  sendTypingIndicator,
+  stopTypingIndicator,
+  subscribeToTyping
 } from '../src/_services/socketService';
 
 import MessageBubble from '../src/_components/MessageBubble';
@@ -72,10 +75,23 @@ import {
   extensionFromFileUri 
 } from '../lib/firebaseHelpers/messages';
 
-// Placeholder for missing presence helpers if they are not found elsewhere
+import { 
+  subscribeToUserStatus as socketSubscribeToUserStatus,
+  requestUserStatus
+} from '../src/_services/socketService';
+
 const subscribeToUserPresence = (uid: string, callback: (presence: any) => void) => {
-  // Mock presence subscribe
-  return () => {};
+  if (!uid) return () => {};
+  
+  // Request initial status
+  requestUserStatus(uid);
+
+  // Subscribe to updates
+  return socketSubscribeToUserStatus((data) => {
+    if (String(data.userId) === String(uid)) {
+      callback(data);
+    }
+  });
 };
 
 export default function DM() {
@@ -113,7 +129,7 @@ export default function DM() {
   );
   const [conversationMeta, setConversationMeta] = useState<any | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
-
+  const { height: windowHeight } = useWindowDimensions();
 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -139,6 +155,26 @@ export default function DM() {
   const [showPostSelector, setShowPostSelector] = useState(false);
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  const handleInputChange = (text: string) => {
+    setInput(text);
+    
+    if (!conversationId || !currentUserId || !otherUserId) return;
+    
+    // Send typing indicator
+    sendTypingIndicator({ conversationId, userId: currentUserId, recipientId: otherUserId });
+    
+    // Clear existing timer
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    
+    // Set timer to stop typing indicator after 2 seconds of inactivity
+    typingTimerRef.current = setTimeout(() => {
+      stopTypingIndicator({ conversationId, userId: currentUserId, recipientId: otherUserId });
+    }, 2000);
+  };
+  
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserPresence, setOtherUserPresence] = useState<any | null>(null);
   const [shareSearchQuery, setShareSearchQuery] = useState("");
@@ -160,24 +196,44 @@ export default function DM() {
   const hasPreloadedMessagesRef = useRef<boolean>(false);
 
   const messagesWithSeparators = useMemo(() => {
+    // Sort chronologically (oldest first) so we can insert separators BEFORE the messages of that day
+    const sorted = [...messages].sort((a, b) => (a.__ts || 0) - (b.__ts || 0));
     const list: any[] = [];
-    let lastDate: string | null = null;
+    let lastDateKey: string | null = null;
     
-    // Sort reverse-chronologically (newest first) for inverted list
-    const sorted = [...messages].sort((a, b) => (b.__ts || 0) - (a.__ts || 0));
-
     sorted.forEach((msg) => {
       const ms = msg.__ts || Date.now();
       const dateObj = new Date(ms > Date.now() ? Date.now() : ms);
-      const dateLabel = dateObj.toLocaleDateString();
+      const dateKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}-${dateObj.getDate()}`;
       
-      if (dateLabel !== lastDate) {
-        list.push({ type: 'date', date: dateLabel, id: `date_${dateLabel}` });
-        lastDate = dateLabel;
+      if (dateKey !== lastDateKey) {
+        const now = new Date();
+        const diffDays = (now.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24);
+        
+        let formattedDate = "";
+        const timeStr = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toUpperCase();
+        
+        if (dateKey === `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`) {
+          formattedDate = timeStr;
+        } else if (diffDays < 7) {
+          const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+          formattedDate = `${days[dateObj.getDay()]} ${timeStr}`;
+        } else if (dateObj.getFullYear() === now.getFullYear()) {
+          const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+          formattedDate = `${months[dateObj.getMonth()]} ${dateObj.getDate()}, ${timeStr}`;
+        } else {
+          const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+          formattedDate = `${months[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}, ${timeStr}`;
+        }
+        
+        list.push({ type: 'date', date: formattedDate, id: `date_${dateKey}` });
+        lastDateKey = dateKey;
       }
       list.push(msg);
     });
-    return list;
+    
+    // Reverse the final list for the inverted FlatList
+    return list.reverse();
   }, [messages]);
 
   const { profile: otherUserProfile } = useUserProfile(otherUserId);
@@ -419,11 +475,25 @@ export default function DM() {
             if (Date.now() - createdMs < 15_000) return false;
             return true;
           });
-          return mergeMessages(filtered, [incoming]);
+          const mergedAudio = mergeMessages(filtered, [incoming]);
+          AsyncStorage.setItem(`messages_cache_${conversationId}`, JSON.stringify(mergedAudio.slice(0, 50))).catch(() => {});
+          return mergedAudio;
         }
 
-        return mergeMessages(prev, [incoming]);
+        const merged = mergeMessages(prev, [incoming]);
+        AsyncStorage.setItem(`messages_cache_${conversationId}`, JSON.stringify(merged.slice(0, 50))).catch(() => {});
+        return merged;
       });
+    });
+
+    const unsubTyping = subscribeToTyping(conversationId, (data) => {
+      if (String(data.userId) === String(otherUserId)) {
+        setIsOtherTyping(true);
+      }
+    }, (data) => {
+      if (String(data.userId) === String(otherUserId)) {
+        setIsOtherTyping(false);
+      }
     });
 
     // Fallback polling - significantly reduced frequency to let Socket.IO handle real-time.
@@ -445,6 +515,7 @@ export default function DM() {
       cancelled = true;
       clearTimeout(safetyTimer);
       unsub();
+      unsubTyping();
       clearInterval(pollInterval);
     };
   }, [conversationId, currentUserId, isGroupConversation]);
@@ -486,7 +557,7 @@ export default function DM() {
 
   const requestAutoScroll = (force: boolean, animated: boolean) => {
     if (force || isNearBottomRef.current) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated }), 100);
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated }), 100);
     }
   };
 
@@ -496,6 +567,11 @@ export default function DM() {
     if (!input.trim() || !conversationId || !currentUserId || sending) return;
     const msgText = input.trim();
     
+    // Stop typing indicator on send
+    if (conversationId && currentUserId && otherUserId) {
+      stopTypingIndicator({ conversationId, userId: currentUserId, recipientId: otherUserId });
+    }
+
     if (editingMessage) {
       const targetId = getMessageId(editingMessage);
       setSending(true);
@@ -865,8 +941,9 @@ export default function DM() {
           if (finalMsg) {
             setMessages(prev => {
               const withoutTemp = prev.filter(m => m.id !== tempId);
-              const merged = mergeMessages(withoutTemp, [{ ...finalMsg, tempId }]);
-              return dedupeById(merged);
+              const merged = dedupeById(mergeMessages(withoutTemp, [{ ...finalMsg, tempId }]));
+              AsyncStorage.setItem(`messages_cache_${conversationId}`, JSON.stringify(merged.slice(0, 50))).catch(() => {});
+              return merged;
             });
             // Remove from pending set after finalization
             pendingTempIdsRef.current.delete(tempId);
@@ -989,22 +1066,29 @@ export default function DM() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
       >
         <DMHeader
           displayName={displayName}
           avatarUri={avatarUri}
           isGroup={isGroupConversation}
-          statusText={!isGroupConversation ? (otherUserPresence?.online ? 'Online' : 'Offline') : ''}
+          statusText={
+            isOtherTyping 
+              ? 'typing...' 
+              : !isGroupConversation 
+                ? (otherUserPresence?.status === 'online' ? 'Online' : 'Offline') 
+                : ''
+          }
           onBack={() => safeRouterBack()}
           onInfo={() => setShowOptionsModal(true)}
         />
-
         <FlatList
           ref={flatListRef}
+          style={{ flex: 1 }}
           data={messagesWithSeparators}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderChatItem}
@@ -1016,7 +1100,7 @@ export default function DM() {
 
         <DMInput
           input={input}
-          setInput={setInput}
+          setInput={handleInputChange}
           onSend={handleSend}
           onMediaPress={handlePickImage}
           onCameraPress={handleLaunchCamera}
@@ -1131,14 +1215,15 @@ export default function DM() {
            </View>
          </Pressable>
       </Modal>
-    </SafeAreaView>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 0.5, borderBottomColor: '#dbdbdb', backgroundColor: '#fff' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 0, backgroundColor: '#fff' },
   backBtn: { marginRight: 12 },
   headerUser: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10, backgroundColor: '#eee' },
@@ -1146,8 +1231,8 @@ const styles = StyleSheet.create({
   activeText: { fontSize: 11, color: '#8e8e8e' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerIcon: { marginLeft: 16 },
-  dateWrap: { alignSelf: 'center', backgroundColor: '#efefef', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, marginVertical: 15 },
-  dateText: { fontSize: 12, color: '#8e8e8e', fontWeight: '600' },
+  dateWrap: { alignSelf: 'center', marginVertical: 24, backgroundColor: 'transparent' },
+  dateText: { fontSize: 12, color: '#8e8e8e', fontWeight: '500' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   optionsContainer: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 10, paddingBottom: 40, paddingHorizontal: 20 },
   optionsHandle: { width: 40, height: 4, backgroundColor: '#dbdbdb', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },

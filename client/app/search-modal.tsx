@@ -117,7 +117,7 @@ const defaultRegions: Region[] = [
 ];
 
 export default function SearchModal() {
-  const [tab, setTab] = useState<'place' | 'people'>('place');
+  const [tab, setTab] = useState<'place' | 'people' | 'tags'>('place');
   const [q, setQ] = useState<string>('');
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const router = useRouter();
@@ -133,6 +133,8 @@ export default function SearchModal() {
   const [followingMap, setFollowingMap] = useState<{ [key: string]: boolean }>({});
   const [requestedMap, setRequestedMap] = useState<{ [key: string]: boolean }>({});
   const [followLoadingMap, setFollowLoadingMap] = useState<{ [key: string]: boolean }>({});
+  const [hashtags, setHashtags] = useState<any[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
   const insets = useSafeAreaInsets();
   const { isOnline } = useNetworkStatus();
   const { showBanner } = useOfflineBanner();
@@ -255,8 +257,9 @@ export default function SearchModal() {
   useEffect(() => {
     setQ('');
     setSuggestions([]);
-    setUsers([]); // Only reset to empty array, never set region objects
-    setRecommendations([]); // Only reset to empty array, never set region objects
+    setUsers([]);
+    setRecommendations([]);
+    setHashtags([]);
     setSelectedRegion(null);
   }, [tab]);
 
@@ -355,6 +358,29 @@ export default function SearchModal() {
     };
   }, [q, tab]);
 
+  // Hashtag search
+  useEffect(() => {
+    if (tab !== 'tags' || q.length < 1) {
+      setHashtags([]);
+      return;
+    }
+    setLoadingTags(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { apiService } = await import('@/src/_services/apiService');
+        const res = await apiService.get(`/posts/hashtags?q=${q.replace(/^#/, '')}`);
+        if (res.success) {
+          setHashtags(res.data || []);
+        }
+      } catch (err) {
+        console.error('Hashtag search error:', err);
+      } finally {
+        setLoadingTags(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [q, tab]);
+
   // UI
   // Error boundary fallback UI
   if (hasError) {
@@ -399,7 +425,7 @@ export default function SearchModal() {
                 >
                   <Text style={[styles.tabText, tab === 'place' && styles.tabTextActive]}>Place</Text>
                 </TouchableOpacity>
-                <Text style={styles.dotSep}>Â·</Text>
+
                 <TouchableOpacity
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -408,6 +434,16 @@ export default function SearchModal() {
                   style={styles.tabBtnInline}
                 >
                   <Text style={[styles.tabText, tab === 'people' && styles.tabTextActive]}>People</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setTab('tags');
+                  }}
+                  style={styles.tabBtnInline}
+                >
+                  <Text style={[styles.tabText, tab === 'tags' && styles.tabTextActive]}>Tags</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -608,6 +644,34 @@ export default function SearchModal() {
                 removeClippedSubviews={true}
               />
             )}
+            {/* Tags Tab Results */}
+            {tab === 'tags' && (
+              <View style={{ flex: 1, marginTop: 8 }}>
+                {loadingTags && <ActivityIndicator size="small" color="#888" style={{ marginBottom: 10 }} />}
+                <FlatList
+                  data={hashtags}
+                  keyExtractor={(item, index) => `${item.name}-${index}`}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.userResultRow}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        router.push(`/hashtag-detail?tag=${item.name}`);
+                      }}
+                    >
+                      <View style={styles.tagIconWrap}>
+                        <Text style={{ fontSize: 20, color: '#333' }}>#</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 16 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '600', color: '#222' }}>#{item.name}</Text>
+                        <Text style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{item.count} posts</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={<Text style={{ color: '#888', marginTop: 12, textAlign: 'center' }}>No tags found</Text>}
+                />
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -638,8 +702,8 @@ const styles = StyleSheet.create({
   tabsInline: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 25, // Perfectly equal spacing
   },
-  dotSep: { fontSize: 18, color: '#fff', marginHorizontal: 2, marginTop: 2 }, // hidden dot
   tabBtnInline: { paddingVertical: 2, paddingHorizontal: 0, marginHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
   tabText: {
     fontSize: 16,
@@ -874,6 +938,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 0,
+  },
+  tagIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f6f6f8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
+    marginRight: 0,
   },
   userActionBtn: {
     width: 40,

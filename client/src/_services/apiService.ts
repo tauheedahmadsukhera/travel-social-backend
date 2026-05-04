@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { getAPIBaseURL as getBaseUrl } from '../../config/environment';
 
 type AnyObject = Record<string, any>;
@@ -197,8 +198,9 @@ async function apiRequestWithRetry(method: string, url: string, data?: any, conf
 
   // In-flight GET dedupe (prevents double loads on focus, fast taps, multiple hooks).
   // We only dedupe GET because it should be idempotent.
+  const bypassDedupe = config?.bypassDedupe === true || (config?.params && config.params._t) || config?._t;
   const dedupeKey =
-    normalizedMethod === 'get'
+    (normalizedMethod === 'get' && !bypassDedupe)
       ? `get:${url}?p=${stableStringify(config?.params || config || undefined)}&d=${stableStringify(data)}`
       : '';
 
@@ -332,7 +334,8 @@ export const apiService = {
   delete: (url: string, data?: any) => apiRequest('delete', url, data),
 
   // ✅ Social Media Features
-  getPosts: (params?: any) => apiRequest('get', '/posts', undefined, params),
+  getPosts: (params?: any) => apiRequest('get', '/posts/feed', undefined, params),
+
   getRecommendedPosts: (params?: any) => apiRequest('get', '/posts/recommended', undefined, params),
   createPost: (data: any) => apiRequest('post', '/posts', data),
   likePost: (postId: string, userId: string) => apiRequest('post', `/posts/${postId}/like`, { userId }),
@@ -347,8 +350,32 @@ export const apiService = {
   loginFirebase: (data: any) => apiRequest('post', '/auth/login-firebase', data),
   registerFirebase: (data: any) => apiRequest('post', '/auth/register-firebase', data),
 
-  // ✅ Media Upload
-  uploadMedia: (data: any) => apiRequest('post', '/media/upload', data),
+  // ✅ Media Upload (Industrial Binary/Multipart)
+  uploadMedia: (file: any, mediaType: string = 'auto', path?: string) => {
+    const formData = new FormData();
+    
+    // React Native specific file object handling
+    if (file && typeof file === 'object' && file.uri) {
+      const uri = file.uri;
+      const name = file.name || uri.split('/').pop() || 'upload.jpg';
+      const type = file.type || (name.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+      
+      formData.append('file', {
+        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+        type,
+        name,
+      } as any);
+    } else {
+      formData.append('file', file);
+    }
+    
+    if (mediaType) formData.append('mediaType', mediaType);
+    if (path) formData.append('path', path);
+
+    return apiRequest('post', '/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 
   // ✅ Live Streaming
   getLiveStreams: () => apiRequest('get', '/live-streams'),

@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -24,10 +23,11 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { safeRouterBack } from '@/lib/safeRouterBack';
 import { useAppDialog } from '@/src/_components/AppDialogProvider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { API_BASE_URL } from '../../lib/api';
+import { API_BASE_URL, BACKEND_URL } from '../../lib/api';
 import { useCurrentLocation } from '../../hooks/useCurrentLocation';
 import { createStory, getUserHighlights, getUserSectionsSorted, getUserStories } from '../../lib/firebaseHelpers';
 import { followUser, sendFollowRequest, unfollowUser } from '../../lib/firebaseHelpers/follow';
@@ -62,6 +62,12 @@ import ProfileHeader from '@/src/_components/profile/ProfileHeader';
 import ProfileStats from '@/src/_components/profile/ProfileStats';
 import ProfileActions from '@/src/_components/profile/ProfileActions';
 import ProfileTabs from '@/src/_components/profile/ProfileTabs';
+import ProfileGridItem from '@/src/_components/profile/ProfileGridItem';
+import ProfileSections from '@/src/_components/profile/ProfileSections';
+import { UploadStoryModal } from '@/src/_components/profile/UploadStoryModal';
+import { CollectionsModal, UserMenuModal } from '@/src/_components/profile/ProfileModals';
+import { useProfileActions } from '@/hooks/useProfileActions';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallDevice = SCREEN_HEIGHT < 700;
@@ -383,7 +389,7 @@ export default function Profile({ userIdProp }: any) {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [postViewerVisible, setPostViewerVisible] = useState<boolean>(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
-  const [segmentTab, setSegmentTab] = useState<'grid' | 'map' | 'tagged'>('grid');
+  const [segmentTab, setSegmentTab] = useState<'grid' | 'map' | 'tagged' | 'saved'>('grid');
   const { location: currentLocation } = useCurrentLocation();
   const [taggedPosts, setTaggedPosts] = useState<any[]>([]);
   const [editSectionsModal, setEditSectionsModal] = useState<boolean>(false);
@@ -399,7 +405,7 @@ export default function Profile({ userIdProp }: any) {
   const { isOnline } = useNetworkStatus();
   const { showBanner } = useOfflineBanner();
   const PROFILE_CACHE_KEY = useMemo(
-    () => `profile_v2_${String(viewedUserId || 'unknown')}_${String(currentUserId || 'anon')}`,
+    () => `profile_v3_${String(viewedUserId || 'unknown')}_${String(currentUserId || 'anon')}`,
     [viewedUserId, currentUserId]
   );
 
@@ -510,126 +516,43 @@ export default function Profile({ userIdProp }: any) {
     }
   }, [PROFILE_MAP_ENABLED, segmentTab]);
 
-  // Handlers
-  const handleFollowToggle = async () => {
-    if (!currentUserId || !viewedUserId || followLoading || isOwnProfile) return;
-    hapticMedium();
-    setFollowLoading(true);
-    try {
-      if (isPrivate) {
-        const res = await sendFollowRequest(currentUserId, viewedUserId);
-        if (res.success) {
-          setFollowRequestPending(true);
-        }
-      } else {
-        if (isFollowing) {
-          if (__DEV__) console.log('[handleFollowToggle] Unfollowing user:', viewedUserId);
-          const res = await unfollowUser(currentUserId, viewedUserId);
-          if (__DEV__) console.log('[handleFollowToggle] Unfollow response:', res);
-          setApprovedFollower(false);
-          if (res.success) {
-            // Update local state immediately
-            setIsFollowing(false);
-            setProfile(prev => {
-              if (!prev) return prev;
-              const base = typeof prev.followersCount === 'number'
-                ? prev.followersCount
-                : (typeof prev.followers === 'number' ? prev.followers : 0);
-              return { 
-                ...prev, 
-                followersCount: Math.max(0, base - 1),
-                followers: Math.max(0, base - 1)
-              };
+  // Hook for actions
+  const {
+    followLoading: actionFollowLoading,
+    handleFollowToggle,
+    handleMessage: hookHandleMessage,
+    handleLikePost,
+    handleBlockUser
+  } = useProfileActions({
+    currentUserId,
+    viewedUserId: viewedUserId ?? null,
+    isOwnProfile,
+    isPrivate,
+    isFollowing,
+    setIsFollowing,
+    setProfile,
+    setApprovedFollower,
+    setFollowRequestPending,
+    likedPosts,
+    setLikedPosts,
+    savedPosts,
+    setSavedPosts,
+    router
+  });
 
-            });
-            // Refresh profile data from backend to get updated counts
-            const profileRes = await getUserProfileAPI(viewedUserId, currentUserId || undefined);
-            if (profileRes.success && profileRes.data) {
-              setProfile(profileRes.data);
-              if (__DEV__) console.log('[handleFollowToggle] Profile refreshed after unfollow');
-            }
-          }
-        } else {
-          if (__DEV__) console.log('[handleFollowToggle] Following user:', viewedUserId);
-          const res = await followUser(currentUserId, viewedUserId);
-          if (__DEV__) console.log('[handleFollowToggle] Follow response:', res);
-          if (res.success) {
-            // Update local state immediately
-            setIsFollowing(true);
-            setProfile(prev => {
-              if (!prev) return prev;
-              const base = typeof prev.followersCount === 'number'
-                ? prev.followersCount
-                : (typeof prev.followers === 'number' ? prev.followers : 0);
-              return { 
-                ...prev, 
-                followersCount: base + 1,
-                followers: base + 1
-              };
-
-            });
-            // Refresh profile data from backend to get updated counts
-            const profileRes = await getUserProfileAPI(viewedUserId, currentUserId || undefined);
-            if (profileRes.success && profileRes.data) {
-              setProfile(profileRes.data);
-              if (__DEV__) console.log('[handleFollowToggle] Profile refreshed after follow');
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[handleFollowToggle] Error:', err);
-      Alert.alert('Error', 'Failed to update follow status. Please try again.');
-    } finally {
-      setFollowLoading(false);
-    }
-  };
+  // Sync loading state
+  useEffect(() => {
+    setFollowLoading(actionFollowLoading);
+  }, [actionFollowLoading]);
 
   const handleMessage = () => {
-    if (!viewedUserId || !profile) return;
-
-    hapticLight();
-
-    // Check if account is private and user is not approved follower
-    if (isPrivate && !approvedFollower) {
-      Alert.alert('Private Account', 'You need to be an approved follower to send messages to this user.');
-      return;
-    }
-
-    router.push({
-      pathname: '/dm',
-      params: {
-        otherUserId: viewedUserId,
-        user: profile.name || 'User',
-        avatar: profile.avatar || ''
-      }
-    });
-  };
-
-  const handleLikePost = async (post: any) => {
-    if (!currentUserId || !post?.id) return;
-    if (likedPosts[post.id]) {
-      await unlikePost(post.id, currentUserId);
-      setLikedPosts(prev => ({ ...prev, [post.id]: false }));
-    } else {
-      await likePost(post.id, currentUserId);
-      setLikedPosts(prev => ({ ...prev, [post.id]: true }));
-    }
+    hookHandleMessage(profile, approvedFollower);
   };
 
   const handleSavePost = async (post: any) => {
     if (!currentUserId || !post?.id) return;
-
     const isSaved = savedPosts[post.id];
-
-    try {
-      // TODO: implement save/unsave on backend API
-      // For now, just update UI state
-      setSavedPosts(prev => ({ ...prev, [post.id]: !isSaved }));
-      if (__DEV__) console.log('Post', isSaved ? 'unsaved' : 'saved', '(local only)');
-    } catch (error) {
-      console.error('Error saving/unsaving post:', error);
-    }
+    setSavedPosts((prev: any) => ({ ...prev, [post.id]: !isSaved }));
   };
 
   const handleSharePost = async (post: any) => {
@@ -638,57 +561,6 @@ export default function Profile({ userIdProp }: any) {
     } catch (e) {
       if (__DEV__) console.log('Share error:', e);
     }
-  };
-
-  // Block user handler
-  const handleBlockUser = async () => {
-    if (!currentUserId || !viewedUserId || isOwnProfile) return;
-
-    Alert.alert(
-      'Block User',
-      `Block ${profile?.name || 'this user'}?\n\nThey won't be able to find your profile, posts, or stories. They won't be notified that you blocked them.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Block user via backend API
-              const blockerId = currentUserId;
-              const targetUserId = viewedUserId;
-              if (!blockerId || !targetUserId) {
-                throw new Error('Missing user id');
-              }
-              const success = await userService.blockUser(blockerId, targetUserId);
-
-              if (success) {
-                // Also unfollow if following
-                if (isFollowing) {
-                  await unfollowUser(blockerId, targetUserId);
-                }
-
-                // Remove from your followers if they follow you
-                const theyFollowYou = profile?.followers?.includes(blockerId);
-                if (theyFollowYou) {
-                  await unfollowUser(targetUserId, blockerId);
-                }
-
-                setUserMenuVisible(false);
-                Alert.alert('Blocked', `${profile?.name || 'User'} has been blocked.`, [
-                  { text: 'OK', onPress: () => safeRouterBack() }
-                ]);
-              } else {
-                throw new Error('Block request failed');
-              }
-            } catch (error) {
-              console.error('Error blocking user:', error);
-              Alert.alert('Error', 'Failed to block user. Please try again.');
-            }
-          }
-        }
-      ]
-    );
   };
 
   // Report user handler
@@ -789,82 +661,53 @@ export default function Profile({ userIdProp }: any) {
           const timestamp = Date.now();
           const [blockedSet, profileRes] = await Promise.all([
             currentUserId ? fetchBlockedUserIds(currentUserId) : Promise.resolve(new Set<string>()),
-            getUserProfileAPI(viewedUserId, currentUserId || undefined),
+            apiService.get(`/users/${viewedUserId}/aggregated`, { requesterUserId: currentUserId, _t: timestamp }),
           ]);
+
           if (!profileRes.success || !profileRes.data) {
-            console.warn('[Profile] Profile fetch failed:', profileRes.error);
+            console.warn('[Profile] Aggregated fetch failed:', profileRes.error);
             setProfile(null);
             return;
           }
 
-          const profileData = profileRes.data as ProfileData;
+          const profileData = profileRes.data;
           setProfile(profileData);
           
-          const derivedIsPrivate = !!profileData?.isPrivate;
-          const derivedApprovedFollower = !!profileData?.isApprovedFollower;
-          const canViewPrivateProfile = !derivedIsPrivate || isOwnProfile || derivedApprovedFollower;
+          // Hydrate stats and permissions from aggregated data
+          setIsPrivate(!!profileData.isPrivate);
+          setApprovedFollower(!!profileData.isApprovedFollower);
+          setFollowRequestPending(!!profileData.followRequestPending);
+          setIsFollowing(!!profileData.isFollowing);
+          setPassportLocationsCount(profileData.passportCount || 0);
 
-          setIsPrivate(derivedIsPrivate);
-          setApprovedFollower(derivedApprovedFollower);
-          setFollowRequestPending(!!profileData?.followRequestPending);
-
+          const canViewPrivateProfile = !!profileData.hasAccess;
           setLoading(false);
 
-          // Fetch other data in parallel (UI already shows profile header)
-          const postsPromise = apiService.getUserPosts(viewedUserId, { _t: timestamp }).catch(() => null);
-          const sectionsPromise = apiService.get(`/users/${viewedUserId}/sections`, { _t: timestamp }).catch(() => null);
-          const highlightsPromise = getUserHighlights(viewedUserId, currentUserId || undefined).catch(() => null);
-          const storiesPromise = getUserStories(viewedUserId).catch(() => null);
-          const taggedPostsPromise = getTaggedPosts(viewedUserId, currentUserId || undefined).catch(() => null);
-          const savedPostsPromise = apiService.get(`/users/${viewedUserId}/saved`, {
-            viewerId: currentUserId || undefined,
-            requesterId: currentUserId || undefined,
-            requesterUserId: currentUserId || undefined,
-            _t: timestamp
-          }).catch(() => ({ success: false, data: [] }));
+          // Fetch only secondary media/lists in parallel
+          const secondaryPromises = [
+            canViewPrivateProfile ? apiService.getUserPosts(viewedUserId, { _t: timestamp }).catch(() => null) : Promise.resolve(null),
+            canViewPrivateProfile ? apiService.get(`/users/${viewedUserId}/sections`, { _t: timestamp }).catch(() => null) : Promise.resolve(null),
+            canViewPrivateProfile ? getUserHighlights(viewedUserId, currentUserId || undefined).catch(() => null) : Promise.resolve(null),
+            canViewPrivateProfile ? getUserStories(viewedUserId).catch(() => null) : Promise.resolve(null),
+          ];
 
-          const passportPromise = (viewedUserId && canViewPrivateProfile)
-            ? getPassportData(viewedUserId).catch(() => null)
-            : Promise.resolve(null);
-          
-          const followStatusPromise = (!isOwnProfile && currentUserId && viewedUserId)
-            ? import('../../lib/firebaseHelpers/follow').then(({ checkFollowStatus }) => checkFollowStatus(currentUserId!, viewedUserId!)).catch(() => null)
-            : Promise.resolve(null);
-
-          const [
-            passportRes,
-            followStatusRes,
-            postsRes,
-            sectionsRes,
-            highlightsRes,
-            storiesRes,
-            taggedPostsRes,
-            savedPostsRes
-          ] = await Promise.all([
-            passportPromise,
-            followStatusPromise,
-            postsPromise,
-            sectionsPromise,
-            highlightsPromise,
-            storiesPromise,
-            taggedPostsPromise,
-            savedPostsPromise
-          ]);
+          const [postsRes, sectionsRes, highlightsRes, storiesRes] = await Promise.all(secondaryPromises);
 
           // Hydrate state
-          if (passportRes) {
-            const stamps = Array.isArray((passportRes as any)?.stamps) ? (passportRes as any).stamps : [];
-            setPassportLocationsCount(typeof (passportRes as any)?.ticketCount === 'number' ? (passportRes as any).ticketCount : stamps.length);
-          }
-
-          if (followStatusRes && (followStatusRes as any).success) {
-            setIsFollowing((followStatusRes as any).isFollowing || false);
-          }
-
           let postsData: any[] = [];
           if ((postsRes as any)?.success) {
             postsData = Array.isArray((postsRes as any).data) ? (postsRes as any).data : ((postsRes as any).posts || []);
           }
+          
+          if (__DEV__ && postsData.length > 0) {
+            console.log('[Profile] Sample Post Enrichment:', {
+              id: postsData[0]._id || postsData[0].id,
+              isLiked: postsData[0].isLiked,
+              isSaved: postsData[0].isSaved,
+              saved: postsData[0].saved
+            });
+          }
+
           const filteredPosts = filterOutBlocked(postsData, blockedSet);
           setPosts(filteredPosts.slice(0, 36));
 
@@ -878,21 +721,19 @@ export default function Profile({ userIdProp }: any) {
           if ((highlightsRes as any)?.success) {
             highlightsData = Array.isArray((highlightsRes as any).data) ? (highlightsRes as any).data : ((highlightsRes as any).highlights || []);
           }
-          const normalizedHighlights = highlightsData
-            .map((h: any) => ({
-              ...h,
-              id: String(h?.id || h?._id || ''),
-              title: h?.title || h?.name || 'Highlight',
-              coverImage: h?.coverImage || h?.image || h?.cover || '',
-            }))
-            .filter((h: any) => !!h.id);
+          const normalizedHighlights = highlightsData.map((h: any) => ({
+            ...h,
+            id: String(h?.id || h?._id || ''),
+            title: h?.title || h?.name || 'Highlight',
+            coverImage: h?.coverImage || h?.image || h?.cover || '',
+          })).filter((h: any) => !!h.id);
           setHighlights(normalizedHighlights);
 
           let userStoriesForCache: any[] = [];
           if ((storiesRes as any)?.success && Array.isArray((storiesRes as any)?.stories)) {
-            const now = Date.now();
+            const nowTime = Date.now();
             userStoriesForCache = (storiesRes as any).stories
-              .filter((s: any) => !s.expiresAt || new Date(s.expiresAt).getTime() > now)
+              .filter((s: any) => !s.expiresAt || new Date(s.expiresAt).getTime() > nowTime)
               .map((story: any) => ({
                 ...story,
                 id: story._id || story.id,
@@ -908,29 +749,21 @@ export default function Profile({ userIdProp }: any) {
             setUserStories(userStoriesForCache);
           }
 
-          let taggedData: any[] = [];
-          if ((taggedPostsRes as any)?.success) {
-            taggedData = Array.isArray((taggedPostsRes as any).data) ? (taggedPostsRes as any).data : ((taggedPostsRes as any).posts || []);
-          }
-          setTaggedPosts(filterOutBlocked(taggedData, blockedSet));
+          // Lazy load tagged and saved will be handled by useEffect below
 
-          let savedData: any[] = [];
-          const rawSaved = (savedPostsRes as any)?.data || (savedPostsRes as any);
-          if (Array.isArray(rawSaved)) savedData = rawSaved;
-          setSavedSectionPosts(filterOutBlocked(savedData, blockedSet));
 
           // Cache snapshot
           try {
             await setCachedData(PROFILE_CACHE_KEY, {
               profile: profileData,
-              isPrivate: derivedIsPrivate,
-              approvedFollower: derivedApprovedFollower,
+              isPrivate: !!profileData.isPrivate,
+              approvedFollower: !!profileData.isApprovedFollower,
               posts: filteredPosts.slice(0, 36),
               sections: sectionsData,
               highlights: normalizedHighlights,
               userStories: userStoriesForCache,
-              taggedPosts: filterOutBlocked(taggedData, blockedSet),
-              savedSectionPosts: filterOutBlocked(savedData, blockedSet),
+              taggedPosts: [],
+              savedSectionPosts: [],
             }, { ttl: 24 * 60 * 60 * 1000 });
           } catch {}
 
@@ -952,6 +785,21 @@ export default function Profile({ userIdProp }: any) {
   useEffect(() => {
     setProfileAvatarFailed(false);
   }, [profile?.avatar, (profile as any)?.photoURL, (profile as any)?.profilePicture]);
+
+  // Lazy Load Tab Content
+  useEffect(() => {
+    if (segmentTab === 'tagged' && taggedPosts.length === 0 && !loading && !isPrivate && viewedUserId) {
+      getTaggedPosts(viewedUserId, currentUserId || undefined).then(res => {
+        if (res?.success) setTaggedPosts(filterOutBlocked(Array.isArray(res.data) ? res.data : (res.posts || []), new Set()));
+      });
+    }
+    if (segmentTab === 'saved' && isOwnProfile && savedSectionPosts.length === 0 && !loading && viewedUserId) {
+      apiService.get(`/users/${viewedUserId}/saved`, { viewerId: currentUserId }).then(res => {
+        const data = res?.data || res;
+        if (Array.isArray(data)) setSavedSectionPosts(filterOutBlocked(data, new Set()));
+      });
+    }
+  }, [segmentTab, viewedUserId, currentUserId, isOwnProfile, isPrivate, loading]);
 
   const handleAvatarPick = async () => {
     try {
@@ -1007,7 +855,83 @@ export default function Profile({ userIdProp }: any) {
     const unsub = feedEventEmitter.onFeedUpdate((event) => {
       if (event.type === 'POST_DELETED' && event.postId) {
         if (__DEV__) console.log('[Profile] Post deleted event received:', event.postId);
-        setPosts(prev => prev.filter(p => (p.id || p._id) !== event.postId));
+        // 1. Update local states
+        const targetId = String(event.postId).split('-loop')[0];
+        const filterFn = (prev: any[]) => (Array.isArray(prev) ? prev.filter(p => {
+          const pid = String(p?.id || p?._id || '').split('-loop')[0];
+          return pid !== targetId;
+        }) : []);
+
+        setPosts(prev => filterFn(prev));
+        setTaggedPosts(prev => filterFn(prev));
+        setSavedSectionPosts(prev => filterFn(prev));
+        
+        // 2. Aggressively update all related profile caches to prevent "ghost" post on restart
+        (async () => {
+          try {
+            const allKeys = await AsyncStorage.getAllKeys();
+            const profileKeys = allKeys.filter(k => k.includes('profile_v2_') || k.includes('profile_cache_'));
+            
+            for (const fullKey of profileKeys) {
+              try {
+                const cached = await AsyncStorage.getItem(fullKey);
+                if (cached) {
+                  let entry = JSON.parse(cached);
+                  let snap = entry.data || entry; // handle both raw and CacheEntry formats
+                  let changed = false;
+
+                  if (snap && Array.isArray(snap.posts)) {
+                    const originalLen = snap.posts.length;
+                    snap.posts = snap.posts.filter((p: any) => {
+                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
+                      return pid !== targetId;
+                    });
+                    if (snap.posts.length !== originalLen) changed = true;
+                  }
+
+                  if (snap && Array.isArray(snap.taggedPosts)) {
+                    const originalLen = snap.taggedPosts.length;
+                    snap.taggedPosts = snap.taggedPosts.filter((p: any) => {
+                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
+                      return pid !== targetId;
+                    });
+                    if (snap.taggedPosts.length !== originalLen) changed = true;
+                  }
+
+                  if (snap && Array.isArray(snap.savedSectionPosts)) {
+                    const originalLen = snap.savedSectionPosts.length;
+                    snap.savedSectionPosts = snap.savedSectionPosts.filter((p: any) => {
+                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
+                      return pid !== targetId;
+                    });
+                    if (snap.savedSectionPosts.length !== originalLen) changed = true;
+                  }
+
+                  if (changed) {
+                    if (entry.data) entry.data = snap; else entry = snap;
+                    await AsyncStorage.setItem(fullKey, JSON.stringify(entry));
+                  }
+                }
+              } catch (e) {
+                await AsyncStorage.removeItem(fullKey);
+              }
+            }
+          } catch (e) {
+            if (__DEV__) console.warn('[Profile] Failed to aggressively clear caches:', e);
+          }
+        })();
+        
+        // 3. Refresh profile stats (to update post count 7 -> 6)
+        if (viewedUserId) {
+          apiService.get(`/users/${viewedUserId}/aggregated`, { requesterUserId: currentUserId })
+            .then(res => {
+              if (res.success && res.data) {
+                setProfile(res.data);
+                setIsPrivate(!!res.data.isPrivate);
+                setApprovedFollower(!!res.data.isApprovedFollower);
+              }
+            }).catch(() => {});
+        }
       }
       if (event.type === 'POST_UPDATED' && event.postId) {
         const patch = event.data && typeof event.data === 'object' ? event.data : {};
@@ -1049,7 +973,7 @@ export default function Profile({ userIdProp }: any) {
   }, []);
 
 
-  const renderProfileHeader = () => {
+  const renderProfileHeader = useMemo(() => {
     return (
       <View style={styles.content}>
         <ProfileHeader 
@@ -1075,10 +999,9 @@ export default function Profile({ userIdProp }: any) {
 
         <ProfileStats 
           locationsCount={passportLocationsCount}
-          postsCount={posts.length}
+          postsCount={Number(profile?.postsCount ?? posts.length)}
           followersCount={Math.max(0, Number(profile?.followersCount ?? profile?.followers ?? 0))}
           followingCount={Math.max(0, Number(profile?.followingCount ?? profile?.following ?? 0))}
-
           onPressLocations={() => {
             if (!viewedUserId) return;
             router.push({
@@ -1149,121 +1072,54 @@ export default function Profile({ userIdProp }: any) {
           />
         )}
 
-        {/* Collections horizontal scroller (keeping inline for specific logic) */}
-        {(!isPrivate || isOwnProfile || approvedFollower) && segmentTab === 'grid' && (() => {
-          const visibleSections = (sections as any[]).filter(s => {
-            if (isOwnProfile) return true;
-            if (!s.visibility || s.visibility === 'public') return true;
-            const collaborators = Array.isArray(s.collaborators) ? s.collaborators : [];
-            const viewerId = String(currentUserId || '');
-            return collaborators.some((c: any) => {
-              const cid = typeof c === 'string' ? c : (c.userId || c.uid || c._id || c.firebaseUid);
-              return String(cid) === viewerId;
-            });
-          });
-
-          if (visibleSections.length === 0) return null;
-
-          return (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 14, paddingVertical: 10 }}>
-              {visibleSections.map((s, idx) => {
-                const isActive = selectedSection === s.name;
-                const coverUri = s.coverImage || sectionSourcePosts.find(p => s.postIds?.includes?.(getPostId(p)))?.imageUrl || DEFAULT_AVATAR_URL;
-                return (
-                  <TouchableOpacity
-                    key={`section-${String((s as any)?._id || s.name)}-${idx}`}
-                    activeOpacity={0.8}
-                    onPress={() => { hapticLight(); setSelectedSection(isActive ? null : s.name); }}
-                    style={{ alignItems: 'center', width: 60 }}
-                  >
-                    <View style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', borderWidth: isActive ? 2 : 0, borderColor: '#0A3D62', backgroundColor: '#eee' }}>
-                      <ExpoImage source={{ uri: coverUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={0} />
-                    </View>
-                    <Text numberOfLines={1} style={{ marginTop: 4, fontSize: 10, fontWeight: isActive ? '700' : '400', color: isActive ? '#0A3D62' : '#333', textAlign: 'center', width: 60 }}>{s.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          );
-        })()}
+        {(!isPrivate || isOwnProfile || approvedFollower) && segmentTab === 'grid' && (
+          <ProfileSections
+            sections={sections}
+            selectedSection={selectedSection}
+            onSelectSection={setSelectedSection}
+            sectionSourcePosts={sectionSourcePosts}
+            getPostId={getPostId}
+            isOwnProfile={isOwnProfile}
+            currentUserId={currentUserId}
+          />
+        )}
       </View>
     );
-  };
+  }, [profile, userStories, isOwnProfile, isPrivate, approvedFollower, passportLocationsCount, posts.length, highlights, highlightViewerVisible, selectedHighlightId, segmentTab, sections, selectedSection, isFollowing, followRequestPending, followLoading, viewedUserId]);
 
-  const currentPostsArray = segmentTab === 'grid' ? (selectedSection ? visiblePosts : posts) : taggedPosts;
+  const currentPostsArray = segmentTab === 'grid' 
+    ? (selectedSection ? visiblePosts : posts) 
+    : (segmentTab === 'saved' ? savedSectionPosts : taggedPosts);
 
-  const renderGridItem = ({ item, index }: { item: any, index: number }) => {
+  const normalizeMediaUrl = useCallback((url: string) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('//') || trimmed.startsWith('data:') || trimmed.startsWith('file:') || trimmed.startsWith('ph:')) {
+      return trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
+    }
+    if (trimmed.includes('cloudinary.com')) {
+      return `https://${trimmed.replace(/^\/+/, '')}`;
+    }
+    const cleanUrl = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return `${BACKEND_URL}${cleanUrl}`;
+  }, []);
+
+  const renderGridItem = useCallback(({ item, index }: { item: any, index: number }) => {
     return (
-      <TouchableOpacity
-        style={styles.gridItem}
-        activeOpacity={0.8}
-        onPress={() => {
-          hapticLight();
+      <ProfileGridItem
+        item={item}
+        index={index}
+        onPress={(item, idx) => {
           const modalIndex = currentPostsArray.findIndex(p => (p.id || p._id) === (item.id || item._id));
-          setSelectedPostIndex(modalIndex >= 0 ? modalIndex : index);
+          setSelectedPostIndex(modalIndex >= 0 ? modalIndex : idx);
           setPostViewerVisible(true);
         }}
-      >
-        {(() => {
-          const firstMedia = item.videoUrl || item.mediaUrls?.[0] || item.imageUrls?.[0] || item.imageUrl || '';
-          const isVideo = isVideoUrl(firstMedia) || item.postType === 'video' || item.mediaType === 'video' || !!item.videoUrl;
-          const thumbnailUrl = item.thumbnailUrl || item.imageUrl;
-          const hasThumbnailImage = !!thumbnailUrl && !isVideoUrl(thumbnailUrl);
-
-          if (isVideo && !hasThumbnailImage) {
-            return (
-              <View style={{ width: '100%', height: '100%', backgroundColor: '#000', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                <Video
-                  source={{ uri: firstMedia }}
-                  style={{ width: '100%', height: '100%', position: 'absolute' }}
-                  resizeMode={ResizeMode.COVER}
-                  shouldPlay={false}
-                  isMuted={true}
-                  useNativeControls={false}
-                />
-                <Ionicons name="play" size={24} color="rgba(255,255,255,0.4)" />
-              </View>
-            );
-          }
-
-          return (
-            <ExpoImage
-              source={{ uri: hasThumbnailImage ? thumbnailUrl : (isVideo ? '' : (firstMedia || DEFAULT_IMAGE_URL)) }}
-              style={{ width: '100%', height: '100%', backgroundColor: isVideo ? '#000' : '#f0f0f0' }}
-              contentFit="cover"
-              transition={200}
-              cachePolicy="memory-disk"
-              priority="high"
-            />
-          );
-        })()}
-        {(() => {
-          const firstMedia = item.videoUrl || item.mediaUrls?.[0] || item.imageUrls?.[0] || item.imageUrl || '';
-          const isVideo = isVideoUrl(firstMedia) || item.postType === 'video' || item.mediaType === 'video' || !!item.videoUrl;
-          if (isVideo) {
-            return (
-              <View style={{ 
-                position: 'absolute', 
-                top: 6, 
-                right: 6, 
-                backgroundColor: 'rgba(0,0,0,0.5)', 
-                borderRadius: 4, 
-                padding: 4,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.3,
-                shadowRadius: 2,
-                elevation: 3
-              }}>
-                <Ionicons name="play" size={14} color="#fff" style={{ marginLeft: 1 }} />
-              </View>
-            );
-          }
-          return null;
-        })()}
-      </TouchableOpacity>
+        normalizeMediaUrl={normalizeMediaUrl}
+        isVideoUrl={isVideoUrl}
+        DEFAULT_IMAGE_URL={DEFAULT_IMAGE_URL}
+      />
     );
-  };
+  }, [currentPostsArray, normalizeMediaUrl]);
 
   // UI
   // Show loading while auth is initializing
@@ -1308,7 +1164,17 @@ export default function Profile({ userIdProp }: any) {
 
       {/* Header for other users' profiles */}
       {!isOwnProfile && (
-        <View style={styles.profileHeader}>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: 8,
+          borderBottomWidth: 1,
+          borderBottomColor: '#f0f0f0',
+          backgroundColor: '#fff',
+        }}>
           <TouchableOpacity
             onPress={() => {
               hapticLight();
@@ -1339,11 +1205,12 @@ export default function Profile({ userIdProp }: any) {
       )}
 
       {(!isPrivate || isOwnProfile || approvedFollower) ? (
-        <FlatList
+        <FlashList
           data={currentPostsArray}
           keyExtractor={(item, index) => item.id || item._id || `post-${index}`}
           renderItem={renderGridItem}
           numColumns={3}
+          estimatedItemSize={SCREEN_WIDTH / 3}
           ListHeaderComponent={renderProfileHeader}
           ListEmptyComponent={() => (
             !loading && (
@@ -1358,14 +1225,11 @@ export default function Profile({ userIdProp }: any) {
           onRefresh={onRefresh}
           refreshing={refreshing}
           scrollEventThrottle={16}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={7}
           removeClippedSubviews={Platform.OS === 'android'}
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          {renderProfileHeader()}
+          {renderProfileHeader}
           <View style={{ padding: 40, alignItems: 'center' }}>
             <Ionicons name="lock-closed" size={48} color="#ccc" />
             <Text style={{ marginTop: 10, color: '#999' }}>This account is private</Text>
@@ -1375,71 +1239,13 @@ export default function Profile({ userIdProp }: any) {
       )}
 
       {/* Collections View Sheet */}
-      <Modal
+      <CollectionsModal
         visible={viewCollectionsModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setViewCollectionsModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => {
-            hapticLight();
-            setViewCollectionsModal(false);
-          }}
-        >
-          <TouchableOpacity 
-            activeOpacity={1} 
-            onPress={(e) => e.stopPropagation()}
-            style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 20), maxHeight: SCREEN_HEIGHT * 0.7 }]}
-          >
-            <View style={styles.handleContainer}>
-              <View style={styles.menuHandle} />
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
-              {sections.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#999', marginTop: 20 }}>No collections yet.</Text>
-              ) : sections.map((s, idx) => {
-                // Ensure visibility rule applies to the list as well (if private or specific collaborators)
-                if (!isOwnProfile && s.visibility === 'private') {
-                  const collaborators = Array.isArray(s.collaborators) ? s.collaborators : [];
-                  const viewerId = String(currentUserId || '');
-                  const isCollab = collaborators.some((c: any) => {
-                    const cid = typeof c === 'string' ? c : (c.userId || c.uid || c._id || c.firebaseUid);
-                    return String(cid) === viewerId;
-                  });
-                  if (!isCollab) return null;
-                }
-
-                const coverUri = s.coverImage || sectionSourcePosts.find(p => s.postIds?.includes?.(getPostId(p)))?.imageUrl || DEFAULT_AVATAR_URL;
-                const isActive = selectedSection === s.name;
-                
-                return (
-                  <TouchableOpacity
-                    key={`sheet-section-${idx}`}
-                    style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
-                    onPress={() => {
-                      setSelectedSection(isActive ? null : s.name);
-                      setViewCollectionsModal(false);
-                    }}
-                  >
-                    <ExpoImage
-                      source={{ uri: coverUri }}
-                      style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: '#eee', borderWidth: isActive ? 2 : 0, borderColor: '#0A3D62' }}
-                      contentFit="cover"
-                      transition={0}
-                    />
-                    <Text style={{ marginLeft: 16, fontSize: 16, fontWeight: isActive ? '700' : '500', color: isActive ? '#0A3D62' : '#222' }}>
-                      {s.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setViewCollectionsModal(false)}
+        sections={sections}
+        selectedSection={selectedSection}
+        onSelectSection={setSelectedSection}
+      />
 
       {/* Instagram-style Post Viewer */}
       {React.createElement(PostViewerModal as any, {
@@ -1451,7 +1257,7 @@ export default function Profile({ userIdProp }: any) {
         authUser: currentUserId ? { uid: currentUserId } : null,
         likedPosts: likedPosts,
         savedPosts: savedPosts,
-        handleLikePost: handleLikePost,
+        handleLikePost: (post: any) => handleLikePost(post?.id || post?._id || ''),
         handleSavePost: handleSavePost,
         title: "Post",
         handleSharePost: handleSharePost,
@@ -1582,317 +1388,43 @@ export default function Profile({ userIdProp }: any) {
       {/* Create Highlight Modal removed as per user request */}
 
       {/* User Menu Modal (for other users' profiles) - Block, Report options */}
-      <Modal
+      <UserMenuModal
         visible={userMenuVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setUserMenuVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setUserMenuVisible(false)}
-        >
-          <TouchableOpacity 
-            activeOpacity={1} 
-            onPress={(e) => e.stopPropagation()}
-            style={[
-              styles.menuSheet, 
-              { paddingBottom: Math.max(insets.bottom, 20) }
-            ]}
-          >
-            {/* Static Handle Container */}
-            <View style={styles.handleContainer}>
-              <View style={styles.menuHandle} />
-            </View>
-
-            <ScrollView
-              style={{ maxHeight: SCREEN_HEIGHT * 0.8 }}
-              contentContainerStyle={styles.menuSheetContent}
-              bounces={false}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Menu Options */}
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleBlockUser}
-              >
-                <View style={[styles.menuIconContainer, { backgroundColor: '#fee' }]}>
-                  <Ionicons name="ban-outline" size={22} color="#e74c3c" />
-                </View>
-                <Text style={[styles.menuItemText, { color: '#e74c3c' }]}>Block</Text>
-              </TouchableOpacity>
-
-              <View style={styles.menuSeparator} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleReportUser}
-              >
-                <View style={[styles.menuIconContainer, { backgroundColor: '#fff5e6' }]}>
-                  <Ionicons name="flag-outline" size={22} color="#0A3D62" />
-                </View>
-                <Text style={styles.menuItemText}>Report</Text>
-              </TouchableOpacity>
-
-              <View style={styles.menuSeparator} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setUserMenuVisible(false);
-                  shareProfile({
-                    userId: String(viewedUserId || ''),
-                    name: typeof profile?.name === 'string' ? profile.name : (typeof profile?.displayName === 'string' ? profile.displayName : ''),
-                    username: typeof profile?.username === 'string' ? profile.username : ''
-                  });
-                }}
-              >
-                <View style={[styles.menuIconContainer, { backgroundColor: '#e8f4fd' }]}>
-                  <Ionicons name="share-outline" size={22} color="#0095f6" />
-                </View>
-                <Text style={styles.menuItemText}>Share Profile</Text>
-              </TouchableOpacity>
-
-              <View style={styles.menuSeparator} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={async () => {
-                  setUserMenuVisible(false);
-                  try {
-                    const id = String(viewedUserId || '');
-                    const link = buildProfileWebLink(id) || buildProfileDeepLink(id);
-                    await Clipboard.setStringAsync(link);
-                    Alert.alert('Copied', 'Profile link copied to clipboard');
-                  } catch (e) {
-                    Alert.alert('Error', 'Could not copy link');
-                  }
-                }}
-              >
-                <View style={[styles.menuIconContainer, { backgroundColor: '#f0f0f0' }]}>
-                  <Ionicons name="link-outline" size={22} color="#666" />
-                </View>
-                <Text style={styles.menuItemText}>Copy Profile URL</Text>
-              </TouchableOpacity>
-
-              {/* Cancel Button */}
-              <TouchableOpacity
-                style={styles.menuCancelBtn}
-                onPress={() => setUserMenuVisible(false)}
-              >
-                <Text style={styles.menuCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-      {/* Story Upload Modal (Instagram Style) */}
-      <Modal
+        onClose={() => setUserMenuVisible(false)}
+        isOwnProfile={isOwnProfile}
+        onBlock={() => handleBlockUser(profile?.name || profile?.displayName || 'this user')}
+        onReport={handleReportUser}
+        onShare={() => {
+          setUserMenuVisible(false);
+          shareProfile({
+            userId: String(viewedUserId || ''),
+            name: typeof profile?.name === 'string' ? profile.name : (typeof profile?.displayName === 'string' ? profile.displayName : ''),
+            username: typeof profile?.username === 'string' ? profile.username : ''
+          });
+        }}
+      />
+      {/* Story Upload Modal */}
+      <UploadStoryModal
         visible={showUploadModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
+        onClose={() => {
           setShowUploadModal(false);
           setSelectedMedia(null);
           setLocationQuery('');
           setLocationSuggestions([]);
         }}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-          >
-            <View style={{ flex: 1 }}>
-              {/* Header */}
-              <View style={styles.modalHeader}>
-                <TouchableOpacity
-                  activeOpacity={0.6}
-                  onPress={() => {
-                    setShowUploadModal(false);
-                    setSelectedMedia(null);
-                    setLocationQuery('');
-                    setLocationSuggestions([]);
-                  }}
-                >
-                  <Feather name="x" size={24} color="#222" />
-                </TouchableOpacity>
-
-                <Text style={styles.modalTitle}>Create Story</Text>
-
-                <View style={{ width: 40 }} />
-              </View>
-
-              <ScrollView
-                contentContainerStyle={{
-                  paddingHorizontal: 20,
-                  paddingBottom: 40
-                }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Media Preview */}
-                {selectedMedia ? (
-                  <View style={styles.mediaPreviewContainer}>
-                    {String(selectedMedia?.type || '').toLowerCase() === 'video' ? (
-                      <Video
-                        source={{ uri: selectedMedia.uri }}
-                        style={styles.modalImage}
-                        resizeMode={ResizeMode.COVER}
-                        useNativeControls
-                        shouldPlay={false}
-                      />
-                    ) : (
-                      <Image
-                        source={{ uri: selectedMedia.uri }}
-                        style={styles.modalImage}
-                        resizeMode="cover"
-                      />
-                    )}
-                    <TouchableOpacity
-                      style={styles.changeMediaButton}
-                      onPress={async () => {
-                        const pickerResult = await ImagePicker.launchImageLibraryAsync({
-                          mediaTypes: ['images', 'videos'],
-                          allowsEditing: true,
-                          aspect: [9, 16],
-                          quality: 0.8
-                        });
-                        if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets[0]?.uri) {
-                          setSelectedMedia(pickerResult.assets[0]);
-                        }
-                      }}
-                    >
-                      <Feather name="edit-2" size={16} color="#007aff" />
-                      <Text style={styles.changeMediaText}>Change</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-
-                {/* Caption Input */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Caption (Optional)</Text>
-                  <TextInput
-                    placeholder="Write something..."
-                    value={selectedMedia?.caption || ''}
-                    onChangeText={text => setSelectedMedia((prev: any) => prev ? { ...prev, caption: text } : prev)}
-                    style={styles.inputField}
-                    placeholderTextColor="#999"
-                    multiline
-                  />
-                </View>
-
-                {/* Location Input */}
-                <View style={[styles.inputGroup, { zIndex: 10 }]}>
-                  <Text style={styles.inputLabel}>Location (Optional)</Text>
-                  <View style={{ position: 'relative' }}>
-                    <View style={styles.locationInputContainer}>
-                      <Feather name="map-pin" size={18} color="#666" />
-                      <TextInput
-                        placeholder="Add location..."
-                        value={locationQuery}
-                        onChangeText={setLocationQuery}
-                        style={styles.locationInput}
-                        placeholderTextColor="#999"
-                      />
-                    </View>
-                    {locationSuggestions.length > 0 && (
-                      <View style={styles.locationDropdown}>
-                        <ScrollView keyboardShouldPersistTaps="handled">
-                          {locationSuggestions.map((item) => (
-                            <TouchableOpacity
-                              key={item.placeId}
-                              style={styles.locationItem}
-                              onPress={() => {
-                                Keyboard.dismiss();
-                                setSelectedMedia((prev: any) => prev ? {
-                                  ...prev,
-                                  locationData: { name: item.name, address: item.address, placeId: item.placeId }
-                                } : prev);
-                                setLocationQuery(item.name);
-                                setLocationSuggestions([]);
-                              }}
-                            >
-                              <Feather name="map-pin" size={16} color="#007aff" style={{ marginRight: 8 }} />
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.locationName}>{item.name}</Text>
-                                <Text style={styles.locationAddress} numberOfLines={1}>{item.address}</Text>
-                              </View>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {/* Upload Progress */}
-                {uploading && (
-                  <View style={styles.uploadingArea}>
-                    <ActivityIndicator size="small" color="#007aff" style={{ marginBottom: 8 }} />
-                    <Text style={styles.uploadingText}>Uploading {uploadProgress}%</Text>
-                    <View style={styles.uploadingBarBg}>
-                      <View style={[styles.uploadingBar, { width: `${uploadProgress}%` }]} />
-                    </View>
-                  </View>
-                )}
-
-                {/* Share Button */}
-                <TouchableOpacity
-                  style={[styles.shareButton, !selectedMedia && styles.shareButtonDisabled]}
-                  disabled={!selectedMedia || uploading}
-                  onPress={async () => {
-                    if (!selectedMedia || !currentUserId || uploading) return;
-                    setUploading(true);
-                    setUploadProgress(0);
-                    try {
-                      let uploadUri = selectedMedia.uri;
-                      const mediaType = selectedMedia.type === 'video' ? 'video' : 'image';
-                      if (mediaType === 'image') {
-                        const manipResult = await ImageManipulator.manipulateAsync(
-                          selectedMedia.uri,
-                          [{ resize: { width: 1080 } }],
-                          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-                        );
-                        uploadUri = manipResult.uri;
-                      }
-                      const storyRes = await createStory(
-                        currentUserId,
-                        uploadUri,
-                        mediaType,
-                        undefined,
-                        selectedMedia.locationData,
-                        undefined,
-                        'Everyone',
-                        [],
-                        (p: number) => setUploadProgress(Math.round(p))
-                      );
-                      if (storyRes?.success) {
-                        setUploadProgress(100);
-                        setTimeout(() => {
-                          setShowUploadModal(false);
-                          setSelectedMedia(null);
-                          setUploading(false);
-                          // Signal refresh
-                          feedEventEmitter.emit('feedUpdated');
-                          showSuccess('Story shared successfully!');
-                        }, 500);
-                      }
-                    } catch (err) {
-                      Alert.alert('Error', 'Failed to upload story');
-                      setUploading(false);
-                    }
-                  }}
-                >
-                  <Text style={styles.shareButtonText}>{uploading ? 'Sharing...' : 'Share Story'}</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+        selectedMedia={selectedMedia}
+        setSelectedMedia={setSelectedMedia}
+        currentUserId={currentUserId}
+        locationQuery={locationQuery}
+        setLocationQuery={setLocationQuery}
+        locationSuggestions={locationSuggestions}
+        setLocationSuggestions={setLocationSuggestions}
+        uploading={uploading}
+        setUploading={setUploading}
+        uploadProgress={uploadProgress}
+        setUploadProgress={setUploadProgress}
+        showSuccess={showSuccess}
+      />
     </SafeAreaView>
   );
 }
@@ -1971,311 +1503,4 @@ const styles = StyleSheet.create({
   followingBtn: { backgroundColor: '#f5f5f5', borderWidth: 1, borderColor: '#e0e0e0' },
   followText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   followingText: { color: '#333' },
-  collectionsSheetOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  collectionsSheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-  },
-  collectionsSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 18,
-  },
-  collectionsHandle: {
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#ddd',
-    alignSelf: 'center',
-    marginBottom: 12,
-  },
-  collectionSheetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#f0f0f0',
-  },
-  collectionSheetThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    marginRight: 12,
-    backgroundColor: '#eee',
-  },
-  collectionSheetThumbPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    marginRight: 12,
-    backgroundColor: '#f2f2f2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  collectionSheetText: {
-    fontSize: 18,
-    color: '#222',
-    flexShrink: 1,
-  },
-  collectionSheetTextActive: {
-    color: '#0A3D62',
-    fontWeight: '700',
-  },
-  sectionsScroller: { paddingVertical: 8 },
-  sectionCard: { alignItems: 'center', width: 70, marginRight: 4 },
-  sectionCover: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#eee' },
-  sectionLabel: { marginTop: 4, fontSize: 10, color: '#666', textAlign: 'center' },
-  sectionLabelActive: { fontWeight: '700', color: '#000' },
-  segmentControl: { flexDirection: 'row', borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: '#e0e0e0', marginTop: 0 },
-  segmentBtn: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  segmentBtnActive: { flex: 1, alignItems: 'center', paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: '#0A3D62' },
-  card: { backgroundColor: '#f7f7f7', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#eee', marginTop: 8 },
-  cardText: { color: '#333', lineHeight: 20 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 0, paddingBottom: 8 },
-  gridItem: { flexBasis: '33.3333%', aspectRatio: 1, padding: 1 },
-  sectionOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, alignItems: 'center' },
-  sectionGridLabel: { color: '#fff', fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  mapContainer: { width: '100%', height: 400, marginTop: 8, borderRadius: 12, overflow: 'hidden', backgroundColor: '#ffcccc' },
-  map: { width: '100%', height: '100%' },
-  markerContainer: { alignItems: 'center', justifyContent: 'center', width: 60, height: 60, backgroundColor: '#FF6B6B', borderRadius: 30, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 },
-  markerAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#eee' },
-  customMarkerWrap: {
-    width: 70,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 6,
-    overflow: 'visible',
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-  },
-  customMarkerImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 14,
-    resizeMode: 'cover',
-  },
-  customMarkerAvatarWrap: {
-    position: 'absolute',
-    top: -10,
-    right: -10,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 4,
-  },
-  customMarkerAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  postViewerHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
-  postViewerHeaderContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 },
-  postViewerCloseBtn: { padding: 4 },
-  postViewerUserInfo: { flexDirection: 'row', alignItems: 'center' },
-  postViewerAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 8 },
-  postViewerUsername: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  postViewerSlide: { flex: 1, backgroundColor: '#000' },
-  postImageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#222' },
-  postViewerImage: { width: '100%', height: undefined, aspectRatio: 1, borderRadius: 12 },
-  postActionsBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  postActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  actionBtn: { padding: 8 },
-  captionContainer: { paddingHorizontal: 16, paddingVertical: 8 },
-  captionText: { color: '#fff', fontSize: 15 },
-  captionUsername: { fontWeight: '700', color: '#fff' },
-  commentsContainer: { paddingHorizontal: 16, paddingBottom: 24 },
-  // Profile header styles (for other users)
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-  },
-  menuSeparator: {
-    height: 1,
-    backgroundColor: '#f0f0f0',
-  },
-  menuCancelBtn: {
-    marginTop: 24,
-    marginBottom: 4,
-    marginHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  menuCancelText: { fontSize: 16, fontWeight: '600', color: '#000' },
-  // Story Upload Modal Styles
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: responsiveValues.spacing,
-    paddingHorizontal: responsiveValues.modalPadding,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  modalTitle: {
-    fontSize: responsiveValues.titleSize,
-    fontWeight: '700',
-    color: '#222',
-  },
-  mediaPreviewContainer: {
-    marginTop: responsiveValues.spacingLarge,
-    marginBottom: responsiveValues.spacingLarge,
-  },
-  modalImage: {
-    width: '100%',
-    height: responsiveValues.imageHeight,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f5',
-  },
-  changeMediaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  changeMediaText: {
-    color: '#007aff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  inputGroup: {
-    width: '100%',
-    marginBottom: responsiveValues.spacingLarge,
-    zIndex: 1,
-  },
-  inputLabel: {
-    fontWeight: '600',
-    fontSize: responsiveValues.labelSize,
-    marginBottom: 8,
-    color: '#666',
-  },
-  inputField: {
-    minHeight: responsiveValues.inputHeight,
-    fontSize: responsiveValues.inputSize,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    paddingHorizontal: responsiveValues.spacing,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    color: '#222',
-  },
-  locationInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    paddingHorizontal: responsiveValues.spacing,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    gap: 10,
-    height: responsiveValues.inputHeight,
-  },
-  locationInput: {
-    flex: 1,
-    fontSize: responsiveValues.inputSize,
-    color: '#222',
-    height: '100%',
-  },
-  uploadingArea: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  uploadingText: {
-    marginBottom: 8,
-    color: '#666',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  uploadingBarBg: {
-    width: '100%',
-    height: 6,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  uploadingBar: {
-    height: 6,
-    backgroundColor: '#007aff',
-    borderRadius: 3,
-  },
-  shareButton: {
-    width: '100%',
-    backgroundColor: '#007aff',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  shareButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  shareButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  locationDropdown: {
-    position: 'absolute',
-    top: responsiveValues.inputHeight + 4,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    maxHeight: 200,
-    zIndex: 1000,
-    elevation: 4,
-  },
-  locationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  locationName: {
-    color: '#222',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  locationAddress: {
-    color: '#999',
-    fontSize: 12,
-  },
 });

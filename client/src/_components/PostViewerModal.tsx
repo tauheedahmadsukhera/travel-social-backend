@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef } from 'react';
-import { Dimensions, FlatList, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,10 +10,11 @@ import PostCard from './PostCard';
 
 interface Post {
   id: string;
+  _id?: string;
   imageUrl?: string;
   imageUrls?: string[];
   caption?: string;
-  userId: string;
+  userId: any;
   likes?: string[];
   savedBy?: string[];
   commentsCount?: number;
@@ -27,6 +29,7 @@ interface Profile {
 
 interface AuthUser {
   uid?: string;
+  _id?: string;
 }
 
 interface PostViewerModalProps {
@@ -64,44 +67,38 @@ export default function PostViewerModal({
   setCommentModalVisible,
   title = "Posts",
 }: PostViewerModalProps): React.ReactElement {
-  const flatListRef = useRef<FlatList>(null);
+  const flashListRef = useRef<FlashList<any>>(null);
   const insets = useSafeAreaInsets();
   const didInitialScrollRef = useRef(false);
-  const prevVisibleRef = useRef(false);
   const targetIndexRef = useRef(0);
 
   useEffect(() => {
-    const wasVisible = prevVisibleRef.current;
-    prevVisibleRef.current = visible;
     if (!visible) {
       didInitialScrollRef.current = false;
       return;
     }
-    // Only run the initial positioning when the modal transitions from hidden -> visible.
-    if (wasVisible || !visible) return;
-    if (!flatListRef.current) return;
+    if (!flashListRef.current) return;
     if (!Array.isArray(posts) || posts.length === 0) return;
     if (selectedPostIndex < 0 || selectedPostIndex >= posts.length) return;
 
     targetIndexRef.current = selectedPostIndex;
     
-    // Smooth initial scroll handling - slightly longer delay to ensure layout is ready
+    // FlashList initial positioning is much faster
     const timer = setTimeout(() => {
-      if (!flatListRef.current || didInitialScrollRef.current) return;
+      if (!flashListRef.current || didInitialScrollRef.current) return;
       try {
-        flatListRef.current.scrollToIndex({ 
+        flashListRef.current.scrollToIndex({ 
           index: selectedPostIndex, 
-          animated: false,
-          viewPosition: 0 
+          animated: false
         });
         didInitialScrollRef.current = true;
       } catch (e) {
-        // Fallback handled by onScrollToIndexFailed
+        // Fallback
       }
-    }, 150);
+    }, 16); // Even shorter delay for FlashList
 
     return () => clearTimeout(timer);
-  }, [visible, selectedPostIndex]); // Removed posts.length dependency to avoid jumping during data updates
+  }, [visible, selectedPostIndex]);
 
   return (
     <Modal
@@ -128,41 +125,24 @@ export default function PostViewerModal({
           <View style={{ width: 40 }} />
         </View>
 
-        <FlatList
-          ref={flatListRef}
+        <FlashList
+          ref={flashListRef}
           data={posts}
           keyExtractor={(item, index) => String(item?.id || item?._id || index)}
+          estimatedItemSize={SCREEN_HEIGHT * 0.75}
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={() => {
             didInitialScrollRef.current = true;
           }}
-          // Continuous scrolling feels better for variable height posts
+          initialScrollIndex={selectedPostIndex >= 0 && selectedPostIndex < posts.length ? selectedPostIndex : undefined}
           snapToAlignment="start"
           decelerationRate="fast"
-          initialNumToRender={Math.min(posts.length, 5)}
-          maxToRenderPerBatch={3}
-          windowSize={5}
           removeClippedSubviews={Platform.OS === 'android'}
-          onScrollToIndexFailed={(info) => {
-            if (!Array.isArray(posts) || posts.length === 0) return;
-            const safeIndex = Math.max(0, Math.min(posts.length - 1, info.index));
-            // For variable height, we jump to an estimate and then try again.
-            flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * safeIndex,
-              animated: false,
-            });
-            setTimeout(() => {
-              try {
-                flatListRef.current?.scrollToIndex({ index: safeIndex, animated: false });
-              } catch {}
-            }, 100);
-          }}
           renderItem={({ item }) => (
             <PostCard
               post={item}
               currentUser={authUser}
               showMenu={true}
-              inPostViewer
               onCommentPress={(pid, avatar) => {
                 setCommentModalPostId(pid);
                 setCommentModalAvatar(avatar);

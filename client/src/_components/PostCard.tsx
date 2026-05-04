@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Dimensions, StyleSheet, InteractionManager, Alert, Modal, Pressable } from "react-native";
-
+import { View, Dimensions, StyleSheet, InteractionManager, Alert, Modal, Pressable, KeyboardAvoidingView, Platform, Text, Animated, PanResponder, TouchableOpacity } from "react-native";
+import { Ionicons, Feather } from "@expo/vector-icons";
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -10,10 +10,12 @@ import PostMedia from './PostCard/PostMedia';
 import PostActions from './PostCard/PostActions';
 import PostCaption from './PostCard/PostCaption';
 import { CommentSection } from "./CommentSection";
+import { feedEventEmitter } from "../../lib/feedEventEmitter";
 import ShareModal from "./ShareModal";
 import { useUser } from "./UserContext";
 import { likePost, unlikePost } from "../../lib/firebaseHelpers";
 import { apiService } from '@/src/_services/apiService';
+import { BACKEND_URL } from "../../lib/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -27,7 +29,9 @@ interface PostCardProps {
   onCloseCommentsModal?: () => void;
   onCommentPress?: (postId: string, avatar: string) => void;
   mirror?: boolean;
+  containerHeight?: number;
 }
+
 
 const PostCard: React.FC<PostCardProps> = ({ 
   post, 
@@ -35,18 +39,139 @@ const PostCard: React.FC<PostCardProps> = ({
   showMenu = true, 
   highlightedCommentId, 
   onCommentPress,
-  mirror = false
+  mirror = false,
+  containerHeight
 }) => {
+
   const router = useRouter();
   const user = useUser();
-  const [isLiked, setIsLiked] = useState(post?.isLiked || false);
+  const [isLiked, setIsLiked] = useState(() => {
+    // 1. Trust backend flag FIRST
+    if (post?.isLiked !== undefined) return post.isLiked;
+
+    // 2. Fallback to local calculation (Standard MongoDB _id only)
+    const myId = String(currentUser?._id || currentUser?.id || '');
+    if (myId && Array.isArray(post?.likes)) {
+      return post.likes.some((id: any) => {
+        const lid = String(id?._id || id?.id || id || '');
+        return lid === myId;
+      });
+    }
+    return false;
+  });
+
   const [likeCount, setLikeCount] = useState(post?.likeCount || 0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  const [paginationOffset, setPaginationOffset] = useState(20);
+  const [showComments, setShowComments] = useState<false | 'comment' | 'reactions'>(false);
   const [showShare, setShowShare] = useState(false);
+  const [showFullScreen, setShowFullScreen] = useState<number | null>(null);
+  const [showPostMenu, setShowPostMenu] = useState(false);
+  const [localReactions, setLocalReactions] = useState<any[]>(post?.reactions || []);
+  const [localCommentCount, setLocalCommentCount] = useState<number>(
+    post?.commentCount !== undefined ? post.commentCount : (post?.commentsCount || 0)
+  );
+
+  // Sync like state when user or post changes
+  useEffect(() => {
+    // 1. Trust backend flag FIRST
+    if (post?.isLiked !== undefined) {
+      setIsLiked(post.isLiked);
+      return;
+    }
+
+    // 2. Fallback to local calculation (Standard MongoDB _id only)
+    const myId = String(currentUser?._id || currentUser?.id || '');
+    if (myId && Array.isArray(post?.likes)) {
+      const liked = post.likes.some((id: any) => {
+        const lid = String(id?._id || id?.id || id || '');
+        return lid === myId;
+      });
+      setIsLiked(liked);
+    }
+  }, [currentUser?._id, currentUser?.id, post?.likes, post?.isLiked]);
   const videoRef = useRef<any>(null);
+
+
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (e, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (e, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          setShowComments(false);
+          translateY.setValue(0);
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    if (!showComments) {
+      translateY.setValue(0);
+    }
+  }, [showComments]);
+
+  useEffect(() => {
+    const sub = feedEventEmitter.onPostUpdated(post._id, (pid, data) => {
+      if (data.reactions) {
+        setLocalReactions(data.reactions);
+      }
+      if (data.isLiked !== undefined) setIsLiked(data.isLiked);
+      if (data.likeCount !== undefined) setLikeCount(data.likeCount);
+      
+      if (data.commentCount !== undefined) {
+        setLocalCommentCount(data.commentCount);
+      } else if (data.commentsCount !== undefined) {
+        setLocalCommentCount(data.commentsCount);
+      }
+    });
+
+    const commentSub = (feedEventEmitter as any).addListener('commentAdded', (data: any) => {
+      // Just a trigger - we rely on commentCountUpdated for the actual number
+    });
+
+    const commentDeleteSub = (feedEventEmitter as any).addListener('commentDeleted', (data: any) => {
+      // Just a trigger - we rely on commentCountUpdated for the actual number
+    });
+
+    const commentCountSub = (feedEventEmitter as any).addListener('commentCountUpdated', (data: any) => {
+      if (data.postId === post._id || data.postId === post.id) {
+        setLocalCommentCount(data.count);
+      }
+    });
+
+    return () => {
+      sub.remove();
+      commentSub.remove();
+      commentDeleteSub.remove();
+      commentCountSub.remove();
+    };
+  }, [post._id, post.id]);
+
+  // Force sync when post prop changes (e.g. after refresh)
+  useEffect(() => {
+    setIsLiked(post?.isLiked || false);
+    setLikeCount(post?.likeCount || 0);
+    setLocalReactions(post?.reactions || []);
+    
+    const count = post?.commentCount !== undefined ? post.commentCount : (post?.commentsCount || 0);
+    setLocalCommentCount(count);
+  }, [post?._id, post?.id, post?.isLiked, post?.likeCount, post?.reactions, post?.commentCount, post?.commentsCount]);
+
 
   // Derived data
   const postUserName = post?.userName || post?.user?.displayName || post?.user?.name || post?.userId?.displayName || post?.userId?.name || 'User';
@@ -62,26 +187,38 @@ const PostCard: React.FC<PostCardProps> = ({
     if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
     if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
     if (diff < 2419200) return `${Math.floor(diff / 604800)}w`;
-    return date.toLocaleDateString();
+    
+    // Format: September 9 2023
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${months[date.getMonth()]} ${date.getDate()} ${date.getFullYear()}`;
   };
   const postTimeText = useMemo(() => getPostTime(post?.createdAt || post?.timestamp), [post?.createdAt, post?.timestamp]);
 
 
   const handleLike = useCallback(async () => {
+    // Determine the most reliable user ID (MongoDB _id preferred, then firebaseUid)
+    const activeUserId = currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid;
+    
+    if (!activeUserId) {
+      if (__DEV__) console.warn('[PostCard] Cannot like: No active user ID found');
+      return;
+    }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newLiked = !isLiked;
     setIsLiked(newLiked);
     setLikeCount((prev: number) => newLiked ? prev + 1 : prev - 1);
     
     try {
-      if (newLiked) await likePost(post._id, user?.uid);
-      else await unlikePost(post._id, user?.uid);
+      const userName = currentUser?.displayName || currentUser?.name || 'Someone';
+      if (newLiked) await likePost(post._id, activeUserId);
+      else await unlikePost(post._id, activeUserId);
     } catch (err) {
       // Revert on error
       setIsLiked(!newLiked);
       setLikeCount((prev: number) => !newLiked ? prev + 1 : prev - 1);
     }
-  }, [isLiked, post._id, user?.uid]);
+  }, [isLiked, post._id, currentUser]);
 
   const onScroll = useCallback((event: any) => {
     const x = event.nativeEvent.contentOffset.x;
@@ -89,8 +226,19 @@ const PostCard: React.FC<PostCardProps> = ({
     if (index !== activeIndex) setActiveIndex(index);
   }, [activeIndex]);
 
+  const mediaData = useMemo(() => {
+    return Array.isArray(post?.media) ? post.media : [];
+  }, [post?.media]);
+
+  const isOwner = useMemo(() => {
+    const authorId = String(post?.userId?._id || post?.userId || '');
+    const viewerId = String(currentUser?._id || currentUser?.id || currentUser?.uid || '');
+    return authorId && viewerId && authorId === viewerId;
+  }, [post, currentUser]);
+
   return (
-    <View style={postStyles.cardInner}>
+    <View style={postStyles.cardContainer}>
+
       <PostHeader 
         post={post}
         postUserName={postUserName}
@@ -113,75 +261,20 @@ const PostCard: React.FC<PostCardProps> = ({
             } as any);
           }
         }}
-        onMenuPress={() => {
-          const isOwner = user?.uid === (post?.userId?._id || post?.userId || post?.user?.uid);
-          const options = isOwner 
-            ? ['Edit Post', 'Delete Post', 'Cancel']
-            : ['Report Post', 'Copy Link', 'Cancel'];
-          
-          Alert.alert(
-            'Post Options',
-            '',
-            options.map(opt => ({
-              text: opt,
-              style: opt === 'Delete Post' || opt === 'Report Post' ? 'destructive' : 'default',
-              onPress: () => {
-                if (opt === 'Delete Post') {
-                  // handle delete
-                } else if (opt === 'Edit Post') {
-                  router.push(`/create-post?postId=${post._id}`);
-                }
-              }
-            }))
-          );
-        }}
+        onMenuPress={() => setShowPostMenu(true)}
         showMenu={showMenu}
       />
 
-
       <PostMedia 
-        media={useMemo(() => {
-          const mediaArr: any[] = [];
-          
-          // 1. Get all potential media from the post object
-          const rawMedia = post?.media || post?.mediaUrls || post?.imageUrls || post?.videoUrls;
-          const singleUrl = post?.imageUrl || post?.url || post?.mediaUrl || post?.videoUrl;
-
-          // 2. Handle arrays
-          if (Array.isArray(rawMedia) && rawMedia.length > 0) {
-            rawMedia.forEach(item => {
-              if (typeof item === 'string' && item.trim()) {
-                mediaArr.push({ 
-                  url: item.trim(), 
-                  type: (item.toLowerCase().includes('.mp4') || item.toLowerCase().includes('.mov')) ? 'video' : 'image' 
-                });
-              } else if (item && typeof item === 'object' && (item.url || item.uri)) {
-                mediaArr.push({
-                  url: item.url || item.uri,
-                  type: item.type || 'image'
-                });
-              }
-            });
-          }
-          
-          // 3. Handle single fields if array is empty
-          if (mediaArr.length === 0 && typeof singleUrl === 'string' && singleUrl.trim()) {
-            mediaArr.push({ 
-              url: singleUrl.trim(), 
-              type: (singleUrl.toLowerCase().includes('.mp4') || singleUrl.toLowerCase().includes('.mov')) ? 'video' : 'image' 
-            });
-          }
-          
-          return mediaArr;
-        }, [post])}
-
-
-
-        mediaHeight={400}
+        media={mediaData}
         activeIndex={activeIndex}
         onScroll={onScroll}
         onMediaPress={(index) => {
-          handleLike();
+          setShowFullScreen(index);
+        }}
+        onDoubleTap={() => {
+          if (!isLiked) handleLike();
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }}
         isMuted={isMuted}
         toggleMute={() => setIsMuted(!isMuted)}
@@ -189,62 +282,200 @@ const PostCard: React.FC<PostCardProps> = ({
       />
 
 
+      <View style={{ backgroundColor: '#fff' }}>
+        <PostActions 
+          isLiked={isLiked}
+          onLikePress={handleLike}
+          onCommentPress={() => setShowComments('comment')}
+          onReactionPress={() => setShowComments('reactions')}
+          onSharePress={() => setShowShare(true)}
+          post={post}
+          likeCount={likeCount}
+          commentCount={localCommentCount}
+          reactions={localReactions}
+          currentUserId={currentUser?._id || currentUser?.id || currentUser?.uid}
+        />
 
-      <PostActions 
-        isLiked={isLiked}
-        onLikePress={handleLike}
-        onCommentPress={() => setShowComments(true)}
-        onSharePress={() => setShowShare(true)}
-        post={post}
-        likeCount={likeCount}
-        commentCount={post?.commentCount || 0}
-        reactions={post?.reactions}
-      />
+        <PostCaption 
+          postUserName={postUserName}
+          caption={post?.caption || post?.text || ''}
+          hashtags={post?.hashtags || []}
+          isExpanded={isExpanded}
+          onToggleExpand={() => setIsExpanded(!isExpanded)}
+          onHashtagPress={(tag) => {
+            router.push(`/hashtag-detail?tag=${encodeURIComponent(tag)}`);
+          }}
+        />
 
-      <PostCaption 
-        postUserName={postUserName}
-        caption={post?.caption || ''}
-        hashtags={post?.hashtags || []}
-        isExpanded={isExpanded}
-        onToggleExpand={() => setIsExpanded(!isExpanded)}
-        onHashtagPress={(tag) => {
-          router.push(`/search?q=${encodeURIComponent(tag)}`);
+      </View>
+
+      <Pressable 
+        style={{ 
+          paddingHorizontal: 12, 
+          paddingTop: 6, 
+          paddingBottom: 10,
+          marginTop: 0
         }}
-      />
+        onPress={() => setShowComments('comment')}
+      >
+        <View style={{ backgroundColor: '#f0f2f5', padding: 12, borderRadius: 10 }}>
+          <Text style={{ color: '#65676b', fontSize: 14 }}>Write a comment...</Text>
+        </View>
+      </Pressable>
 
+      {/* Post Options Menu (Edit, Delete, Report) */}
+      <Modal
+        visible={showPostMenu}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowPostMenu(false)}
+      >
+        <Pressable 
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} 
+          onPress={() => setShowPostMenu(false)} 
+        />
+        <View style={{ 
+          backgroundColor: '#fff', 
+          borderTopLeftRadius: 20, 
+          borderTopRightRadius: 20, 
+          paddingBottom: 40,
+          marginTop: 'auto'
+        }}>
+          <View style={{ height: 4, width: 40, backgroundColor: '#ddd', borderRadius: 2, alignSelf: 'center', marginVertical: 12 }} />
+          
+          {isOwner ? (
+            <>
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
+                onPress={() => {
+                  setShowPostMenu(false);
+                  router.push(`/create-post?editPostId=${post._id}&initialData=${encodeURIComponent(JSON.stringify(post))}`);
+                }}
+              >
+                <Feather name="edit-3" size={22} color="#333" />
+                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500' }}>Edit</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
+                onPress={() => {
+                  setShowPostMenu(false);
+                  Alert.alert("Delete", "Are you sure?", [
+                    { text: "Cancel" },
+                    { text: "Delete", style: "destructive", onPress: async () => {
+                       await apiService.delete(`/posts/${post._id}`);
+                       feedEventEmitter.emitFeedUpdate({ type: 'POST_DELETED', postId: post._id });
+                    }}
+                  ]);
+                }}
+              >
+                <Feather name="trash-2" size={22} color="#ff4d4d" />
+                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500', color: '#ff4d4d' }}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
+                onPress={() => {
+                  setShowPostMenu(false);
+                  setShowShare(true);
+                }}
+              >
+                <Feather name="share-2" size={22} color="#333" />
+                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500' }}>Share</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
+                onPress={() => {
+                  setShowPostMenu(false);
+                  Alert.alert("Report", "This post has been reported.");
+                }}
+              >
+                <Feather name="flag" size={22} color="#ff4d4d" />
+                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500', color: '#ff4d4d' }}>Report</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          <TouchableOpacity 
+            style={{ marginTop: 10, padding: 18, alignItems: 'center' }}
+            onPress={() => setShowPostMenu(false)}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#0095f6' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       <Modal
-        visible={showComments}
+        visible={!!showComments}
         animationType="slide"
         transparent={true}
         onRequestClose={() => setShowComments(false)}
       >
         <Pressable 
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} 
+          style={{ flex: 1, backgroundColor: 'transparent' }} 
           onPress={() => setShowComments(false)} 
         />
-        <View style={{ 
-          height: '80%', 
-          backgroundColor: '#fff', 
-          borderTopLeftRadius: 20, 
-          borderTopRightRadius: 20,
-          overflow: 'hidden'
-        }}>
-          <View style={{ 
-            height: 5, 
-            width: 40, 
-            backgroundColor: '#ddd', 
-            borderRadius: 3, 
-            alignSelf: 'center', 
-            marginVertical: 10 
-          }} />
+        <Animated.View 
+          style={{ 
+            height: '85%', 
+            backgroundColor: '#fff', 
+            borderTopLeftRadius: 30, 
+            borderTopRightRadius: 30, 
+            overflow: 'hidden',
+            marginTop: 'auto',
+            transform: [{ translateY }],
+            elevation: 0,
+            shadowOpacity: 0
+          }}
+        >
+          {/* Drag Handle */}
+          <View 
+            {...panResponder.panHandlers}
+            style={{ 
+              height: 40, 
+              width: '100%', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              backgroundColor: '#fff' 
+            }}
+          >
+            <View style={{ height: 5, width: 40, backgroundColor: '#ddd', borderRadius: 3 }} />
+          </View>
+          
           <CommentSection 
-            postId={post._id}
+            postId={post._id || post.id}
             postOwnerId={post?.userId?._id || post?.userId}
             currentAvatar={currentUser?.avatar || currentUser?.photoURL || ''}
             currentUser={currentUser}
-            maxHeight={Dimensions.get('window').height * 0.7}
+            maxHeight={Dimensions.get('window').height * 0.8}
+            initialTab={showComments === 'reactions' ? 'reactions' : 'comment'}
           />
+        </Animated.View>
+      </Modal>
+
+      <Modal
+        visible={showFullScreen !== null}
+        transparent={true}
+        onRequestClose={() => setShowFullScreen(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
+          <Pressable style={{ position: 'absolute', top: 50, right: 20, zIndex: 10 }} onPress={() => setShowFullScreen(null)}>
+            <Ionicons name="close-circle" size={40} color="#fff" />
+          </Pressable>
+          {showFullScreen !== null && (
+            <PostMedia 
+              media={mediaData}
+              activeIndex={showFullScreen}
+              onScroll={() => {}}
+              onMediaPress={() => setShowFullScreen(null)}
+              isMuted={isMuted}
+              toggleMute={() => setIsMuted(!isMuted)}
+              videoRef={videoRef}
+            />
+          )}
         </View>
       </Modal>
 

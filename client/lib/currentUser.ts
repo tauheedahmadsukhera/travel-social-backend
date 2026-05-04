@@ -64,48 +64,40 @@ async function persistCanonicalIds(canonicalId: string, firebaseUid?: string | n
 
 /**
  * Resolve the most reliable user id for API calls.
- * Prefers Mongo id if available, and keeps AsyncStorage keys synchronized.
+ * ENFORCES MongoDB _id from JWT token as the Universal Identity.
  */
 export async function resolveCanonicalUserId(preferredId?: string | null): Promise<string | null> {
-  const [storedUserId, storedUid, storedFirebaseUid, token] = await Promise.all([
+  const [storedUserId, token] = await Promise.all([
     AsyncStorage.getItem('userId'),
-    AsyncStorage.getItem('uid'),
-    AsyncStorage.getItem('firebaseUid'),
     AsyncStorage.getItem('token'),
   ]);
 
+  // 1. Extract from Token (Highest Authority)
   const tokenUserId = readUserIdFromToken(token);
   if (tokenUserId) {
-    const firebaseUid = uniqueNonEmpty([storedFirebaseUid, storedUid, preferredId || null])[0] || null;
-    await persistCanonicalIds(tokenUserId, firebaseUid);
+    if (storedUserId !== tokenUserId) {
+      await AsyncStorage.setItem('userId', tokenUserId);
+      // Deprecated keys for backward compatibility, pointing to the same MongoDB ID
+      await AsyncStorage.setItem('uid', tokenUserId);
+    }
     return tokenUserId;
   }
 
-  const rawCandidates = uniqueNonEmpty([preferredId || null, storedUserId, storedUid, storedFirebaseUid]);
-  const objectIdLike = rawCandidates.filter((c) => /^[a-fA-F0-9]{24}$/.test(c));
-  const nonObjectId = rawCandidates.filter((c) => !/^[a-fA-F0-9]{24}$/.test(c));
-  const candidates = [...objectIdLike, ...nonObjectId];
-  if (candidates.length === 0) return null;
+  // 2. Fallback to stored userId
+  if (storedUserId) return storedUserId;
 
-  for (const candidate of candidates) {
-    try {
-      const res = await apiService.get(`/users/${encodeURIComponent(candidate)}`);
-      if (res?.success && res?.data) {
-        const user = res.data;
-        if (isLikelyPlaceholderUser(user, candidate)) {
-          continue;
-        }
-        const canonicalId = String(user?._id || user?.id || candidate);
-        const firebaseUid = user?.firebaseUid || user?.uid || storedFirebaseUid || null;
-        await persistCanonicalIds(canonicalId, firebaseUid ? String(firebaseUid) : null);
-        return canonicalId;
-      }
-    } catch {
-      // Try next candidate.
-    }
+  // 3. Last resort: preferredId (if it's a MongoDB ID)
+  if (preferredId && /^[a-fA-F0-9]{24}$/.test(preferredId)) {
+    await AsyncStorage.setItem('userId', preferredId);
+    return preferredId;
   }
 
-  const fallback = candidates[0];
-  await persistCanonicalIds(fallback, storedFirebaseUid);
-  return fallback;
+  return preferredId || null;
+}
+
+/**
+ * Direct getter for the unified MongoDB userId.
+ */
+export async function getAuthenticatedUserId(): Promise<string | null> {
+  return resolveCanonicalUserId();
 }
