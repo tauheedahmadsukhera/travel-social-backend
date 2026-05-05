@@ -8,7 +8,7 @@
     "scheme": "trave-social",
     "userInterfaceStyle": "light",
     "android": {
-      "versionCode": 112,
+      "versionCode": 113,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/icon.png",
@@ -45,7 +45,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Allow Trips to access your camera for posting photos and live streaming.",
         "NSMicrophoneUsageDescription": "Allow Trips to access your microphone for live streaming.",
-        "NSPhotoLibraryUsageDescription": "Allow Trips to access your photo library so you can select and upload photos to share in your travel posts, stories, and profile picture.",
+        "NSPhotoLibraryUsageDescription": "Allow Trips to access your photo library to select photos for your travel posts, stories, and profile picture. For example, selecting a photo from your camera roll to create a new post.",
         "NSLocationWhenInUseUsageDescription": "Allow Trips to use your location for maps, location tagging, and passport suggestions while you use the app.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Trips to use your location while you are using the app for maps, tagging, and passport suggestions.",
         "NSLocationAlwaysUsageDescription": "Trips uses your location only while you are using the app for maps and passport suggestions.",
@@ -111,7 +111,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos for posting.",
+          "photosPermission": "Allow Trips to access your photos to select images for your posts. For example, selecting a photo from your gallery to create a new post.",
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for taking photos."
         }
       ],

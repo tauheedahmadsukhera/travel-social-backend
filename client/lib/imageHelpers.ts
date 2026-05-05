@@ -11,8 +11,8 @@
  * @param height - Desired height (optional; defaults to width for square)
  * @returns Optimized thumbnail URL or original if not Cloudinary URL
  */
-export function getThumbnailUrl(imageUrl: string | null | undefined, width: number = 400, height?: number): string {
-  if (!imageUrl || typeof imageUrl !== 'string') return '';
+export function getThumbnailUrl<T extends string | null | undefined>(imageUrl: T, width: number = 400, height?: number): T | string {
+  if (!imageUrl || typeof imageUrl !== 'string') return imageUrl as T | string;
 
   // Only optimize Cloudinary URLs that contain the upload segment
   if (!imageUrl.includes('res.cloudinary.com') || !imageUrl.includes('/upload/')) {
@@ -40,8 +40,8 @@ export function getThumbnailUrl(imageUrl: string | null | undefined, width: numb
  * @param imageUrl - Original image URL
  * @param context - 'feed' (400px), 'map-marker' (200px), 'thumbnail' (150px), 'detail' (full)
  */
-export function getOptimizedImageUrl(imageUrl: string | null | undefined, context: 'feed' | 'map-marker' | 'thumbnail' | 'detail' = 'feed'): string {
-  if (!imageUrl || typeof imageUrl !== 'string') return '';
+export function getOptimizedImageUrl<T extends string | null | undefined>(imageUrl: T, context: 'feed' | 'map-marker' | 'thumbnail' | 'detail' = 'feed'): T | string {
+  if (!imageUrl || typeof imageUrl !== 'string') return imageUrl as T | string;
 
   // If Firebase Storage URL, return original (no transformation)
   if (imageUrl.includes('firebasestorage.googleapis.com')) {

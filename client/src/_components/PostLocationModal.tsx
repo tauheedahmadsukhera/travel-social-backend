@@ -1,10 +1,10 @@
-﻿import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import SaveButton from '@/src/_components/SaveButton';
 import { useUser } from '@/src/_components/UserContext';
-import { likePost, unlikePost } from '../lib/firebaseHelpers';
+import { likePost, unlikePost } from '@/lib/firebaseHelpers';
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
 
 // Move context to top-level

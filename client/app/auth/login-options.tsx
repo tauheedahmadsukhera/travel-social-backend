@@ -134,6 +134,11 @@ export default function LoginOptionsScreen() {
                 Sign up
               </Text>
             </Text>
+            <Text style={{ fontSize: 12, color: '#666', textAlign: 'center', marginTop: 15 }}>
+              By logging in, you agree to our{' '}
+              <Text style={{ fontWeight: '600' }} onPress={() => router.push('/legal/terms' as any)}>Terms of Service</Text> and{' '}
+              <Text style={{ fontWeight: '600' }} onPress={() => router.push('/legal/privacy' as any)}>Privacy Policy</Text>.
+            </Text>
           </View>
         </View>
       </ScrollView>

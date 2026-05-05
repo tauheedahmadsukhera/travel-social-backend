@@ -72,6 +72,8 @@ const styles = StyleSheet.create({
 		borderRadius: 8,
 		marginBottom: 12,
 		paddingHorizontal: 16,
+		borderWidth: 1,
+		borderColor: '#d1d1d1',
 	},
 	iconContainer: {
 		marginRight: 12,
