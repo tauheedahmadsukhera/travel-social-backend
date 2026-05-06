@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, KeyboardAvoidingView, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 // Hook & Components
 import { useCreatePost, isVideoUri } from '../hooks/useCreatePost';
@@ -22,6 +22,7 @@ import { hapticLight } from '../lib/haptics';
 
 export default function CreatePostScreen() {
   const params = useLocalSearchParams();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   
   const {
