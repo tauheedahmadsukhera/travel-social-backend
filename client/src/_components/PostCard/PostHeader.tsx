@@ -46,10 +46,15 @@ const PostHeader: React.FC<PostHeaderProps> = ({
           <Text style={styles.cardHeaderName} numberOfLines={1}>{postUserName}</Text>
           {post?.user?.verified && <VerifiedBadge size={14} />}
         </TouchableOpacity>
-        <View style={styles.cardHeaderSubRow}>
+        <View style={[styles.cardHeaderSubRow, { flexWrap: 'nowrap' }]}>
           {locationName ? (
-            <TouchableOpacity onPress={onLocationPress} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.cardHeaderLocation} numberOfLines={1}>{locationName}</Text>
+            <TouchableOpacity 
+              onPress={onLocationPress} 
+              style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}
+            >
+              <Text style={[styles.cardHeaderLocation, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">
+                {locationName}
+              </Text>
               {post?.locationData?.verified && (
                 <View style={{ marginLeft: 3 }}>
                   <VerifiedBadge size={12} color="#000" />
@@ -58,7 +63,7 @@ const PostHeader: React.FC<PostHeaderProps> = ({
               <View style={styles.cardHeaderDot} />
             </TouchableOpacity>
           ) : null}
-          <Text style={styles.cardHeaderDate}>{postTimeText}</Text>
+          <Text style={[styles.cardHeaderDate, { flexShrink: 0 }]}>{postTimeText}</Text>
         </View>
       </View>
       {showMenu && (
