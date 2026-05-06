@@ -197,11 +197,17 @@ const PostCard: React.FC<PostCardProps> = ({
 
 
   const handleLike = useCallback(async () => {
-    // Try to get ID from prop first, then from the useUser hook fallback
-    const activeUserId = currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid || user?._id || user?.id || user?.uid;
+    // Extensive ID resolution
+    const activeUserId = 
+      currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid || 
+      currentUser?.firebaseUserId || currentUser?.localId ||
+      user?._id || user?._id || user?.id || user?.uid;
     
     if (!activeUserId) {
-      if (__DEV__) console.warn('[PostCard] Cannot like: No active user ID found. currentUser:', !!currentUser, 'hookUser:', !!user);
+      if (__DEV__) {
+        console.warn('[PostCard] Cannot like: No ID found. Structure:', JSON.stringify(currentUser));
+        console.log('[PostCard] Hook User structure:', JSON.stringify(user));
+      }
       return;
     }
 
