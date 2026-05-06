@@ -202,17 +202,34 @@ export const useCreatePost = (params: any = {}) => {
       setLoadingVerifiedResults(true);
       const nearby = await mapService.getNearbyPlaces(center.lat, center.lon, 100);
       
-      // Filter out Plus Codes (e.g. "C8XV+JRP") and map results
-      const validNearby = nearby
-        .filter((p: any) => !p.name || !p.name.includes('+'))
-        .map((p: any) => ({
-          name: p.name,
+      // Map results, replacing Plus Codes with actual area/street names
+      const validNearby = nearby.map((p: any) => {
+        let displayName = p.name;
+        
+        // If the name is a Plus Code (contains '+')
+        if (displayName && displayName.includes('+')) {
+          const fallbackStr = p.address || p.vicinity || '';
+          const parts = fallbackStr.split(',');
+          
+          // Try to get a clean part of the address that isn't a Plus Code
+          const cleanPart = parts.find((part: string) => part.trim() !== '' && !part.includes('+'));
+          
+          if (cleanPart) {
+            displayName = cleanPart.trim();
+          } else {
+            displayName = 'Nearby Location';
+          }
+        }
+
+        return {
+          name: displayName,
           address: p.address || p.vicinity,
           lat: p.lat || p.geometry?.location?.lat,
           lon: p.lon || p.geometry?.location?.lng,
           placeId: p.placeId || p.place_id,
           verified: true
-        }));
+        };
+      });
         
       setVerifiedResults(validNearby);
 
