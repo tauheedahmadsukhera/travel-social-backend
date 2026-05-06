@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as MediaLibrary from 'expo-media-library';
 import { apiService } from '@/src/_services/apiService';
 import { API_BASE_URL } from '../api';
 import {
@@ -626,6 +627,28 @@ export async function uploadMedia(uri: string, mediaType: 'image' | 'video' = 'i
         });
       } catch (err: any) {
         console.error('[uploadImage] ❌ Remote image error:', err.message);
+        throw err;
+      }
+    } else if (uri.startsWith('ph://') || uri.startsWith('assets-library://')) {
+      // Handle iOS photo library URIs
+      console.log('[uploadMedia] 🍏 Detected iOS Photo Library URI, resolving to local file...');
+      try {
+        const assetId = uri.startsWith('ph://') 
+          ? uri.replace('ph://', '').split('/')[0] 
+          : uri;
+        
+        const assetInfo = await MediaLibrary.getAssetInfoAsync(assetId);
+        const localUri = assetInfo.localUri || assetInfo.uri;
+        
+        if (!localUri) {
+          throw new Error('Could not resolve iOS asset to local URI');
+        }
+        
+        console.log('[uploadMedia] ✅ Resolved to local URI:', localUri);
+        // Recurse with resolved local URI
+        return uploadMedia(localUri, mediaType, path);
+      } catch (err: any) {
+        console.error('[uploadMedia] ❌ iOS resolve error:', err.message);
         throw err;
       }
     } else {

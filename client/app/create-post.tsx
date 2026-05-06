@@ -165,7 +165,7 @@ export default function CreatePostScreen() {
         visible={showVerifiedModal}
         onClose={() => setShowVerifiedModal(false)}
         verifiedSearch={verifiedSearch}
-        onSearchChange={setVerifiedSearch}
+        onSearchChange={handleVerifiedSearch}
         loadingVerifiedResults={loadingVerifiedResults}
         verifiedResults={verifiedResults}
         verifiedOptions={verifiedOptions}

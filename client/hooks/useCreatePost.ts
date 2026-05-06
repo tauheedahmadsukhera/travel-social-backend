@@ -141,6 +141,25 @@ export const useCreatePost = (params: any = {}) => {
     }, 400);
   };
 
+  const handleVerifiedSearch = (text: string) => {
+    setVerifiedSearch(text);
+    if (verifiedTimer.current) clearTimeout(verifiedTimer.current);
+    verifiedTimer.current = setTimeout(async () => {
+      if (text.length < 2) return setVerifiedResults([]);
+      setLoadingVerifiedResults(true);
+      try {
+        const suggestions = await mapService.getAutocompleteSuggestions(text);
+        setVerifiedResults(suggestions.map((s: any) => ({
+          name: s.description.split(',')[0],
+          address: s.description,
+          placeId: s.placeId,
+          lat: 0, lon: 0,
+          verified: true
+        })));
+      } catch { setVerifiedResults([]); } finally { setLoadingVerifiedResults(false); }
+    }, 400);
+  };
+
   const handleUserSearch = (text: string) => {
     setUserSearch(text);
     if (userTimer.current) clearTimeout(userTimer.current);
@@ -249,6 +268,6 @@ export const useCreatePost = (params: any = {}) => {
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, categories, setCategories,
     galleryAssets, loadingGallery, hasMoreGallery, galleryEndCursor, loadGalleryAssets,
-    handleShare, handleHashtagCommit, handleCamera, isEditMode: !!params.editPostId
+    handleShare, handleHashtagCommit, handleCamera, handleVerifiedSearch, isEditMode: !!params.editPostId
   };
 };
