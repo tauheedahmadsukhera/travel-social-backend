@@ -30,7 +30,9 @@ export default function CreatePostScreen() {
     selectedImages, setSelectedImages, location, setLocation,
     verifiedLocation, setVerifiedLocation, taggedUsers, setTaggedUsers,
     selectedCategories, setSelectedCategories, categories,
-    galleryAssets, loadingGallery, handleShare, 
+    galleryAssets, loadingGallery, handleShare, handleHashtagCommit,
+    locationSearch, locationResults, loadingLocationResults, handleLocationSearch,
+    verifiedSearch, setVerifiedSearch, verifiedResults, loadingVerifiedResults, verifiedOptions, verifiedCenter,
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, isEditMode,
     galleryEndCursor, handleCamera, loadGalleryAssets

@@ -215,12 +215,12 @@ export const useCreatePost = (params: any = {}) => {
         postType === 'STORY' ? 'story' : 'post'
       );
 
-      if (res.success) {
+      if (res && res.success) {
         hapticSuccess();
         feedEventEmitter.emitFeedUpdate({ type: 'POST_CREATED', postId: res.postId });
         router.replace('/(tabs)/home');
       } else {
-        throw new Error(res.error || 'Failed to create post');
+        throw new Error('Failed to create post');
       }
     } catch (e: any) {
       console.error('[handleShare] Error:', e);
@@ -243,7 +243,7 @@ export const useCreatePost = (params: any = {}) => {
     verifiedSearch, setVerifiedSearch, verifiedResults, loadingVerifiedResults, verifiedOptions, verifiedCenter,
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, categories, setCategories,
-    galleryAssets, loadingGallery, hasMoreGallery, loadGalleryAssets,
+    galleryAssets, loadingGallery, hasMoreGallery, galleryEndCursor, loadGalleryAssets,
     handleShare, handleHashtagCommit, handleCamera, isEditMode: !!params.editPostId
   };
 };
