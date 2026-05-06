@@ -171,6 +171,13 @@ export const useCreatePost = (params: any = {}) => {
       const center = { lat: currentLoc.coords.latitude, lon: currentLoc.coords.longitude };
       setVerifiedCenter(center);
 
+      // Fetch address for current location
+      let currentAddress = `GPS: ${center.lat.toFixed(4)}, ${center.lon.toFixed(4)}`;
+      try {
+        const addressRes = await mapService.reverseGeocode(center.lat, center.lon);
+        if (addressRes) currentAddress = addressRes;
+      } catch {}
+
       // 1. Fetch nearby from map service (Nearby 100m)
       setLoadingVerifiedResults(true);
       const nearby = await mapService.getNearbyPlaces(center.lat, center.lon, 100);
@@ -188,8 +195,8 @@ export const useCreatePost = (params: any = {}) => {
       
       // Always add current GPS as an option
       options.push({
-        name: 'Current Location',
-        address: `GPS: ${center.lat.toFixed(4)}, ${center.lon.toFixed(4)}`,
+        name: currentAddress.split(',')[0] || 'Current Location',
+        address: currentAddress,
         lat: center.lat,
         lon: center.lon,
         verified: true
