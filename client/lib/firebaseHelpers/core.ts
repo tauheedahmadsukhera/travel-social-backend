@@ -489,9 +489,9 @@ export async function getPassportTickets(userId: string) {
       return [];
     }
     const res = await apiService.get(`/users/${userId}/passport-tickets`);
-    return res?.data || {};
+    return Array.isArray(res?.data) ? res.data : [];
   } catch (error) {
-    return {};
+    return [];
   }
 }
 

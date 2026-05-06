@@ -183,17 +183,36 @@ export const useCreatePost = (params: any = {}) => {
         verified: true
       })));
 
-      // 2. Fetch passport tickets / verified options from backend
-      const tickets = await getPassportTickets(center.lat, center.lon);
-      if (tickets && tickets.success) {
-        setVerifiedOptions(tickets.data.map((t: any) => ({
-          name: t.name,
-          address: t.address,
-          lat: t.lat,
-          lon: t.lon,
-          verified: true
-        })));
+      // 2. Prepare verified options (GPS + Passport)
+      const options: LocationType[] = [];
+      
+      // Always add current GPS as an option
+      options.push({
+        name: 'Current Location',
+        address: `GPS: ${center.lat.toFixed(4)}, ${center.lon.toFixed(4)}`,
+        lat: center.lat,
+        lon: center.lon,
+        verified: true
+      });
+
+      // Fetch passport tickets / verified options from backend
+      const authUserId = await getAuthenticatedUserId();
+      if (authUserId) {
+        const tickets = await getPassportTickets(authUserId);
+        if (Array.isArray(tickets)) {
+          tickets.forEach((t: any) => {
+            options.push({
+              name: t.name,
+              address: t.address,
+              lat: t.lat,
+              lon: t.lon,
+              verified: true
+            });
+          });
+        }
       }
+      
+      setVerifiedOptions(options);
     } catch (e) {
       console.error('[fetchNearbyVerifiedLocations] Error:', e);
     } finally {
