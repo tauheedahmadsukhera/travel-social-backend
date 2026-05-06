@@ -6,12 +6,12 @@ import { Platform } from 'react-native';
 // ⚠️ FIREBASE CONFIGURATION - AUTHENTICATION ONLY
 // Firebase is ONLY used for social login authentication (Google, Apple, Snapchat, TikTok)
 // All data operations (posts, stories, comments, etc.) should use Backend API
-// Backend URL: https://trave-social-backend.onrender.com/api
+// Backend URL: https://travel-social-backend.onrender.com/api
 
 // ✅ SECURE FIREBASE CONFIGURATION - Environment Variables
 // Firebase is ONLY used for social login authentication (Google, Apple, Snapchat, TikTok)
 // All data operations (posts, stories, comments, etc.) use Backend API
-// Backend URL: https://trave-social-backend.onrender.com/api
+// Backend URL: https://travel-social-backend.onrender.com/api
 
 import { FIREBASE_CONFIG } from './environment';
 const firebaseConfig = FIREBASE_CONFIG;
@@ -27,7 +27,7 @@ try {
 // ✅ AUTHENTICATION ONLY - Initialize Firebase Auth with React Native persistence
 let auth: Auth | null = null;
 try {
-  if (app) {
+  if (app && !getApps().length) {
     const { getReactNativePersistence } = require('firebase/auth');
     auth = initializeAuth(app, {
       persistence: Platform.OS === 'web'
@@ -35,6 +35,9 @@ try {
         : getReactNativePersistence(AsyncStorage),
     });
     console.log('✅ Firebase Auth initialized (AUTHENTICATION ONLY)');
+  } else if (app) {
+    auth = getAuth(app);
+    console.log('✅ Using existing Firebase Auth instance');
   } else {
     console.warn('Firebase app not available, auth initialization skipped');
   }

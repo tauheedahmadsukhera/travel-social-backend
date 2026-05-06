@@ -39,6 +39,14 @@ function getExpoPublicVar(key: string): string {
       return process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
     case 'EXPO_PUBLIC_AGORA_TOKEN_URL':
       return process.env.EXPO_PUBLIC_AGORA_TOKEN_URL || '';
+    case 'EXPO_PUBLIC_SNAPCHAT_CLIENT_ID':
+      return process.env.EXPO_PUBLIC_SNAPCHAT_CLIENT_ID || '';
+    case 'EXPO_PUBLIC_SNAPCHAT_CLIENT_SECRET':
+      return process.env.EXPO_PUBLIC_SNAPCHAT_CLIENT_SECRET || '';
+    case 'EXPO_PUBLIC_TIKTOK_CLIENT_KEY':
+      return process.env.EXPO_PUBLIC_TIKTOK_CLIENT_KEY || '';
+    case 'EXPO_PUBLIC_TIKTOK_CLIENT_SECRET':
+      return process.env.EXPO_PUBLIC_TIKTOK_CLIENT_SECRET || '';
     default:
       return '';
   }
@@ -150,6 +158,12 @@ export const AGORA_CONFIG = {
   // Certificate should NEVER be in frontend - request tokens from backend only
   tokenServerUrl: getEnvVar('EXPO_PUBLIC_AGORA_TOKEN_URL', ''),
 } as const;
+
+// Social Config
+export const SNAPCHAT_CLIENT_ID = getEnvVar('EXPO_PUBLIC_SNAPCHAT_CLIENT_ID', '');
+export const SNAPCHAT_CLIENT_SECRET = getEnvVar('EXPO_PUBLIC_SNAPCHAT_CLIENT_SECRET', '');
+export const TIKTOK_CLIENT_KEY = getEnvVar('EXPO_PUBLIC_TIKTOK_CLIENT_KEY', '');
+export const TIKTOK_CLIENT_SECRET = getEnvVar('EXPO_PUBLIC_TIKTOK_CLIENT_SECRET', '');
 
 // App Configuration
 export const APP_CONFIG = {
