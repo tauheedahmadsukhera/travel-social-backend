@@ -127,6 +127,7 @@ const PostCard: React.FC<PostCardProps> = ({
 
   useEffect(() => {
     const sub = feedEventEmitter.onPostUpdated(post._id, (pid, data) => {
+      if (!data) return; // Guard against undefined data
       if (data.reactions) {
         setLocalReactions(data.reactions);
       }

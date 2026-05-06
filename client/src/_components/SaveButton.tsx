@@ -70,6 +70,7 @@ export default function SaveButton({ post, currentUser }: any) {
     if (!pid) return;
     const { feedEventEmitter } = require("../../lib/feedEventEmitter");
     const sub = feedEventEmitter.onPostUpdated(pid, (id: string, data: any) => {
+      if (!data) return; // Guard against undefined data
       if (data.isSaved !== undefined) setSaved(data.isSaved);
       else if (data.saved !== undefined) setSaved(data.saved);
     });
