@@ -2,8 +2,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Alert, Dimensions, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
-import * as MediaLibrary from 'expo-media-library';
-import * as VideoThumbnails from 'expo-video-thumbnails';
+    import * as MediaLibrary from 'expo-media-library';
+    import * as ImagePicker from 'expo-image-picker';
+    import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useUser } from '@/src/_components/UserContext';
 import { useAppDialog } from '@/src/_components/AppDialogProvider';
 import { apiService } from '@/src/_services/apiService';
@@ -152,14 +153,81 @@ export const useCreatePost = (params: any = {}) => {
     }, 400);
   };
 
+  const handleCamera = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permission is required to take photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImages([result.assets[0].uri]);
+        setStep('preview');
+      }
+    } catch (e) {
+      console.error('[handleCamera] Error:', e);
+    }
+  };
+
+  const handleHashtagCommit = () => {
+    if (!hashtagInput.trim()) return;
+    const tag = hashtagInput.trim().replace(/^#/, '');
+    if (!hashtags.includes(tag)) {
+      setHashtags(prev => [...prev, tag]);
+    }
+    setHashtagInput('');
+    hapticLight();
+  };
+
   const handleShare = async () => {
+    if (!selectedImages || selectedImages.length === 0) {
+      Alert.alert('No media', 'Please select at least one image or video.');
+      return;
+    }
+
     setLoading(true);
     try {
-      hapticSuccess();
-      router.replace('/(tabs)/home');
+      hapticMedium();
+      const authUserId = await getAuthenticatedUserId();
+      if (!authUserId) throw new Error('User not authenticated');
+
+      const isVideo = isVideoUri(selectedImages[0], galleryAssets);
+      
+      const res = await createPost(
+        authUserId,
+        selectedImages,
+        caption,
+        verifiedLocation?.name || location?.name || '',
+        isVideo ? 'video' : 'image',
+        verifiedLocation || location || undefined,
+        taggedUsers.map(u => u.uid),
+        selectedCategories.length > 0 ? selectedCategories[0].name : undefined,
+        hashtags,
+        [], // mentions
+        visibility,
+        selectedGroupId ? [selectedGroupId] : [],
+        postType === 'STORY' ? 'story' : 'post'
+      );
+
+      if (res.success) {
+        hapticSuccess();
+        feedEventEmitter.emitFeedUpdate({ type: 'POST_CREATED', postId: res.postId });
+        router.replace('/(tabs)/home');
+      } else {
+        throw new Error(res.error || 'Failed to create post');
+      }
     } catch (e: any) {
-      Alert.alert('Error', e.message);
-    } finally { setLoading(false); }
+      console.error('[handleShare] Error:', e);
+      Alert.alert('Error', e.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadGalleryAssets(); }, []);
@@ -176,6 +244,6 @@ export const useCreatePost = (params: any = {}) => {
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, categories, setCategories,
     galleryAssets, loadingGallery, hasMoreGallery, loadGalleryAssets,
-    handleShare, isEditMode: !!params.editPostId
+    handleShare, handleHashtagCommit, handleCamera, isEditMode: !!params.editPostId
   };
 };

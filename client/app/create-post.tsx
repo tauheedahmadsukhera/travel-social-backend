@@ -31,10 +31,9 @@ export default function CreatePostScreen() {
     verifiedLocation, setVerifiedLocation, taggedUsers, setTaggedUsers,
     selectedCategories, setSelectedCategories, categories,
     galleryAssets, loadingGallery, handleShare, 
-    locationSearch, locationResults, loadingLocationResults, handleLocationSearch,
-    verifiedSearch, setVerifiedSearch, verifiedResults, loadingVerifiedResults, verifiedOptions, verifiedCenter,
     userSearch, userResults, loadingUserResults, handleUserSearch,
-    categorySearch, setCategorySearch, isEditMode
+    categorySearch, setCategorySearch, isEditMode,
+    galleryEndCursor, handleCamera, loadGalleryAssets
   } = useCreatePost(params);
 
   // Modal visibility states
@@ -61,8 +60,8 @@ export default function CreatePostScreen() {
               setSelectedImages([...selectedImages, uri]);
             }
           }}
-          onCamera={() => {}} 
-          onLoadMore={() => {}}
+          onCamera={handleCamera} 
+          onLoadMore={() => loadGalleryAssets(galleryEndCursor)}
           loading={loadingGallery}
         />
       ) : (
@@ -80,7 +79,7 @@ export default function CreatePostScreen() {
               hashtags={hashtags}
               hashtagInput={hashtagInput}
               onHashtagInputChange={setHashtagInput}
-              onHashtagCommit={() => {}}
+              onHashtagCommit={handleHashtagCommit}
               onRemoveTag={(tag) => setHashtags(hashtags.filter(t => t !== tag))}
               selectedCategories={selectedCategories}
               onOpenCategories={() => setShowCategoryModal(true)}
