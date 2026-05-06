@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Platform, KeyboardAvoidingView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform, KeyboardAvoidingView, StyleSheet, ScrollView } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 
@@ -75,38 +76,59 @@ export default function CreatePostScreen() {
       ) : (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <View style={{ flex: 1 }}>
-            <MediaPreview
-              uris={selectedImages}
-              thumbnails={{}}
-              isVideo={(uri) => isVideoUri(uri, galleryAssets)}
-              height={300}
-            />
-            <PostDetailsForm
-              caption={caption}
-              setCaption={setCaption}
-              hashtags={hashtags}
-              hashtagInput={hashtagInput}
-              onHashtagInputChange={setHashtagInput}
-              onHashtagCommit={handleHashtagCommit}
-              onRemoveTag={(tag) => setHashtags(hashtags.filter(t => t !== tag))}
-              selectedCategories={selectedCategories}
-              onOpenCategories={() => setShowCategoryModal(true)}
-              onRemoveCategory={(name) => setSelectedCategories(selectedCategories.filter(c => c.name !== name))}
-              locationName={location?.name}
-              onOpenLocation={() => setShowLocationModal(true)}
-              verifiedLocationName={verifiedLocation?.name}
-              onOpenVerifiedLocation={() => setShowVerifiedModal(true)}
-              taggedUsers={taggedUsers}
-              onOpenTagPeople={() => setShowTagModal(true)}
-              onRemoveTaggedUser={(uid) => setTaggedUsers(taggedUsers.filter(u => u.uid !== uid))}
-              visibility={visibility}
-              onOpenVisibility={() => setShowVisibilityModal(true)}
-            />
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }}>
+              <TouchableOpacity onPress={() => setStep('picker')} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' }}>
+                <Feather name="x" size={20} color="#000" />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 16, fontWeight: '600' }}>New post</Text>
+              <View style={{ width: 40 }} />
+            </View>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 20, paddingBottom: insets.bottom || 20 }}>
-              <TouchableOpacity onPress={() => setStep('picker')}><Text style={{ fontSize: 16 }}>Back</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} style={{ backgroundColor: '#0095f6', paddingHorizontal: 30, paddingVertical: 10, borderRadius: 10 }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>{isEditMode ? 'Save' : 'Share'}</Text>
+            <ScrollView style={{ flex: 1 }}>
+              <MediaPreview
+                uris={selectedImages}
+                thumbnails={{}}
+                isVideo={(uri) => isVideoUri(uri, galleryAssets)}
+                height={350}
+              />
+              <PostDetailsForm
+                caption={caption}
+                setCaption={setCaption}
+                hashtags={hashtags}
+                hashtagInput={hashtagInput}
+                onHashtagInputChange={setHashtagInput}
+                onHashtagCommit={handleHashtagCommit}
+                onRemoveTag={(tag) => setHashtags(hashtags.filter(t => t !== tag))}
+                selectedCategories={selectedCategories}
+                onOpenCategories={() => setShowCategoryModal(true)}
+                onRemoveCategory={(name) => setSelectedCategories(selectedCategories.filter(c => c.name !== name))}
+                locationName={location?.name}
+                onOpenLocation={() => setShowLocationModal(true)}
+                verifiedLocationName={verifiedLocation?.name}
+                onOpenVerifiedLocation={() => setShowVerifiedModal(true)}
+                taggedUsers={taggedUsers}
+                onOpenTagPeople={() => setShowTagModal(true)}
+                onRemoveTaggedUser={(uid) => setTaggedUsers(taggedUsers.filter(u => u.uid !== uid))}
+                visibility={visibility}
+                onOpenVisibility={() => setShowVisibilityModal(true)}
+              />
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: (insets.bottom || 20) + 5, borderTopWidth: 0.5, borderTopColor: '#f0f0f0' }}>
+              <TouchableOpacity onPress={() => {
+                setCaption('');
+                setHashtags([]);
+                setLocation(null);
+                setVerifiedLocation(null);
+                setTaggedUsers([]);
+                setSelectedCategories([]);
+              }}>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#333' }}>Clear all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShare} style={{ backgroundColor: '#0a3d62', paddingHorizontal: 35, paddingVertical: 12, borderRadius: 8 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>{isEditMode ? 'Save' : 'Share'}</Text>
               </TouchableOpacity>
             </View>
           </View>

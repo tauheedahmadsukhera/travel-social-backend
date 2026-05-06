@@ -223,7 +223,12 @@ export const useCreatePost = (params: any = {}) => {
         throw new Error('Failed to create post');
       }
     } catch (e: any) {
-      console.error('[handleShare] Error:', e);
+      console.error('[handleShare] ❌ Error:', e);
+      // Log response error if available
+      if (e.response) {
+        console.error('[handleShare] Response status:', e.response.status);
+        console.error('[handleShare] Response data:', JSON.stringify(e.response.data, null, 2));
+      }
       Alert.alert('Error', e.message || 'Something went wrong');
     } finally {
       setLoading(false);
