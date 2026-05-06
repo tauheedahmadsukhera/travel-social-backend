@@ -893,7 +893,7 @@ export async function createPost(
 
         const addr = typeof locationData.address === 'string' ? locationData.address : '';
         if (addr) {
-          const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+          const parts = addr.split(',').map((p: string) => p.trim()).filter(Boolean);
           if (parts.length >= 1) keys.push(parts[0]);
           if (parts.length >= 2) keys.push(parts[1]);
           if (parts.length >= 1) keys.push(parts[parts.length - 1]);
@@ -1397,7 +1397,7 @@ export async function updatePost(
         keys.push(locationData.name, locationData.neighborhood, locationData.city, locationData.country, locationData.countryCode);
         const addr = typeof locationData.address === 'string' ? locationData.address : '';
         if (addr) {
-          const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+          const parts = addr.split(',').map((p: string) => p.trim()).filter(Boolean);
           if (parts.length >= 1) keys.push(parts[0]);
           if (parts.length >= 2) keys.push(parts[1]);
           if (parts.length >= 1) keys.push(parts[parts.length - 1]);

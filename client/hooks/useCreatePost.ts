@@ -421,6 +421,21 @@ export const useCreatePost = (params: any = {}) => {
           setLocation({ name: post.location, address: '', lat: 0, lon: 0 });
         }
         if (post.visibility) setVisibility(post.visibility);
+        if (post.category) {
+          // If category is a string, we might need to match it with our category list
+          setSelectedCategories([{ name: post.category }]);
+        }
+        if (post.type) {
+          setPostType(post.type.toUpperCase());
+        }
+        if (Array.isArray(post.taggedUserIds) && post.taggedUserIds.length > 0) {
+          // Map simple IDs to UserType objects (minimal info until fully fetched)
+          const basicTagged = post.taggedUserIds.map((id: string) => ({
+            uid: id,
+            displayName: 'User', // Fallback
+          }));
+          setTaggedUsers(basicTagged);
+        }
       }
     } catch (e) {
       console.error('[loadPostForEditing] Error:', e);
