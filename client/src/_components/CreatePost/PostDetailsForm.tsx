@@ -28,7 +28,7 @@ interface PostDetailsFormProps {
 const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
   caption, setCaption, hashtags, hashtagInput, onHashtagInputChange, onHashtagCommit, onRemoveTag,
   selectedCategories, onOpenCategories, onRemoveCategory, locationName, onOpenLocation,
-  verifiedLocationName, onOpenVerifiedLocation, taggedUsers, onOpenTagPeople, onRemoveTaggedUser,
+  verifiedLocation, onOpenVerifiedLocation, taggedUsers, onOpenTagPeople, onRemoveTaggedUser,
   visibility, onOpenVisibility
 }) => {
   return (
