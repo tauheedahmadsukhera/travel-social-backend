@@ -6,8 +6,8 @@
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-// @ts-ignore
-import * as EnvVars from '@env';
+
+// Note: react-native-dotenv populates process.env, so we don't need a wildcard import which is unsupported
 
 // Expo only inlines EXPO_PUBLIC_* when accessed statically (process.env.EXPO_PUBLIC_FOO).
 // Dynamic lookups like process.env[key] will be undefined in production bundles.
@@ -72,17 +72,20 @@ function getEnvVar(key: string, defaultValue?: string): string {
   };
 
   const configValue = env[key];
-  // Try static Expo access first, then @env fallback, then direct process.env
-  const processValue = key.startsWith('EXPO_PUBLIC_') ? getExpoPublicVar(key) : (process.env as any)[key];
-  const envFileValue = (EnvVars as any)?.[key.replace('EXPO_PUBLIC_', '')] || (EnvVars as any)?.[key];
+  
+  // Try static Expo access first (most reliable in production)
+  const staticValue = key.startsWith('EXPO_PUBLIC_') ? getExpoPublicVar(key) : '';
+  
+  // Try direct process.env (populated by react-native-dotenv)
+  const envProcessValue = (process.env as any)[key] || (process.env as any)[key.replace('EXPO_PUBLIC_', '')];
   
   let value = '';
   if (!isPlaceholder(configValue)) {
     value = configValue as string;
-  } else if (!isPlaceholder(processValue)) {
-    value = processValue as string;
-  } else if (!isPlaceholder(envFileValue)) {
-    value = envFileValue as string;
+  } else if (!isPlaceholder(staticValue)) {
+    value = staticValue as string;
+  } else if (!isPlaceholder(envProcessValue)) {
+    value = envProcessValue as string;
   }
 
   if (!value && !isDevelopment && defaultValue === undefined) {
