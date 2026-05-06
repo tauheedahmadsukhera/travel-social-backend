@@ -201,14 +201,20 @@ export const useCreatePost = (params: any = {}) => {
       // 1. Fetch nearby from map service (Nearby 100m)
       setLoadingVerifiedResults(true);
       const nearby = await mapService.getNearbyPlaces(center.lat, center.lon, 100);
-      setVerifiedResults(nearby.map((p: any) => ({
-        name: p.name,
-        address: p.address || p.vicinity,
-        lat: p.lat || p.geometry?.location?.lat,
-        lon: p.lon || p.geometry?.location?.lng,
-        placeId: p.placeId || p.place_id,
-        verified: true
-      })));
+      
+      // Filter out Plus Codes (e.g. "C8XV+JRP") and map results
+      const validNearby = nearby
+        .filter((p: any) => !p.name || !p.name.includes('+'))
+        .map((p: any) => ({
+          name: p.name,
+          address: p.address || p.vicinity,
+          lat: p.lat || p.geometry?.location?.lat,
+          lon: p.lon || p.geometry?.location?.lng,
+          placeId: p.placeId || p.place_id,
+          verified: true
+        }));
+        
+      setVerifiedResults(validNearby);
 
       // 2. Prepare verified options (GPS + Passport)
       const options: LocationType[] = [];
