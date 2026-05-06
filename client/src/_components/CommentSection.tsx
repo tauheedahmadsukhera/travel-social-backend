@@ -232,6 +232,33 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
     }
   };
 
+  const handleReportComment = async (comment: Comment) => {
+    setShowOptions(false);
+    Alert.alert(
+      "Report Comment",
+      "Why are you reporting this comment?",
+      [
+        { text: "Spam", onPress: () => submitCommentReport(comment, 'spam') },
+        { text: "Inappropriate", onPress: () => submitCommentReport(comment, 'inappropriate') },
+        { text: "Harassment", onPress: () => submitCommentReport(comment, 'harassment') },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
+  };
+
+  const submitCommentReport = async (comment: Comment, reason: string) => {
+    try {
+      await apiService.reportContent({
+        targetId: comment.id,
+        targetType: 'comment',
+        reason: reason
+      });
+      Alert.alert("Report Submitted", "Thank you for helping us keep the community safe. We will review this comment shortly.");
+    } catch (err) {
+      Alert.alert("Error", "Failed to submit report. Please try again.");
+    }
+  };
+
   const totalCommentCount = comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0);
 
   return (
@@ -240,17 +267,27 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
       <Modal visible={showOptions} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowOptions(false)}>
           <View style={styles.floatingMenu}>
-            <TouchableOpacity style={styles.menuOption} onPress={() => { setEditValue(selectedComment?.text || ""); setIsEditing(true); setShowOptions(false); }}>
-              <Feather name="edit-2" size={22} color="#222" />
-              <Text style={styles.menuOptionText}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuOption, { borderBottomWidth: 0 }]} onPress={() => handleDelete(selectedComment!, selectedComment?.isReply, selectedComment?.parentId)}>
-              <Feather name="trash-2" size={22} color="#FF3B30" />
-              <Text style={[styles.menuOptionText, { color: '#FF3B30' }]}>Delete</Text>
-            </TouchableOpacity>
+            {selectedComment?.userId === currentUserId ? (
+              <>
+                <TouchableOpacity style={styles.menuOption} onPress={() => { setEditValue(selectedComment?.text || ""); setIsEditing(true); setShowOptions(false); }}>
+                  <Feather name="edit-2" size={22} color="#222" />
+                  <Text style={styles.menuOptionText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.menuOption, { borderBottomWidth: 0 }]} onPress={() => handleDelete(selectedComment!, selectedComment?.isReply, selectedComment?.parentId)}>
+                  <Feather name="trash-2" size={22} color="#FF3B30" />
+                  <Text style={[styles.menuOptionText, { color: '#FF3B30' }]}>Delete</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity style={[styles.menuOption, { borderBottomWidth: 0 }]} onPress={() => handleReportComment(selectedComment!)}>
+                <Feather name="flag" size={22} color="#FF4B4B" />
+                <Text style={[styles.menuOptionText, { color: '#FF4B4B' }]}>Report Comment</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
+
 
       {/* Edit Modal */}
       <Modal visible={isEditing} transparent animationType="fade">

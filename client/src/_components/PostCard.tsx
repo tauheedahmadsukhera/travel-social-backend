@@ -236,9 +236,22 @@ const PostCard: React.FC<PostCardProps> = ({
     return authorId && viewerId && authorId === viewerId;
   }, [post, currentUser]);
 
+  const submitPostReport = async (reason: string) => {
+    try {
+      await apiService.reportContent({
+        targetId: post._id || post.id,
+        targetType: 'post',
+        reason: reason
+      });
+      Alert.alert("Report Submitted", "Thank you for helping us keep the community safe. We will review this post shortly.");
+    } catch (err) {
+      Alert.alert("Error", "Failed to submit report. Please try again.");
+    }
+  };
+
   return (
     <View style={postStyles.cardContainer}>
-
+      {/* ... previous content ... */}
       <PostHeader 
         post={post}
         postUserName={postUserName}
@@ -390,11 +403,54 @@ const PostCard: React.FC<PostCardProps> = ({
                 style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
                 onPress={() => {
                   setShowPostMenu(false);
-                  Alert.alert("Report", "This post has been reported.");
+                  Alert.alert(
+                    "Report Post",
+                    "Why are you reporting this post?",
+                    [
+                      { text: "Spam", onPress: () => submitPostReport('spam') },
+                      { text: "Inappropriate", onPress: () => submitPostReport('inappropriate') },
+                      { text: "Harassment", onPress: () => submitPostReport('harassment') },
+                      { text: "Cancel", style: "cancel" }
+                    ]
+                  );
                 }}
               >
                 <Feather name="flag" size={22} color="#ff4d4d" />
-                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500', color: '#ff4d4d' }}>Report</Text>
+                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500', color: '#ff4d4d' }}>Report Post</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
+                onPress={() => {
+                  setShowPostMenu(false);
+                  Alert.alert(
+                    "Block User",
+                    `Are you sure you want to block ${postUserName}? You won't see their posts anymore.`,
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { 
+                        text: "Block", 
+                        style: "destructive", 
+                        onPress: async () => {
+                          try {
+                            const myId = currentUser?._id || currentUser?.id || currentUser?.uid;
+                            const targetId = post?.userId?._id || post?.userId;
+                            if (myId && targetId) {
+                              await apiService.put(`/users/${myId}/block/${targetId}`);
+                              Alert.alert("Blocked", "You will no longer see posts from this user.");
+                              feedEventEmitter.emitFeedUpdate({ type: 'USER_BLOCKED', userId: targetId });
+                            }
+                          } catch (err) {
+                            Alert.alert("Error", "Failed to block user.");
+                          }
+                        } 
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Feather name="slash" size={22} color="#ff4d4d" />
+                <Text style={{ marginLeft: 15, fontSize: 16, fontWeight: '500', color: '#ff4d4d' }}>Block User</Text>
               </TouchableOpacity>
             </>
           )}

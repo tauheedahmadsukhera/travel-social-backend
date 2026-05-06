@@ -93,8 +93,8 @@ export async function signInWithEmailPassword(
     // Step 2: Sync with backend (save to MongoDB)
     const response = await apiService.post('/auth/login-firebase', {
       firebaseUid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName || email.split('@')[0],
+      email: firebaseUser.email || (email && email.includes('@') ? email : `${firebaseUser.uid}@trips.app`), 
+      displayName: firebaseUser.displayName || (email && email.includes('@') ? email.split('@')[0] : 'User'),
       avatar: firebaseUser.photoURL
     });
 
@@ -119,14 +119,20 @@ export async function signInWithEmailPassword(
       console.log('[signInWithEmailPassword] ✅ Unified Identity stored:', canonicalUserId);
       return { success: true, user: firebaseUser };
     } else {
-      console.error('[signInWithEmailPassword] ❌ MongoDB sync failed:', response.error);
+      console.error('[signInWithEmailPassword] ❌ MongoDB sync failed:', response);
       // Still return success since Firebase auth worked
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('userId');
       await AsyncStorage.removeItem('userEmail');
       try { await signOut(firebaseAuth); } catch (e) { }
 
-      return { success: false, error: response.error || 'Login sync failed' };
+      const detailedError = response.message || response.error || 'Login sync failed';
+      const details = response.details ? JSON.stringify(response.details) : '';
+      
+      return { 
+        success: false, 
+        error: `${detailedError} ${details}`.trim() 
+      };
     }
   } catch (error: any) {
     console.error('[signInWithEmailPassword] Firebase login error:', error.message);

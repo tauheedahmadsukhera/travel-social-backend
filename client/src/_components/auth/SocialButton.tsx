@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 
 interface SocialButtonProps {
 	provider: 'google' | 'apple' | 'tiktok' | 'snapchat';
@@ -43,6 +44,18 @@ const providerConfig = {
 export default function SocialButton({ provider, onPress, style, disabled = false }: SocialButtonProps) {
 	const config = providerConfig[provider];
 
+	if (provider === 'apple' && Platform.OS === 'ios') {
+		return (
+			<AppleAuthentication.AppleAuthenticationButton
+				buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+				buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+				cornerRadius={8}
+				style={[styles.button, styles.appleButton, style]}
+				onPress={onPress}
+			/>
+		);
+	}
+
 	return (
 		<TouchableOpacity
 			style={[
@@ -74,6 +87,10 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 16,
 		borderWidth: 1,
 		borderColor: '#d1d1d1',
+	},
+	appleButton: {
+		// The Apple button doesn't need internal text/icon as it's built-in
+		borderWidth: 0, // Apple button has its own styling
 	},
 	iconContainer: {
 		marginRight: 12,

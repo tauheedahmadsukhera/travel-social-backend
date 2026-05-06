@@ -105,7 +105,7 @@ function getTimeoutMs(method: string, url: string): number {
   const m = String(method || '').toLowerCase();
 
   // Auth can be slow on cold starts.
-  if (u === '/auth/login-firebase' || u === '/auth/register-firebase') return 120000;
+  if (u.includes('/auth/')) return 120000;
 
   // Media upload can take longer.
   if (/\/media\/upload/i.test(u)) return 120000;
@@ -395,6 +395,10 @@ export const apiService = {
     apiRequest('get', '/locations/meta', undefined, { location, viewerId }),
   getPostsByLocation: (location: string, skip: number = 0, limit: number = 20, viewerId?: string) =>
     apiRequest('get', '/posts/by-location', undefined, { location, skip, limit, viewerId }),
+
+  // ✅ Moderation & Reporting
+  reportContent: (data: { targetId: string; targetType: 'post' | 'user' | 'comment'; reason: string; details?: string }) =>
+    apiRequest('post', '/moderation/report', data),
 
   // ✅ Status Check
   checkStatus: () => apiRequest('get', '/status'),

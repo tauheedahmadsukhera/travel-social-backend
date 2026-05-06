@@ -110,11 +110,20 @@ export default function WelcomeScreen() {
               <View style={styles.line} />
             </View>
 
+            <Text style={styles.agreementText}>
+              By continuing, you agree to our{' '}
+              <Text style={styles.footerLink} onPress={() => router.push('/legal/terms' as any)}>Terms of Service</Text> and{' '}
+              <Text style={styles.footerLink} onPress={() => router.push('/legal/privacy' as any)}>Privacy Policy</Text>.
+              {'\n'}
+              <Text style={{ fontWeight: 'bold' }}>Zero Tolerance Policy:</Text> There is no tolerance for objectionable content or abusive users.
+            </Text>
+
             <SocialButton provider="google" onPress={handleGoogleSignIn} style={styles.socialButton} disabled={loading} />
             <SocialButton provider="apple" onPress={handleAppleSignIn} style={styles.socialButton} disabled={loading} />
             <SocialButton provider="tiktok" onPress={handleTikTokSignIn} style={styles.socialButton} disabled={loading} />
             <SocialButton provider="snapchat" onPress={handleSnapchatSignIn} style={{ ...styles.socialButton, ...styles.snapButton }} disabled={loading} />
           </View>
+
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -206,6 +215,14 @@ const styles = StyleSheet.create({
   footerLink: {
     color: '#0A3D62',
     fontWeight: '600',
+  },
+  agreementText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+    paddingHorizontal: 10,
   },
   legalLinks: {
     flexDirection: 'row',

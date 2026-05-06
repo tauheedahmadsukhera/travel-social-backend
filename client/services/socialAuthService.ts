@@ -667,7 +667,7 @@ export async function handleSocialAuthResult(result: any, router: any) {
 
       const response = await apiService.post('/auth/login-firebase', {
         firebaseUid: user.uid,
-        email: user.email,
+        email: user.email || `${user.uid}@social.trips.app`,
         displayName: userName,
         avatar: userAvatar,
         provider: user.providerData?.[0]?.providerId || 'social'
@@ -695,8 +695,10 @@ export async function handleSocialAuthResult(result: any, router: any) {
         // Navigate to home
         safeNavigate('/(tabs)/home');
       } else {
-        console.error('❌ Backend sync failed:', response.error);
-        Alert.alert('Login Error', 'Failed to sync with server. Please try again.');
+        console.error('❌ Backend sync failed:', response);
+        const detailedError = response.message || response.error || 'Failed to sync with server';
+        const details = response.details ? JSON.stringify(response.details) : '';
+        Alert.alert('Login Error', `${detailedError} ${details}`.trim());
       }
     } catch (error: any) {
       console.error('Error in handleSocialAuthResult:', error);

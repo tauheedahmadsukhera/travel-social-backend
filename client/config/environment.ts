@@ -295,6 +295,12 @@ export function getAPIBaseURL(): string {
   if (__DEV__) {
     console.log('📡 [environment] EXPO_PUBLIC_API_BASE_URL from env:', envUrl || 'Not set');
     
+    // If a remote URL is explicitly provided in the environment, honor it!
+    if (envUrl && !envLooksLocal) {
+      console.log('📡 [environment] Dev mode: Using explicit remote URL from env:', envUrl);
+      return envUrl;
+    }
+
     // Always prefer local backend in development to test new backend code!
     // If we have a derived host IP (Expo Go / physical device on same wifi), use it.
     if (derivedLocalUrl) {

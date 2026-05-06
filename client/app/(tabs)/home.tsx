@@ -99,11 +99,11 @@ export default function Home() {
     loading, loadingMore, 
     loadInitialFeed, loadMorePosts, 
     HOME_CACHE_KEY 
-  } = useHomeFeed(currentUserId, isOnline);
+  } = useHomeFeed(currentUserId, !!isOnline);
 
   const { categories } = useCategories();
   
-  useFeedEvents(setPosts, setAllLoadedPosts, isOnline, loadInitialFeed);
+  useFeedEvents(setPosts, setAllLoadedPosts, !!isOnline, loadInitialFeed);
 
   // Use official hook for basic tap
   useScrollToTop(listRef);

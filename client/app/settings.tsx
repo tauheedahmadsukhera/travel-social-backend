@@ -129,7 +129,9 @@ export default function SettingsScreen() {
                           await permanentlyDeleteAccount(userId);
                         }
                         // Logout locally regardless of API success to ensure they are logged out
-                        await auth.signOut();
+                        if (auth) {
+                          await auth.signOut();
+                        }
                         await AsyncStorage.clear();
                         router.replace('/auth/welcome' as any);
                       } catch (err) {
