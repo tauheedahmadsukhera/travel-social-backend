@@ -697,6 +697,21 @@ export async function uploadImage(uri: string, path?: string) {
 
 async function uploadStoryMedia(uri: string, userId: string, mediaType: 'image' | 'video', onProgress?: (percent: number) => void): Promise<{ success: boolean; url?: string; error?: string; mediaType?: string; thumbnailUrl?: string }> {
   try {
+    let finalUri = uri;
+
+    // Handle iOS ph:// or assets-library:// URIs
+    if (uri.startsWith('ph://') || uri.startsWith('assets-library://')) {
+      try {
+        const assetId = uri.startsWith('ph://') 
+          ? uri.replace('ph://', '').split('/')[0] 
+          : uri;
+        const assetInfo = await MediaLibrary.getAssetInfoAsync(assetId);
+        finalUri = assetInfo.localUri || assetInfo.uri || uri;
+      } catch (err) {
+        console.warn('[uploadStoryMedia] Failed to resolve iOS asset:', err);
+      }
+    }
+
     const endpointUrl = `${API_BASE_URL}/upload/story`;
     const token = await AsyncStorage.getItem('token');
 
@@ -707,7 +722,7 @@ async function uploadStoryMedia(uri: string, userId: string, mediaType: 'image' 
     const formData = new FormData();
     formData.append('userId', userId);
     formData.append('mediaType', safeType);
-    formData.append('file', { uri, name: fileName, type: contentType } as any);
+    formData.append('file', { uri: finalUri, name: fileName, type: contentType } as any);
 
     return await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();

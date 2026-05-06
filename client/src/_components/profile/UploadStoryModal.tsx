@@ -12,7 +12,8 @@ import {
   Image,
   StyleSheet,
   Dimensions,
-  Keyboard
+  Keyboard,
+  Alert
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ResizeMode, Video } from 'expo-av';
@@ -235,8 +236,10 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                         showSuccess('Story shared successfully!');
                       }, 500);
                     }
-                  } catch (err) {
+                  } catch (err: any) {
                     setUploading(false);
+                    const msg = err?.message || 'Something went wrong while sharing your story.';
+                    Alert.alert('Upload Failed', msg);
                   }
                 }}
               >
