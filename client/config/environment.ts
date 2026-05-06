@@ -6,6 +6,8 @@
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+// @ts-ignore
+import * as EnvVars from '@env';
 
 // Expo only inlines EXPO_PUBLIC_* when accessed statically (process.env.EXPO_PUBLIC_FOO).
 // Dynamic lookups like process.env[key] will be undefined in production bundles.
@@ -70,14 +72,17 @@ function getEnvVar(key: string, defaultValue?: string): string {
   };
 
   const configValue = env[key];
-  // Prefer static EXPO_PUBLIC_* access for production safety.
+  // Try static Expo access first, then @env fallback, then direct process.env
   const processValue = key.startsWith('EXPO_PUBLIC_') ? getExpoPublicVar(key) : (process.env as any)[key];
+  const envFileValue = (EnvVars as any)?.[key.replace('EXPO_PUBLIC_', '')] || (EnvVars as any)?.[key];
   
   let value = '';
   if (!isPlaceholder(configValue)) {
     value = configValue as string;
   } else if (!isPlaceholder(processValue)) {
     value = processValue as string;
+  } else if (!isPlaceholder(envFileValue)) {
+    value = envFileValue as string;
   }
 
   if (!value && !isDevelopment && defaultValue === undefined) {
