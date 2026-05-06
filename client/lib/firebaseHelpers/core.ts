@@ -569,64 +569,28 @@ export async function uploadMedia(uri: string, mediaType: 'image' | 'video' = 'i
   try {
     console.log(`[uploadMedia] 📤 Starting ${mediaType} upload from URI:`, uri);
 
-    // Fast path: local video upload via multipart to avoid huge base64 conversion cost
-    if (mediaType === 'video' && uri.startsWith('file://')) {
+    // Fast path: all local uploads via multipart (industry standard)
+    if (uri.startsWith('file://')) {
       const multipartResult = await uploadWithMultipart(uri, mediaType, path);
       if (multipartResult?.success && multipartResult?.url) {
         return multipartResult;
       }
-      console.warn('[uploadMedia] ⚠️ Multipart video upload failed, falling back to base64:', multipartResult?.error);
-    }
-
-    let base64Data: string = '';
-
-    // Handle file:// URIs (Android/device) - Read as base64
-    if (uri.startsWith('file://')) {
-      console.log('[uploadImage] 📱 Detected file:// URI, reading as base64...');
-      try {
-        // Use legacy API which works better
-        const FileSystemLegacy = require('expo-file-system/legacy');
-        base64Data = await FileSystemLegacy.readAsStringAsync(uri, { encoding: 'base64' });
-        console.log('[uploadImage] ✅ Read file as base64, length:', base64Data.length);
-      } catch (legacyError: any) {
-        console.error('[uploadImage] ⚠️  Legacy FileSystem error:', legacyError.message);
-        // Try new FileSystem API
-        try {
-          console.log('[uploadImage] 🔄 Trying new FileSystem API...');
-          const FileSystem = require('expo-file-system');
-          base64Data = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-          console.log('[uploadImage] ✅ Read file as base64 (new API), length:', base64Data.length);
-        } catch (newError: any) {
-          console.error('[uploadImage] ❌ New FileSystem error:', newError.message);
-          throw new Error(`Cannot read file: ${newError.message}`);
-        }
-      }
+      console.warn('[uploadMedia] ⚠️ Multipart upload failed:', multipartResult?.error);
+      return { success: false, error: multipartResult?.error || 'Upload failed' };
     } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
-      // Handle http(s):// URIs - fetch and convert to base64
-      console.log('[uploadImage] 🌐 Detected http(s) URI, fetching and converting to base64...');
+      // Handle http(s):// URIs - download locally then upload
+      console.log('[uploadMedia] 🌐 Detected http(s) URI, downloading to local cache...');
       try {
-        const response = await fetch(uri);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const blob = await response.blob();
-        const reader = new FileReader();
-
-        return new Promise((resolve) => {
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64 = result.split(',')[1];
-            console.log('[uploadImage] ✅ Converted remote image to base64, length:', base64.length);
-            // Continue with upload
-            uploadWithBase64(base64, mediaType, path).then(resolve);
-          };
-          reader.onerror = (err) => {
-            resolve({ success: false, error: 'Failed to read remote image' });
-          };
-          reader.readAsDataURL(blob);
-        });
+        const FileSystem = require('expo-file-system');
+        const extension = mediaType === 'video' ? '.mp4' : '.jpg';
+        const localUri = FileSystem.cacheDirectory + 'dl_' + Date.now() + extension;
+        
+        const { uri: downloadedUri } = await FileSystem.downloadAsync(uri, localUri);
+        console.log('[uploadMedia] ✅ Downloaded to:', downloadedUri);
+        
+        return uploadWithMultipart(downloadedUri, mediaType, path);
       } catch (err: any) {
-        console.error('[uploadImage] ❌ Remote image error:', err.message);
+        console.error('[uploadMedia] ❌ Remote download error:', err.message);
         throw err;
       }
     } else if (uri.startsWith('ph://') || uri.startsWith('assets-library://')) {
@@ -654,9 +618,6 @@ export async function uploadMedia(uri: string, mediaType: 'image' | 'video' = 'i
     } else {
       throw new Error(`Unsupported URI format: ${uri}`);
     }
-
-    // Upload with base64
-    return uploadWithBase64(base64Data, mediaType, path);
 
   } catch (err: any) {
     console.error('[uploadMedia] ❌ Error:', err.message);
@@ -732,45 +693,7 @@ export async function uploadImage(uri: string, path?: string) {
   return uploadMedia(uri, 'image', path);
 }
 
-// Helper function to upload using base64
-async function uploadWithBase64(base64Data: string, mediaType: 'image' | 'video' = 'image', path?: string): Promise<{ success: boolean; url?: string; error?: string }> {
-  try {
-    if (!base64Data) {
-      throw new Error('No base64 data provided');
-    }
 
-    // Send as base64 string directly (backend supports this)
-    const extension = mediaType === 'video' ? 'mp4' : 'jpg';
-    const result = await apiService.post('/media/upload', {
-      file: base64Data,
-      fileName: `${mediaType}-${Date.now()}.${extension}`,
-      mediaType: mediaType,
-      path: path
-    });
-
-    console.log('[uploadImage] 📥 Full response received:', JSON.stringify(result).substring(0, 500));
-
-    // Check if response has success flag
-    if (!result?.success) {
-      console.error('[uploadImage] ❌ Backend returned error:', result?.error || 'Unknown error');
-      return { success: false, error: result?.error || 'Upload failed' };
-    }
-
-    // Handle nested response structure
-    const url = result?.data?.url || result?.url || result?.secureUrl || result?.location;
-
-    if (!url) {
-      console.error('[uploadImage] ❌ No URL in response:', result);
-      return { success: false, error: 'No URL returned from upload' };
-    }
-
-    console.log('[uploadImage] ✅ Upload successful:', url);
-    return { success: true, url };
-  } catch (err: any) {
-    console.error('[uploadImage] ❌ Upload error:', err.message);
-    return { success: false, error: err.message };
-  }
-}
 
 async function uploadStoryMedia(uri: string, userId: string, mediaType: 'image' | 'video', onProgress?: (percent: number) => void): Promise<{ success: boolean; url?: string; error?: string; mediaType?: string; thumbnailUrl?: string }> {
   try {
