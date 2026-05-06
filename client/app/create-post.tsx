@@ -84,10 +84,13 @@ export default function CreatePostScreen() {
           <View style={{ flex: 1 }}>
             {/* Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }}>
-              <TouchableOpacity onPress={() => setStep('picker')} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity 
+                onPress={() => isEditMode ? router.back() : setStep('picker')} 
+                style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' }}
+              >
                 <Feather name="x" size={20} color="#000" />
               </TouchableOpacity>
-              <Text style={{ fontSize: 16, fontWeight: '600' }}>New post</Text>
+              <Text style={{ fontSize: 16, fontWeight: '600' }}>{isEditMode ? 'Edit post' : 'New post'}</Text>
               <View style={{ width: 40 }} />
             </View>
 
@@ -97,6 +100,11 @@ export default function CreatePostScreen() {
                 thumbnails={{}}
                 isVideo={(uri) => isVideoUri(uri, galleryAssets)}
                 height={350}
+                onRemove={(index) => {
+                  const updated = [...selectedImages];
+                  updated.splice(index, 1);
+                  setSelectedImages(updated);
+                }}
               />
               <PostDetailsForm
                 caption={caption}
