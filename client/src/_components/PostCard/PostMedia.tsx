@@ -105,8 +105,9 @@ const PostMedia: React.FC<PostMediaProps> = ({
     const mediaUri = getMediaUrl(item.url);
 
     if (isVideo) {
-      // Auto-play logic: play if it's the active index and screen is focused
-      const shouldAutoPlay = isFocused && index === localActiveIndex;
+      // Corrected auto-play logic for looped media
+      const normalizedIndex = index % media.length;
+      const shouldAutoPlay = isFocused && normalizedIndex === localActiveIndex;
 
       return (
         <TouchableOpacity
