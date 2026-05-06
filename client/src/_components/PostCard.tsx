@@ -11,9 +11,10 @@ import PostActions from './PostCard/PostActions';
 import PostCaption from './PostCard/PostCaption';
 import { CommentSection } from "./CommentSection";
 import { feedEventEmitter } from "../../lib/feedEventEmitter";
+import Toast from 'react-native-toast-message';
 import ShareModal from "./ShareModal";
 import { useUser } from "./UserContext";
-import { likePost, unlikePost } from "../../lib/firebaseHelpers";
+import { likePost, unlikePost, sendPostMessage } from "../../lib/firebaseHelpers";
 import { apiService } from '@/src/_services/apiService';
 import { BACKEND_URL } from "../../lib/api";
 
@@ -561,8 +562,33 @@ const PostCard: React.FC<PostCardProps> = ({
         <ShareModal 
           visible={showShare}
           onClose={() => setShowShare(false)}
-          onSend={(userIds) => {
-            console.log('Sending post to users:', userIds);
+          onSend={async (userIds) => {
+            try {
+              const activeUserId = currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid;
+              if (!activeUserId) return;
+              
+              for (const recipientId of userIds) {
+                // Determine conversation ID (consistent with backend logic)
+                const participants = [String(activeUserId), String(recipientId)].sort();
+                const convoId = `${participants[0]}_${participants[1]}`;
+                
+                await sendPostMessage(convoId, String(activeUserId), post, {
+                  recipientId: String(recipientId)
+                });
+              }
+              Toast.show({
+                type: 'success',
+                text1: 'Shared',
+                text2: `Post shared with ${userIds.length} user${userIds.length > 1 ? 's' : ''}`
+              });
+            } catch (err) {
+              console.error('[PostCard] Share error:', err);
+              Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: 'Failed to share post'
+              });
+            }
           }}
           currentUserId={currentUser?._id || currentUser?.id || currentUser?.uid}
           sharePayload={post}

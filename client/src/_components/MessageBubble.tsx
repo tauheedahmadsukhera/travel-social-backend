@@ -122,6 +122,12 @@ function MessageBubbleInner({
 
   const resolvedMediaUrl = mediaUrl || imageUrl || null;
   const resolvedMediaType = inferMediaType(mediaType, resolvedMediaUrl, audioUrl, imageUrl, audioDuration, text);
+
+  // DEBUG LOG
+  if (sharedPost || sharedStory) {
+    console.log(`[MessageBubble] Rendering shared content: id=${id}, type=${resolvedMediaType}, hasPost=${!!sharedPost}, hasStory=${!!sharedStory}`);
+  }
+
   const playbackUrl = audioUrl || (resolvedMediaType === 'audio' ? resolvedMediaUrl : null);
   const isLegacyStoryText = typeof displayText === 'string' && /shared a story:/i.test(displayText);
   const isStoryMetaText = typeof displayText === 'string' && /\b(sent|shared)\b.*\bstory\b/i.test(displayText);
