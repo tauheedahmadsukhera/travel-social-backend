@@ -82,9 +82,12 @@ const PostMedia: React.FC<PostMediaProps> = ({
   const getMediaUrl = (url: string) => {
     if (!url) return '';
     if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('file:')) {
-      // Force high quality for Cloudinary
+      // Force optimization for Cloudinary
       if (url.includes('cloudinary.com') && url.includes('/upload/') && !url.includes('/q_')) {
-        return url.replace('/upload/', '/upload/q_auto:best,f_auto/');
+        // Use q_auto:eco for videos to prevent stuttering, best for images
+        const isVideo = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov');
+        const transformation = isVideo ? 'q_auto:eco,f_auto,vc_h264/' : 'q_auto:best,f_auto/';
+        return url.replace('/upload/', `/upload/${transformation}`);
       }
       return url;
     }
