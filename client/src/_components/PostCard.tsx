@@ -197,11 +197,9 @@ const PostCard: React.FC<PostCardProps> = ({
 
 
   const handleLike = useCallback(async () => {
-    // Extensive ID resolution
     const activeUserId = 
-      currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid || 
-      currentUser?.firebaseUserId || currentUser?.localId ||
-      user?._id || user?._id || user?.id || user?.uid;
+      (typeof currentUser === 'string' ? currentUser : (currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid)) || 
+      user?._id || user?.id || user?.uid;
     
     if (!activeUserId) {
       if (__DEV__) {
