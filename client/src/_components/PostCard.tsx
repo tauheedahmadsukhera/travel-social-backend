@@ -197,11 +197,11 @@ const PostCard: React.FC<PostCardProps> = ({
 
 
   const handleLike = useCallback(async () => {
-    // Determine the most reliable user ID (MongoDB _id preferred, then firebaseUid)
-    const activeUserId = currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid;
+    // Try to get ID from prop first, then from the useUser hook fallback
+    const activeUserId = currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid || user?._id || user?.id || user?.uid;
     
     if (!activeUserId) {
-      if (__DEV__) console.warn('[PostCard] Cannot like: No active user ID found');
+      if (__DEV__) console.warn('[PostCard] Cannot like: No active user ID found. currentUser:', !!currentUser, 'hookUser:', !!user);
       return;
     }
 
@@ -327,7 +327,7 @@ const PostCard: React.FC<PostCardProps> = ({
           likeCount={likeCount}
           commentCount={localCommentCount}
           reactions={localReactions}
-          currentUserId={currentUser?._id || currentUser?.id || currentUser?.uid}
+          currentUserId={currentUser?._id || currentUser?.id || currentUser?.uid || user?._id || user?.id || user?.uid}
         />
 
         <PostCaption 
