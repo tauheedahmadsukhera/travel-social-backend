@@ -369,7 +369,7 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
 
   // Initialize liked comments when current story changes
   useEffect(() => {
-    if (currentStory.comments) {
+    if (currentStory?.comments) {
       const likedMap: { [key: string]: boolean } = {};
       const likesCountMap: { [key: string]: number } = {};
 
