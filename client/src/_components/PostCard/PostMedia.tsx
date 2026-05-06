@@ -55,7 +55,7 @@ const PostMedia: React.FC<PostMediaProps> = ({
   onDoubleTap,
 }) => {
   const isFocused = useIsFocused();
-  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [isPlaying, setIsPlaying] = React.useState(true);
   const lastTap = React.useRef<number>(0);
   const flatListRef = React.useRef<FlatList>(null);
   const [isInitialScrollDone, setIsInitialScrollDone] = React.useState(false);
@@ -105,6 +105,9 @@ const PostMedia: React.FC<PostMediaProps> = ({
     const mediaUri = getMediaUrl(item.url);
 
     if (isVideo) {
+      // Auto-play logic: play if it's the active index and screen is focused
+      const shouldAutoPlay = isFocused && index === localActiveIndex;
+
       return (
         <TouchableOpacity
           activeOpacity={1}
@@ -120,17 +123,23 @@ const PostMedia: React.FC<PostMediaProps> = ({
             style={{ width: SCREEN_WIDTH, height: containerHeight }}
             resizeMode={ResizeMode.COVER}
             isLooping
-            shouldPlay={isFocused && isPlaying}
+            shouldPlay={shouldAutoPlay && isPlaying}
             isMuted={isMuted}
             useNativeControls={false}
+            progressUpdateIntervalMillis={500}
             onPlaybackStatusUpdate={(status: any) => {
-              if (status.isLoaded && status.isPlaying !== isPlaying) {
-                setIsPlaying(status.isPlaying);
+              if (status.isLoaded && status.isPlaying !== isPlaying && shouldAutoPlay) {
+                // Keep local state in sync if needed
               }
             }}
           />
-          {/* Mute Button */}
+          {/* Mute/Play Overlay */}
           <View style={styles.videoOverlay} pointerEvents="box-none">
+            {!isPlaying && (
+               <View style={{ position: 'absolute', alignSelf: 'center', top: '45%' }}>
+                 <Ionicons name="play" size={50} color="rgba(255,255,255,0.8)" />
+               </View>
+            )}
             <TouchableOpacity
               activeOpacity={0.7}
               style={styles.muteButtonMini}
