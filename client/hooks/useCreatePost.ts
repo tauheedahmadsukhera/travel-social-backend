@@ -160,6 +160,47 @@ export const useCreatePost = (params: any = {}) => {
     }, 400);
   };
 
+
+
+  const fetchNearbyVerifiedLocations = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      const currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const center = { lat: currentLoc.coords.latitude, lon: currentLoc.coords.longitude };
+      setVerifiedCenter(center);
+
+      // 1. Fetch nearby from map service (Nearby 100m)
+      setLoadingVerifiedResults(true);
+      const nearby = await mapService.getNearbyPlaces(center.lat, center.lon, 100);
+      setVerifiedResults(nearby.map((p: any) => ({
+        name: p.name,
+        address: p.address || p.vicinity,
+        lat: p.lat || p.geometry?.location?.lat,
+        lon: p.lon || p.geometry?.location?.lng,
+        placeId: p.placeId || p.place_id,
+        verified: true
+      })));
+
+      // 2. Fetch passport tickets / verified options from backend
+      const tickets = await getPassportTickets(center.lat, center.lon);
+      if (tickets && tickets.success) {
+        setVerifiedOptions(tickets.data.map((t: any) => ({
+          name: t.name,
+          address: t.address,
+          lat: t.lat,
+          lon: t.lon,
+          verified: true
+        })));
+      }
+    } catch (e) {
+      console.error('[fetchNearbyVerifiedLocations] Error:', e);
+    } finally {
+      setLoadingVerifiedResults(false);
+    }
+  };
+
   const handleUserSearch = (text: string) => {
     setUserSearch(text);
     if (userTimer.current) clearTimeout(userTimer.current);
@@ -254,7 +295,10 @@ export const useCreatePost = (params: any = {}) => {
     }
   };
 
-  useEffect(() => { loadGalleryAssets(); }, []);
+  useEffect(() => { 
+    loadGalleryAssets(); 
+    fetchNearbyVerifiedLocations();
+  }, []);
 
   return {
     step, setStep, loading, caption, setCaption, hashtags, setHashtags,
