@@ -40,7 +40,7 @@ export function useProfileData(viewedUserId: string, authUserId: string) {
         setProfile(null);
       }
       // Posts
-      const postsRes = await getUserPosts(viewedUserId);
+      const postsRes = await getUserPosts(viewedUserId, authUserId);
       let postsData: any[] = [];
       if (isRecord(postsRes) && postsRes.success) {
         if ('data' in postsRes && Array.isArray(postsRes.data)) postsData = postsRes.data;
@@ -60,7 +60,7 @@ export function useProfileData(viewedUserId: string, authUserId: string) {
         setSections([]);
       }
       // Highlights
-      const highlightsRes = await getUserHighlights(viewedUserId);
+      const highlightsRes = await getUserHighlights(viewedUserId, authUserId);
       let highlightsData: any[] = [];
       if (isRecord(highlightsRes) && highlightsRes.success) {
         if ('data' in highlightsRes && Array.isArray(highlightsRes.data)) highlightsData = highlightsRes.data;

@@ -301,7 +301,7 @@ export default function LocationDetailsScreen() {
       }
     }
     fetchDetails();
-  }, [placeId, locationName, locationAddress, isRegionScope, regionIdStr]);
+  }, [placeId, locationName, locationAddress, isRegionScope, regionIdStr, viewerId]);
 
   const extractSubLocationName = (locationName: string, locationAddress: string): string => {
     // Extract city/area name from location
