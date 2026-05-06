@@ -685,8 +685,8 @@ export default function Profile({ userIdProp }: any) {
 
           // Fetch only secondary media/lists in parallel
           const secondaryPromises = [
-            canViewPrivateProfile ? apiService.getUserPosts(viewedUserId, { _t: timestamp }).catch(() => null) : Promise.resolve(null),
-            canViewPrivateProfile ? apiService.get(`/users/${viewedUserId}/sections`, { _t: timestamp }).catch(() => null) : Promise.resolve(null),
+            canViewPrivateProfile ? apiService.getUserPosts(viewedUserId, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
+            canViewPrivateProfile ? apiService.get(`/users/${viewedUserId}/sections`, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
             canViewPrivateProfile ? getUserHighlights(viewedUserId, currentUserId || undefined).catch(() => null) : Promise.resolve(null),
             canViewPrivateProfile ? getUserStories(viewedUserId).catch(() => null) : Promise.resolve(null),
           ];
@@ -1254,7 +1254,7 @@ export default function Profile({ userIdProp }: any) {
         posts: segmentTab === 'grid' ? (selectedSection ? visiblePosts : posts) : taggedPosts,
         selectedPostIndex: selectedPostIndex,
         profile: profile,
-        authUser: currentUserId ? { uid: currentUserId } : null,
+        authUser: currentUserId ? { _id: currentUserId, id: currentUserId, uid: currentUserId, firebaseUid: currentUserFirebaseAlias } : null,
         likedPosts: likedPosts,
         savedPosts: savedPosts,
         handleLikePost: (post: any) => handleLikePost(post?.id || post?._id || ''),

@@ -50,10 +50,10 @@ const PostCard: React.FC<PostCardProps> = ({
     if (post?.isLiked !== undefined) return post.isLiked;
 
     // 2. Fallback to local calculation (Standard MongoDB _id only)
-    const myId = String(currentUser?._id || currentUser?.id || '');
+    const myId = String(currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid || '');
     if (myId && Array.isArray(post?.likes)) {
       return post.likes.some((id: any) => {
-        const lid = String(id?._id || id?.id || id || '');
+        const lid = String(id?._id || id?.id || id?.uid || id?.firebaseUid || id || '');
         return lid === myId;
       });
     }
@@ -83,10 +83,10 @@ const PostCard: React.FC<PostCardProps> = ({
     }
 
     // 2. Fallback to local calculation (Standard MongoDB _id only)
-    const myId = String(currentUser?._id || currentUser?.id || '');
+    const myId = String(currentUser?._id || currentUser?.id || currentUser?.uid || currentUser?.firebaseUid || '');
     if (myId && Array.isArray(post?.likes)) {
       const liked = post.likes.some((id: any) => {
-        const lid = String(id?._id || id?.id || id || '');
+        const lid = String(id?._id || id?.id || id?.uid || id?.firebaseUid || id || '');
         return lid === myId;
       });
       setIsLiked(liked);
