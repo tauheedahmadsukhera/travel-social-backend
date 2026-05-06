@@ -27,6 +27,10 @@ async function unsavePost(postId: string, userId: string) {
 
 export default function SaveButton({ post, currentUser }: any) {
   const user = useUser();
+
+  // Guard: if post is not defined, render nothing
+  if (!post) return null;
+
   const userForSave = currentUser || user;
   const userId =
     typeof userForSave === "string"
@@ -36,19 +40,19 @@ export default function SaveButton({ post, currentUser }: any) {
       userForSave?.userId ||
       userForSave?._id;
 
-  const [saved, setSaved] = useState(post.savedBy?.includes(userId) ?? false);
+  const [saved, setSaved] = useState(post?.savedBy?.includes(userId) ?? false);
   const [modalVisible, setModalVisible] = useState(false);
   const [resolvedUserId, setResolvedUserId] = useState<string>(userId || "");
 
   useEffect(() => {
     // Priority 1: Direct flags from backend (most reliable)
-    const backendSaved = post.isSaved || post.saved || false;
+    const backendSaved = post?.isSaved || post?.saved || false;
     // Priority 2: ID match in savedBy array
-    const idMatch = post.savedBy?.includes(userId) ?? false;
+    const idMatch = post?.savedBy?.includes(userId) ?? false;
     
     console.log(`[SaveButton] Debug: userId=${userId}, backendSaved=${backendSaved}, idMatch=${idMatch}`);
     setSaved(backendSaved || idMatch);
-  }, [post.savedBy, userId, post.isSaved, post.saved]);
+  }, [post?.savedBy, userId, post?.isSaved, post?.saved]);
 
   // Ensure we always have the userId from storage as fallback
   useEffect(() => {
