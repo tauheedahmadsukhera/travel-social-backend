@@ -46,7 +46,13 @@ export default function CreatePostScreen() {
   const [showTagModal, setShowTagModal] = useState(false);
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
 
-  const getLocationKey = (loc: any) => loc ? `${loc.name}_${loc.lat}_${loc.lon}` : '';
+  const getLocationKey = (loc: any) => {
+    if (!loc) return '';
+    if (loc.placeId || loc.place_id) return loc.placeId || loc.place_id;
+    const lat = Number(loc.lat || loc.latitude || 0).toFixed(5);
+    const lon = Number(loc.lon || loc.longitude || 0).toFixed(5);
+    return `${loc.name}_${lat}_${lon}`;
+  };
   const dummyPanHandlers = { onStartShouldSetResponder: () => true, onMoveShouldSetResponder: () => true };
 
   return (

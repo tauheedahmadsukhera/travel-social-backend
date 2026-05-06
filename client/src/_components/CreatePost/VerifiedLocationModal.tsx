@@ -143,9 +143,12 @@ const VerifiedLocationModal: React.FC<VerifiedLocationModalProps> = ({
                         <Feather name="map-pin" size={18} color="#000" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 15, fontWeight: '600', color: '#111' }}>{(item as any).name}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: '600', color: isSelected ? '#0095f6' : '#111' }}>{(item as any).name}</Text>
                         <Text style={{ color: '#666', fontSize: 13, marginTop: 2 }}>{(item as any).address}</Text>
                       </View>
+                      {isSelected && (
+                        <Feather name="check" size={20} color="#0095f6" style={{ marginLeft: 10 }} />
+                      )}
                     </TouchableOpacity>
                   );
                 }}
