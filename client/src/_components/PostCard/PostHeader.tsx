@@ -50,6 +50,11 @@ const PostHeader: React.FC<PostHeaderProps> = ({
           {locationName ? (
             <TouchableOpacity onPress={onLocationPress} style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={styles.cardHeaderLocation} numberOfLines={1}>{locationName}</Text>
+              {post?.locationData?.verified && (
+                <View style={{ marginLeft: 3 }}>
+                  <VerifiedBadge size={12} color="#000" />
+                </View>
+              )}
               <View style={styles.cardHeaderDot} />
             </TouchableOpacity>
           ) : null}

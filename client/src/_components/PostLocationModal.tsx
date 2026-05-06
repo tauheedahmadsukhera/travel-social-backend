@@ -6,6 +6,7 @@ import SaveButton from '@/src/_components/SaveButton';
 import { useUser } from '@/src/_components/UserContext';
 import { likePost, unlikePost } from '@/lib/firebaseHelpers';
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
+import VerifiedBadge from './VerifiedBadge';
 
 // Move context to top-level
 const PostLocationModalContext = React.createContext<{ onImagePress?: (post: PostType) => void }>({});
@@ -31,6 +32,12 @@ interface PostType {
     address?: string;
     city?: string;
     country?: string;
+    verified?: boolean;
+  };
+  locationData?: {
+    name?: string;
+    address?: string;
+    verified?: boolean;
   };
   liked?: boolean; // backend value
   saved?: boolean; // backend value
@@ -158,7 +165,16 @@ export const PostLocationModal: React.FC<PostLocationModalProps> = ({ visible, o
               </View>
               <Text style={styles.postCount}>{postCount} Post{postCount !== 1 ? 's' : ''}</Text>
               <View style={styles.locationBlock}>
-                <Text style={styles.locationName}>{typeof firstPost.location === 'object' ? (firstPost.location.name || 'Location') : (firstPost.location || 'Location')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={styles.locationName}>
+                    {typeof firstPost.location === 'object' ? (firstPost.location.name || 'Location') : (firstPost.location || 'Location')}
+                  </Text>
+                  {(firstPost.locationData?.verified || (typeof firstPost.location === 'object' && firstPost.location.verified)) && (
+                    <View style={{ marginLeft: 4 }}>
+                      <VerifiedBadge size={14} color="#000" />
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.locationAddress}>{typeof firstPost.location === 'object' ? (firstPost.location.address || firstPost.location.city || '') : ''}</Text>
               </View>
               {safePosts.map((item: PostType) => (
