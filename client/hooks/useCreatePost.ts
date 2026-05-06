@@ -175,7 +175,11 @@ export const useCreatePost = (params: any = {}) => {
       let currentAddress = `GPS: ${center.lat.toFixed(4)}, ${center.lon.toFixed(4)}`;
       try {
         const addressRes = await mapService.reverseGeocode(center.lat, center.lon);
-        if (addressRes) currentAddress = addressRes;
+        if (addressRes && addressRes.address) {
+          currentAddress = addressRes.address;
+        } else if (addressRes && addressRes.placeName) {
+          currentAddress = addressRes.placeName;
+        }
       } catch {}
 
       // 1. Fetch nearby from map service (Nearby 100m)
