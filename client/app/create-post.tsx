@@ -36,7 +36,7 @@ export default function CreatePostScreen() {
     verifiedSearch, setVerifiedSearch, verifiedResults, loadingVerifiedResults, verifiedOptions, verifiedCenter,
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, isEditMode,
-    galleryEndCursor, handleCamera, loadGalleryAssets
+    galleryEndCursor, handleCamera, loadGalleryAssets, handleVerifiedSearch
   } = useCreatePost(params);
 
   // Modal visibility states

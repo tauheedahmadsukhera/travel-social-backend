@@ -672,7 +672,7 @@ async function uploadWithMultipart(
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
     const token = await AsyncStorage.getItem('token');
-    const endpointUrl = `${API_BASE_URL}/media/upload`;
+    const endpointUrl = `${API_BASE_URL}/upload/upload`;
 
     const safeType = mediaType === 'video' ? 'video' : 'image';
     const contentType = safeType === 'video' ? 'video/mp4' : 'image/jpeg';
