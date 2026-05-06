@@ -82,6 +82,10 @@ const PostMedia: React.FC<PostMediaProps> = ({
   const getMediaUrl = (url: string) => {
     if (!url) return '';
     if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('file:')) {
+      // Force high quality for Cloudinary
+      if (url.includes('cloudinary.com') && url.includes('/upload/') && !url.includes('/q_')) {
+        return url.replace('/upload/', '/upload/q_auto:best,f_auto/');
+      }
       return url;
     }
     const baseUrl = BACKEND_URL.endsWith('/') ? BACKEND_URL.slice(0, -1) : BACKEND_URL;
