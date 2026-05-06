@@ -52,18 +52,24 @@ export default function CreatePostScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={["top"]}>
       {step === 'picker' ? (
         <MediaPicker
-          assets={galleryAssets}
-          selectedImages={selectedImages}
+          assets={galleryAssets || []}
+          selectedImages={selectedImages || []}
           onSelect={(uri) => {
             hapticLight();
             if (selectedImages.includes(uri)) {
               setSelectedImages(selectedImages.filter(i => i !== uri));
             } else {
+              // Standard behavior: limit to some number or allow multiple
               setSelectedImages([...selectedImages, uri]);
             }
           }}
           onCamera={handleCamera} 
           onLoadMore={() => loadGalleryAssets(galleryEndCursor)}
+          onNext={() => {
+            hapticLight();
+            setStep('details');
+          }}
+          canNext={(selectedImages || []).length > 0}
           loading={loadingGallery}
         />
       ) : (
