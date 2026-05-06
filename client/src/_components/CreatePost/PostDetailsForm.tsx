@@ -16,7 +16,7 @@ interface PostDetailsFormProps {
   onRemoveCategory: (name: string) => void;
   locationName?: string;
   onOpenLocation: () => void;
-  verifiedLocationName?: string;
+  verifiedLocation?: any;
   onOpenVerifiedLocation: () => void;
   taggedUsers: any[];
   onOpenTagPeople: () => void;
@@ -117,7 +117,7 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
         >
           <Feather name="award" size={20} color="#000" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
-            {verifiedLocationName ? (
+            {verifiedLocation ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View style={{ 
                   backgroundColor: '#E3F2FD', 
@@ -130,7 +130,9 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
                   borderColor: '#90CAF9'
                 }}>
                   <Feather name="check-circle" size={14} color="#1976D2" style={{ marginRight: 6 }} />
-                  <Text style={{ color: '#1976D2', fontSize: 14, fontWeight: '600' }}>{verifiedLocationName}</Text>
+                  <Text style={{ color: '#1976D2', fontSize: 14, fontWeight: '600' }}>
+                    {verifiedLocation.name || verifiedLocation.placeName || 'Verified Location'}
+                  </Text>
                 </View>
               </View>
             ) : (

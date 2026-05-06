@@ -111,7 +111,7 @@ export default function CreatePostScreen() {
                 onRemoveCategory={(name) => setSelectedCategories(selectedCategories.filter(c => c.name !== name))}
                 locationName={location?.name}
                 onOpenLocation={() => setShowLocationModal(true)}
-                verifiedLocationName={verifiedLocation?.name}
+                verifiedLocation={verifiedLocation}
                 onOpenVerifiedLocation={() => setShowVerifiedModal(true)}
                 taggedUsers={taggedUsers}
                 onOpenTagPeople={() => setShowTagModal(true)}
