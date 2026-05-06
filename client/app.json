@@ -36,12 +36,19 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tauhee56.travesocial",
-      "buildNumber": "27",
+      "buildNumber": "28",
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
         "googleMapsApiKey": "AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs"
       },
       "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.709095117662-k35juagf7ihkae81tfm9si43jkg7g177"
+            ]
+          }
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Allow Trips to access your camera for capturing and sharing your travel moments. For example, you can take a photo of a landmark to add to your post or start a live broadcast.",
         "NSMicrophoneUsageDescription": "Allow Trips to access your microphone during live streaming so your followers can hear you describe your travel journey.",
@@ -66,6 +73,7 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
+      "@react-native-google-signin/google-signin",
       "./plugins/withCleartextTraffic.js",
       "./plugins/withNetworkSecurityConfig.js",
       "./plugins/withAppAuthRedirectScheme.js",
