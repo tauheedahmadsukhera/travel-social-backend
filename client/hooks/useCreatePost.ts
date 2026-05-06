@@ -173,12 +173,28 @@ export const useCreatePost = (params: any = {}) => {
 
       // Fetch address for current location
       let currentAddress = `GPS: ${center.lat.toFixed(4)}, ${center.lon.toFixed(4)}`;
+      let locationName = 'Current Location';
+      
       try {
         const addressRes = await mapService.reverseGeocode(center.lat, center.lon);
-        if (addressRes && addressRes.address) {
-          currentAddress = addressRes.address;
-        } else if (addressRes && addressRes.placeName) {
-          currentAddress = addressRes.placeName;
+        if (addressRes) {
+          if (addressRes.address) {
+            currentAddress = addressRes.address;
+            // Extract a clean name (exclude plus codes and use first part of address)
+            const parts = addressRes.address.split(',');
+            const firstPart = parts[0].trim();
+            // Simple check to skip plus codes (usually contain '+')
+            if (!firstPart.includes('+')) {
+              locationName = firstPart;
+            } else if (addressRes.city) {
+              locationName = addressRes.city;
+            } else if (parts.length > 1) {
+              locationName = parts[1].trim();
+            }
+          }
+          if (addressRes.placeName) {
+            locationName = addressRes.placeName;
+          }
         }
       } catch {}
 
@@ -199,7 +215,7 @@ export const useCreatePost = (params: any = {}) => {
       
       // Always add current GPS as an option
       options.push({
-        name: currentAddress.split(',')[0] || 'Current Location',
+        name: locationName,
         address: currentAddress,
         lat: center.lat,
         lon: center.lon,
