@@ -45,6 +45,7 @@ export {
   getRegions,
   fetchMessages,
   toggleUserPrivacy,
+  updatePost,
 } from './core';
 
 // Default categories

@@ -913,6 +913,11 @@ export async function createPost(
 
     const mediaUrls = [];
     for (const uri of mediaUris || []) {
+      // If it's already an uploaded image from our server/cloudinary, don't re-upload
+      if (uri.startsWith('http') && (uri.includes('cloudinary.com') || uri.includes(API_BASE_URL.replace('/api', '')))) {
+        mediaUrls.push(uri);
+        continue;
+      }
       const upload = await uploadMedia(uri, mediaType);
       if (!upload?.url) throw new Error(upload?.error || 'Upload failed');
       mediaUrls.push(upload.url);
@@ -1240,6 +1245,7 @@ export default {
   getLocationVisitCount,
   getAllPosts,
   createPost,
+  updatePost,
   getUserPosts,
   getFeedPosts,
   likePost,
@@ -1349,5 +1355,101 @@ export async function searchUsers(query: string, limit: number = 20) {
   } catch (error) {
     console.error('[searchUsers] Error:', error);
     return { success: false, data: [] };
+  }
+}
+
+export async function updatePost(
+  postId: string,
+  userId: string,
+  mediaUris: string[],
+  caption: string,
+  location?: string,
+  mediaType: 'image' | 'video' = 'image',
+  locationData?: any,
+  taggedUserIds?: string[],
+  category?: string,
+  hashtags?: string[],
+  mentions?: string[],
+  visibility: string = 'Everyone',
+  allowedFollowers: string[] = [],
+  postType: string = 'post',
+  thumbnailUrlRaw?: string,
+  aspectRatio?: number
+) {
+  try {
+    const normalizeLocationKey = (val: any) => String(val || '').trim().toLowerCase();
+    const uniqueLocationKeys = (keys: any[]) => {
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const k of Array.isArray(keys) ? keys : []) {
+        const n = normalizeLocationKey(k);
+        if (!n) continue;
+        if (seen.has(n)) continue;
+        seen.add(n);
+        out.push(n);
+      }
+      return out;
+    };
+
+    const buildLocationKeys = () => {
+      const keys: any[] = [];
+      if (locationData) {
+        keys.push(locationData.name, locationData.neighborhood, locationData.city, locationData.country, locationData.countryCode);
+        const addr = typeof locationData.address === 'string' ? locationData.address : '';
+        if (addr) {
+          const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+          if (parts.length >= 1) keys.push(parts[0]);
+          if (parts.length >= 2) keys.push(parts[1]);
+          if (parts.length >= 1) keys.push(parts[parts.length - 1]);
+        }
+      }
+      keys.push(location);
+      const normalized = uniqueLocationKeys(keys);
+      return uniqueLocationKeys(normalized);
+    };
+
+    const mediaUrls = [];
+    for (const uri of mediaUris || []) {
+      if (uri.startsWith('http') && (uri.includes('cloudinary.com') || uri.includes(API_BASE_URL.replace('/api', '')))) {
+        mediaUrls.push(uri);
+        continue;
+      }
+      const upload = await uploadMedia(uri, mediaType);
+      if (!upload?.url) throw new Error(upload?.error || 'Upload failed');
+      mediaUrls.push(upload.url);
+    }
+
+    const locationKeys = buildLocationKeys();
+
+    const payload: any = {
+      content: caption || ' ',
+      caption: caption || ' ',
+      location,
+      locationData,
+      locationKeys,
+      mediaType,
+      mediaUrls,
+      category,
+      hashtags,
+      mentions,
+      taggedUserIds,
+      visibility,
+      type: postType,
+      allowedFollowers: allowedFollowers.length > 0 ? allowedFollowers : undefined,
+      isPrivate: allowedFollowers.length > 0,
+      aspectRatio,
+    };
+
+    if (thumbnailUrlRaw) payload.thumbnailUrl = thumbnailUrlRaw;
+
+    const res = await apiService.patch(`/posts/${postId}`, payload);
+    if (!res || !res.success) {
+      throw new Error(res?.error || 'Update API returned failure');
+    }
+
+    return { success: true, postId };
+  } catch (err: any) {
+    console.error('[updatePost] ❌ Error:', err.message);
+    return { success: false, error: err.message };
   }
 }

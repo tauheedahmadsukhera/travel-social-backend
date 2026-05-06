@@ -10,7 +10,8 @@ import { useAppDialog } from '@/src/_components/AppDialogProvider';
 import { apiService } from '@/src/_services/apiService';
 import { getAuthenticatedUserId } from '../lib/currentUser';
 import { extractHashtags, trackHashtag } from '../lib/mentions';
-import { createPost, createStory, searchUsers, getCategories, DEFAULT_CATEGORIES, getPassportTickets } from '../lib/firebaseHelpers/index';
+import { createPost, updatePost, createStory, searchUsers, getCategories, DEFAULT_CATEGORIES, getPassportTickets } from '../lib/firebaseHelpers/index';
+import { getPostById } from '../lib/firebaseHelpers/post';
 import { feedEventEmitter } from '@/lib/feedEventEmitter';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
 import { getCachedData, setCachedData } from '../hooks/useOffline';
@@ -328,25 +329,49 @@ export const useCreatePost = (params: any = {}) => {
 
       const isVideo = isVideoUri(selectedImages[0], galleryAssets);
       
-      const res = await createPost(
-        authUserId,
-        selectedImages,
-        caption,
-        verifiedLocation?.name || location?.name || '',
-        isVideo ? 'video' : 'image',
-        verifiedLocation || location || undefined,
-        taggedUsers.map(u => u.uid),
-        selectedCategories.length > 0 ? selectedCategories[0].name : undefined,
-        hashtags,
-        [], // mentions
-        visibility,
-        selectedGroupId ? [selectedGroupId] : [],
-        postType === 'STORY' ? 'story' : 'post'
-      );
+      let res;
+      if (params.editPostId) {
+        res = await updatePost(
+          params.editPostId as string,
+          authUserId,
+          selectedImages,
+          caption,
+          verifiedLocation?.name || location?.name || '',
+          isVideo ? 'video' : 'image',
+          verifiedLocation || location || undefined,
+          taggedUsers.map(u => u.uid),
+          selectedCategories.length > 0 ? selectedCategories[0].name : undefined,
+          hashtags,
+          [], // mentions
+          visibility,
+          selectedGroupId ? [selectedGroupId] : [],
+          postType === 'STORY' ? 'story' : 'post'
+        );
+      } else {
+        res = await createPost(
+          authUserId,
+          selectedImages,
+          caption,
+          verifiedLocation?.name || location?.name || '',
+          isVideo ? 'video' : 'image',
+          verifiedLocation || location || undefined,
+          taggedUsers.map(u => u.uid),
+          selectedCategories.length > 0 ? selectedCategories[0].name : undefined,
+          hashtags,
+          [], // mentions
+          visibility,
+          selectedGroupId ? [selectedGroupId] : [],
+          postType === 'STORY' ? 'story' : 'post'
+        );
+      }
 
       if (res && res.success) {
         hapticSuccess();
-        feedEventEmitter.emitFeedUpdate({ type: 'POST_CREATED', postId: res.postId });
+        if (params.editPostId) {
+          feedEventEmitter.emitFeedUpdate({ type: 'POST_UPDATED', postId: params.editPostId as string });
+        } else {
+          feedEventEmitter.emitFeedUpdate({ type: 'POST_CREATED', postId: res.postId });
+        }
         router.replace('/(tabs)/home');
       } else {
         throw new Error('Failed to create post');
@@ -364,10 +389,54 @@ export const useCreatePost = (params: any = {}) => {
     }
   };
 
+  const loadPostForEditing = async (postId: string) => {
+    setLoading(true);
+    try {
+      const res = await getPostById(postId);
+      const post = res?.data || res;
+      if (post && (res?.success !== false)) {
+        setCaption(post.caption || post.content || '');
+        setSelectedImages(post.mediaUrls || post.images || []);
+        if (post.hashtags && Array.isArray(post.hashtags)) setHashtags(post.hashtags);
+        if (post.locationData) {
+          setLocation({
+            name: post.locationData.name || post.location || '',
+            address: post.locationData.address || '',
+            lat: post.locationData.lat || 0,
+            lon: post.locationData.lon || 0,
+            placeId: post.locationData.placeId,
+            verified: post.locationData.verified,
+          });
+          if (post.locationData.verified) {
+            setVerifiedLocation({
+              name: post.locationData.name || post.location || '',
+              address: post.locationData.address || '',
+              lat: post.locationData.lat || 0,
+              lon: post.locationData.lon || 0,
+              placeId: post.locationData.placeId,
+              verified: true,
+            });
+          }
+        } else if (post.location) {
+          setLocation({ name: post.location, address: '', lat: 0, lon: 0 });
+        }
+        if (post.visibility) setVisibility(post.visibility);
+      }
+    } catch (e) {
+      console.error('[loadPostForEditing] Error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => { 
     loadGalleryAssets(); 
     fetchNearbyVerifiedLocations();
-  }, []);
+    
+    if (params.editPostId) {
+      loadPostForEditing(params.editPostId as string);
+    }
+  }, [params.editPostId]);
 
   return {
     step, setStep, loading, caption, setCaption, hashtags, setHashtags,
