@@ -127,11 +127,15 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
                   flexDirection: 'row', 
                   alignItems: 'center',
                   borderWidth: 1,
-                  borderColor: '#90CAF9'
+                  borderColor: '#90CAF9',
+                  maxWidth: '95%'
                 }}>
                   <Feather name="check-circle" size={14} color="#1976D2" style={{ marginRight: 6 }} />
-                  <Text style={{ color: '#1976D2', fontSize: 14, fontWeight: '600' }}>
-                    {verifiedLocation.name || verifiedLocation.placeName || 'Verified Location'}
+                  <Text 
+                    style={{ color: '#1976D2', fontSize: 14, fontWeight: '600' }}
+                    numberOfLines={1}
+                  >
+                    {verifiedLocation.name || verifiedLocation.placeName || (verifiedLocation.address ? verifiedLocation.address.split(',')[0] : 'Verified Location')}
                   </Text>
                 </View>
               </View>
