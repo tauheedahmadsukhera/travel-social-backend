@@ -32,12 +32,14 @@ import { getKeyboardOffset } from '../../utils/responsive';
 import { useUser } from './UserContext';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'expo-router';
+import { useStories } from '../../hooks/useStories';
+import StoryProgressBars from './stories/StoryProgressBars';
+import StoryCommentSection from './stories/StoryCommentSection';
+import { useAppDialog } from '@/src/_components/AppDialogProvider';
 import ShareModal from './ShareModal';
 import HighlightSelectionModal from './HighlightSelectionModal';
-import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { storyForStoriesViewer } from '../../lib/storyViewer';
 import { highlightManager } from '../../lib/highlightManager';
-import { useAppDialog } from '@/src/_components/AppDialogProvider';
 
 const { width, height } = Dimensions.get('window');
 
@@ -96,46 +98,31 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
   const insets = useSafeAreaInsets();
   const { showSuccess } = useAppDialog();
   const paddingTop = Platform.OS === 'ios' ? Math.max(insets.top, 50) : Math.max(insets.top, 50);
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [progress, setProgress] = useState(0);
-  const progressSv = useSharedValue(0);
-  const currentIndexRef = useRef(initialIndex);
-  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
-  const [imageLoading, setImageLoading] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
+  const {
+    currentIndex,
+    setCurrentIndex,
+    isPaused,
+    setIsPaused,
+    imageLoading,
+    setImageLoading,
+    videoDuration,
+    setVideoDuration,
+    progressSv,
+    goToNext,
+    goToPrevious
+  } = useStories(stories, initialIndex, onClose);
+
   const [showComments, setShowComments] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [commentPanY, setCommentPanY] = useState(0);
-  const commentPanResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
-    onPanResponderMove: (_, gestureState) => {
-      setCommentPanY(gestureState.dy);
-    },
-    onPanResponderRelease: (_, gestureState) => {
-      if (gestureState.dy > 40) {
-        setShowComments(false);
-      }
-      setCommentPanY(0);
-    },
-  });
   const [commentText, setCommentText] = useState('');
-  const [replyToId, setReplyToId] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
   const [localStories, setLocalStories] = useState(stories);
   const currentStory = localStories[currentIndex];
-  const [videoDuration, setVideoDuration] = useState(5000); // ms
   const videoRef = useRef<Video>(null);
-  const userContextUser = useUser();
-  // Get current user from AsyncStorage (token-based auth) instead of UserContext
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [latestAvatar, setLatestAvatar] = useState<string | null>(null);
-  const [editingComment, setEditingComment] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
   const [likedComments, setLikedComments] = useState<{ [key: string]: boolean }>({});
   const [commentLikesCount, setCommentLikesCount] = useState<{ [key: string]: number }>({});
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'success'>('idle');
   const [showHighlightModal, setShowHighlightModal] = useState(false);
   const [showNewHighlightModal, setShowNewHighlightModal] = useState(false);
   const [newHighlightName, setNewHighlightName] = useState('');
@@ -390,51 +377,7 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
     }
   }, [currentIndex, localStories, currentUser?.uid]);
 
-  useEffect(() => {
-    const isVideo = currentStory?.videoUrl || currentStory?.mediaType === 'video';
-    const duration = isVideo ? videoDuration : 5000;
-
-    if (isPaused || showComments || imageLoading) {
-      cancelAnimation(progressSv);
-      return;
-    }
-
-    // Restart progress for the current story.
-    cancelAnimation(progressSv);
-    progressSv.value = 0;
-    setProgress(0);
-
-    progressSv.value = withTiming(
-      100,
-      { duration: Math.max(300, duration), easing: Easing.linear },
-      (finished) => {
-        if (!finished) return;
-        const idx = currentIndexRef.current;
-        runOnJS(setProgress)(100);
-        if (idx < localStories.length - 1) {
-          runOnJS(setCurrentIndex)(idx + 1);
-          runOnJS(setImageLoading)(true);
-          runOnJS(setVideoDuration)(5000);
-          runOnJS(setProgress)(0);
-        }
-      }
-    );
-
-    return () => {
-      cancelAnimation(progressSv);
-    };
-  }, [currentIndex, localStories.length, isPaused, showComments, imageLoading, videoDuration, currentStory?.id]);
-
-  const progressFillStyle = useAnimatedStyle(() => {
-    return { width: `${progressSv.value}%` } as any;
-  });
-
-  // Call onClose when story reaches end
-  useEffect(() => {
-    if (progress >= 100 && currentIndex >= localStories.length - 1) {
-      onClose();
-    }
-  }, [progress, currentIndex, localStories.length, onClose]);
+  // Navigation and progress are handled by useStories hook
 
   const currentStoryAvatarUrl = normalizeRemoteUrl(currentStory?.userAvatar) || DEFAULT_AVATAR_URL;
   const currentStoryImageUrl = normalizeRemoteUrl(currentStory?.imageUrl);
@@ -558,25 +501,7 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
     }));
   };
 
-  const goToPrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setProgress(0);
-      setImageLoading(true);
-      setShowComments(false);
-    }
-  };
-
-  const goToNext = () => {
-    if (currentIndex < localStories.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setProgress(0);
-      setImageLoading(true);
-      setShowComments(false);
-    } else {
-      onClose();
-    }
-  };
+  // Navigation is handled by useStories hook
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -720,23 +645,12 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
         {/* Absolute Top Overlay (Progress & Header) */}
         <View style={[viewerStyles.topOverlay, { paddingTop: paddingTop }]}>
           <LinearGradient colors={['rgba(0,0,0,0.7)', 'transparent']} style={StyleSheet.absoluteFillObject} pointerEvents="none" />
-          {/* Progress Bars */}
-          <View style={viewerStyles.progressContainer}>
-            {localStories.map((_, index) => (
-              <View key={index} style={viewerStyles.progressBarBg}>
-                {index === currentIndex ? (
-                  <Animated.View style={[viewerStyles.progressBarFill, progressFillStyle]} />
-                ) : (
-                  <View
-                    style={[
-                      viewerStyles.progressBarFill,
-                      { width: index < currentIndex ? '100%' : '0%' }
-                    ]}
-                  />
-                )}
-              </View>
-            ))}
-          </View>
+          
+          <StoryProgressBars 
+            storiesCount={localStories.length}
+            currentIndex={currentIndex}
+            progressSv={progressSv}
+          />
 
           {/* Header */}
           <View style={viewerStyles.header}>
@@ -857,45 +771,15 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
         </View>
 
         {/* Comments Modal */}
-        <Modal visible={showComments} animationType="slide" transparent={true} onRequestClose={() => setShowComments(false)}>
-           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                 <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowComments(false)} />
-                 <View style={viewerStyles.commentsModal}>
-                    <View style={viewerStyles.modalHandle} />
-                    <Text style={viewerStyles.modalTitle}>Comments</Text>
-                    <FlatList
-                      data={currentStory.comments || []}
-                      keyExtractor={(item) => item.id}
-                      renderItem={({ item }) => (
-                        <View style={viewerStyles.commentItem}>
-                           <Image source={{ uri: item.userAvatar || DEFAULT_AVATAR_URL }} style={viewerStyles.commentAvatar} />
-                           <View style={{ flex: 1 }}>
-                              <Text style={viewerStyles.commentUser}>{item.userName}</Text>
-                              <Text style={viewerStyles.commentText}>{item.text}</Text>
-                              <Text style={viewerStyles.commentMeta}>{getTimeAgo(item.createdAt)}</Text>
-                           </View>
-                        </View>
-                      )}
-                      ListEmptyComponent={<Text style={viewerStyles.emptyText}>No comments yet</Text>}
-                      style={{ padding: 16 }}
-                    />
-                    <View style={viewerStyles.inputArea}>
-                       <TextInput
-                         value={commentText}
-                         onChangeText={setCommentText}
-                         placeholder="Add a comment..."
-                         placeholderTextColor="#999"
-                         style={viewerStyles.textInput}
-                       />
-                       <TouchableOpacity onPress={handleComment} disabled={!commentText.trim()}>
-                          <Feather name="send" size={22} color={commentText.trim() ? "#007aff" : "#999"} />
-                       </TouchableOpacity>
-                    </View>
-                 </View>
-              </View>
-           </KeyboardAvoidingView>
-        </Modal>
+        <StoryCommentSection 
+          visible={showComments}
+          onClose={() => setShowComments(false)}
+          comments={currentStory.comments || []}
+          commentText={commentText}
+          setCommentText={setCommentText}
+          onSendComment={handleComment}
+          getTimeAgo={getTimeAgo}
+        />
 
         {/* Highlight Selection Modal */}
         <HighlightSelectionModal
@@ -1000,7 +884,7 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
           visible={showShareModal}
           currentUserId={currentUser?.uid || ''}
           onClose={() => { setShowShareModal(false); setIsPaused(false); }}
-          onSend={async (userIds) => {
+          onSend={async (userIds: string[]) => {
             const uid = currentUser?.uid || currentUser?.id;
             if (!uid || userIds.length === 0) return;
             setShowShareModal(false);

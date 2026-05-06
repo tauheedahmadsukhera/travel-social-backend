@@ -13,11 +13,12 @@ interface MediaPickerProps {
   onCamera: () => void;
   onLoadMore: () => void;
   onNext: () => void;
+  onBack: () => void;
   canNext: boolean;
   loading: boolean;
 }
 
-const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSelect, onCamera, onLoadMore, onNext, canNext, loading }) => {
+const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSelect, onCamera, onLoadMore, onNext, onBack, canNext, loading }) => {
   const renderItem = ({ item }: { item: GalleryAsset }) => {
     const isSelected = selectedImages.includes(item.uri);
     const index = selectedImages.indexOf(item.uri);
@@ -50,17 +51,22 @@ const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSel
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#efefef' }}>
-        <TouchableOpacity onPress={onCamera} style={{ backgroundColor: '#f0f0f0', padding: 8, borderRadius: 20 }}>
-          <Feather name="camera" size={20} color="#000" />
+        <TouchableOpacity onPress={onBack} style={{ backgroundColor: '#f0f0f0', padding: 8, borderRadius: 20 }}>
+          <Feather name="x" size={20} color="#000" />
         </TouchableOpacity>
         <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Recent</Text>
-        <TouchableOpacity 
-          onPress={onNext} 
-          disabled={!canNext}
-          style={{ opacity: canNext ? 1 : 0.3 }}
-        >
-          <Text style={{ color: '#0095f6', fontWeight: 'bold', fontSize: 16 }}>Next</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={onCamera} style={{ backgroundColor: '#f0f0f0', padding: 8, borderRadius: 20, marginRight: 15 }}>
+            <Feather name="camera" size={20} color="#000" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={onNext} 
+            disabled={!canNext}
+            style={{ opacity: canNext ? 1 : 0.3 }}
+          >
+            <Text style={{ color: '#0095f6', fontWeight: 'bold', fontSize: 16 }}>Next</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <FlatList
         data={assets}

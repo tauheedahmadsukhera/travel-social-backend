@@ -2,7 +2,7 @@ import { DEFAULT_AVATAR_URL } from '../lib/api';
 ﻿import { Image as ExpoImage } from 'expo-image';
 import * as Location from 'expo-location';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Dimensions, FlatList, KeyboardAvoidingView, PermissionsAndroid, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,14 @@ import { PostLocationModal } from '@/src/_components/PostLocationModal';
 import { useUser } from '@/src/_components/UserContext';
 import PostCard from '@/src/_components/PostCard';
 
-// ... existing code ...
+let MapView: any = null;
+let Marker: any = null;
+if (Platform.OS !== 'web') {
+  const RNMaps = require('react-native-maps');
+  MapView = RNMaps.default ?? RNMaps;
+  Marker = RNMaps.Marker;
+}
+
 
 import { getAllPosts } from '../lib/firebaseHelpers';
 import { apiService } from '@/src/_services/apiService';
@@ -26,13 +33,7 @@ type Region = {
   longitudeDelta: number;
 };
 
-let MapView: any = null;
-let Marker: any = null;
-if (Platform.OS !== 'web') {
-  const RNMaps = require('react-native-maps');
-  MapView = RNMaps.default ?? RNMaps;
-  Marker = RNMaps.Marker;
-}
+import { PostMarker, LiveStreamMarker } from '@/src/_components/map/MapMarkers';
 
 const IMAGE_PLACEHOLDER = 'L5H2EC=PM+yV0g-mq.wG9c010J}I';
 
@@ -466,133 +467,39 @@ export default function MapScreen() {
     return isValidLatLon(lat, lon) && likes >= 100;
   });
 
-  // Group posts by location for map markers
-  const locationGroups: { [key: string]: PostType[] } = {};
+  // Group posts by location for map markers - Memoized for performance
+  const limitedLocationGroups = useMemo(() => {
+    const groups: { [key: string]: PostType[] } = {};
+    (Array.isArray(filteredPosts) ? filteredPosts : []).forEach((p) => {
+      let lat = p.lat ?? (typeof p.location !== 'string' ? p.location?.lat : undefined);
+      let lon = p.lon ?? (typeof p.location !== 'string' ? p.location?.lon : undefined);
+      if ((lat == null || lon == null) && typeof p.location === 'object' && p.location) {
+        lat = p.location.lat;
+        lon = p.location.lon;
+      }
 
-  (Array.isArray(filteredPosts) ? filteredPosts : []).forEach((p) => {
-    let lat = p.lat ?? (typeof p.location !== 'string' ? p.location?.lat : undefined);
-    let lon = p.lon ?? (typeof p.location !== 'string' ? p.location?.lon : undefined);
-    if ((lat == null || lon == null) && typeof p.location === 'object' && p.location) {
-      lat = p.location.lat;
-      lon = p.location.lon;
-    }
+      const imageUrl = p.imageUrl || (Array.isArray((p as any).mediaUrls) && (p as any).mediaUrls[0]) || (Array.isArray(p.imageUrls) && p.imageUrls[0]) || DEFAULT_AVATAR_URL;
+      if (isValidLatLon(lat, lon) && typeof imageUrl === 'string' && imageUrl) {
+        const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push({ ...p, lat: Number(lat), lon: Number(lon), imageUrl });
+        groups[key] = groups[key]
+          .sort((a, b) => ((b.likesCount ?? b.likes ?? 0) - (a.likesCount ?? a.likes ?? 0)))
+          .slice(0, 5);
+      }
+    });
 
-    const imageUrl = p.imageUrl || (Array.isArray((p as any).mediaUrls) && (p as any).mediaUrls[0]) || (Array.isArray(p.imageUrls) && p.imageUrls[0]) || DEFAULT_AVATAR_URL;
-    if (isValidLatLon(lat, lon) && typeof imageUrl === 'string' && imageUrl) {
-      const key = `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
-      if (!locationGroups[key]) locationGroups[key] = [];
-      locationGroups[key].push({ ...p, lat: Number(lat), lon: Number(lon), imageUrl });
-      locationGroups[key] = locationGroups[key]
-        .sort((a, b) => ((b.likesCount ?? b.likes ?? 0) - (a.likesCount ?? a.likes ?? 0)))
-        .slice(0, 5);
-    }
-  });
-  const limitedLocationGroups = Object.entries(locationGroups)
-    .slice(0, 50)
-    .reduce((acc, [key, val]) => {
-      acc[key] = val;
-      return acc;
-    }, {} as typeof locationGroups);
+    return Object.entries(groups)
+      .slice(0, 50)
+      .reduce((acc, [key, val]) => {
+        acc[key] = val;
+        return acc;
+      }, {} as typeof groups);
+  }, [filteredPosts, isValidLatLon]);
 
   const validRegion = isValidRegion(mapRegion);
 
-  const PostMarker: React.FC<{ post: PostType; postsAtLocation: PostType[] }> = ({ post, postsAtLocation }) => {
-    const [tracks, setTracks] = useState(true);
-    const [imgLoaded, setImgLoaded] = useState(false);
-    const [avatarLoaded, setAvatarLoaded] = useState(false);
-
-    useEffect(() => {
-      const timeout = setTimeout(() => setTracks(false), 20000);
-      return () => clearTimeout(timeout);
-    }, []);
-
-    useEffect(() => {
-      if (imgLoaded && avatarLoaded) setTracks(false);
-    }, [imgLoaded, avatarLoaded]);
-
-    const imageUrl = post.imageUrl || (Array.isArray((post as any).mediaUrls) && (post as any).mediaUrls[0]) || (Array.isArray(post.imageUrls) && post.imageUrls[0]) || DEFAULT_AVATAR_URL;
-    const avatarUrl = post.userAvatar || DEFAULT_AVATAR_URL;
-
-    const markerImageUrl = getOptimizedImageUrl(imageUrl, 'map-marker');
-    const markerAvatarUrl = getOptimizedImageUrl(avatarUrl, 'thumbnail');
-
-    return Marker ? (
-      <Marker
-        key={`post-${post.id}`}
-        coordinate={{ latitude: Number(post.lat), longitude: Number(post.lon) }}
-        tracksViewChanges={tracks}
-        onPress={() => setSelectedPosts(postsAtLocation)}
-        anchor={{ x: 0.5, y: 0.5 }}
-      >
-        <View style={styles.markerContainer}>
-          <View style={styles.postImageWrapper}>
-            <ExpoImage
-              source={{ uri: markerImageUrl }}
-              style={styles.postImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              placeholder={IMAGE_PLACEHOLDER}
-              transition={150}
-              onLoadEnd={() => setImgLoaded(true)}
-              onError={() => setImgLoaded(true)}
-            />
-          </View>
-          <View style={styles.postAvatarOutside}>
-            <ExpoImage
-              source={{ uri: markerAvatarUrl }}
-              style={styles.postAvatarImgFixed}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              placeholder={IMAGE_PLACEHOLDER}
-              transition={120}
-              onLoadEnd={() => setAvatarLoaded(true)}
-              onError={() => setAvatarLoaded(true)}
-            />
-          </View>
-        </View>
-      </Marker>
-    ) : null;
-  };
-
-  const LiveStreamMarker = ({ stream }: { stream: LiveStream }) => {
-    if (!Marker || !stream.location) return null;
-    return (
-      <Marker
-        key={`live-${stream.id}`}
-        coordinate={{ latitude: stream.location.latitude, longitude: stream.location.longitude }}
-        anchor={{ x: 0.5, y: 0.5 }}
-        onPress={() => {
-          router.push({
-            pathname: '/watch-live',
-            params: {
-              streamId: (stream as any)?.id || (stream as any)?._id,
-              roomId: (stream as any)?.roomId || stream.channelName || (stream as any)?.id,
-              channelName: stream.channelName || (stream as any)?.id,
-              title: (stream as any)?.title,
-              hostName: (stream as any)?.userName,
-              hostAvatar: (stream as any)?.userAvatar,
-            }
-          });
-        }}
-      >
-        <View style={styles.liveMarkerContainer}>
-          <View style={styles.liveBadgeNew}>
-            <Text style={styles.liveText}>LIVE</Text>
-          </View>
-          <View style={styles.liveAvatarOutside}>
-            <ExpoImage
-              source={{ uri: stream.userAvatar || DEFAULT_AVATAR_URL }}
-              style={styles.liveAvatarNew}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              placeholder={IMAGE_PLACEHOLDER}
-              transition={120}
-            />
-          </View>
-        </View>
-      </Marker>
-    );
-  };
+  // Markers moved to separate components
 
   return (
     <View style={styles.container}>
@@ -613,14 +520,10 @@ export default function MapScreen() {
               : DEFAULT_REGION
             }
           >
-            {/* Live stream markers - only show LIVE pill, no distance */}
-            {safeLiveStreams.map((stream) => (
-              <LiveStreamMarker key={stream.id} stream={stream} />
-            ))}
-            {/* Post markers */}
             {Object.entries(limitedLocationGroups).map(([key, postsAtLocation]) => {
               try {
                 const safePostsAtLocation = Array.isArray(postsAtLocation) ? postsAtLocation : [];
+                if (safePostsAtLocation.length === 0) return null;
                 const post = safePostsAtLocation[0];
                 if (
                   post &&
@@ -628,7 +531,14 @@ export default function MapScreen() {
                   typeof post.imageUrl === 'string' && post.imageUrl &&
                   isFinite(Number(post.lat)) && isFinite(Number(post.lon))
                 ) {
-                  return <PostMarker key={`post-${key}`} post={post as any} postsAtLocation={safePostsAtLocation as any} />;
+                  return (
+                    <PostMarker 
+                      key={`post-${key}`} 
+                      post={post as any} 
+                      postsAtLocation={safePostsAtLocation as any} 
+                      onSelect={setSelectedPosts}
+                    />
+                  );
                 }
               } catch (err) {
                 console.error('Error rendering marker:', err, key, postsAtLocation);

@@ -37,7 +37,8 @@ export default function CreatePostScreen() {
     verifiedSearch, setVerifiedSearch, verifiedResults, loadingVerifiedResults, verifiedOptions, verifiedCenter,
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, isEditMode,
-    galleryEndCursor, handleCamera, loadGalleryAssets, handleVerifiedSearch
+    galleryEndCursor, handleCamera, loadGalleryAssets, handleVerifiedSearch,
+    fetchNearbyVerifiedLocations
   } = useCreatePost(params);
 
   // Modal visibility states
@@ -77,6 +78,7 @@ export default function CreatePostScreen() {
             hapticLight();
             setStep('details');
           }}
+          onBack={() => router.back()}
           canNext={(selectedImages || []).length > 0}
           loading={loadingGallery}
         />
@@ -121,7 +123,10 @@ export default function CreatePostScreen() {
                 locationName={location?.name}
                 onOpenLocation={() => setShowLocationModal(true)}
                 verifiedLocation={verifiedLocation}
-                onOpenVerifiedLocation={() => setShowVerifiedModal(true)}
+                onOpenVerifiedLocation={() => {
+                  setShowVerifiedModal(true);
+                  fetchNearbyVerifiedLocations();
+                }}
                 taggedUsers={taggedUsers}
                 onOpenTagPeople={() => setShowTagModal(true)}
                 onRemoveTaggedUser={(uid) => setTaggedUsers(taggedUsers.filter(u => u.uid !== uid))}

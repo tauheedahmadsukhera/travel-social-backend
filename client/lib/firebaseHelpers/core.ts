@@ -496,8 +496,8 @@ export async function getPassportTickets(userId: string) {
 }
 
 // Chat helpers
-export async function fetchMessages(conversationId: string) {
-  return apiService.getMessages(conversationId);
+export async function fetchMessages(conversationId: string, params?: any) {
+  return apiService.getMessages(conversationId, params);
 }
 
 export async function sendMessage(conversationId: string, sender: string, text: string, recipientId?: string) {

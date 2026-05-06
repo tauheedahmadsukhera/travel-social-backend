@@ -66,7 +66,7 @@ const PostActions: React.FC<PostActionsProps> = ({
             <Text style={styles.currentEmoji}>{displayEmoji}</Text>
           )}
           <TouchableOpacity onPress={onReactionPress} style={styles.starTrigger}>
-            <Ionicons name="star" size={22} color="#FFD700" />
+            <Ionicons name="star" size={15} color="#FFD700" />
           </TouchableOpacity>
           <Text style={styles.reactionTotal}>{reactions?.length || 0}</Text>
         </View>

@@ -1,11 +1,11 @@
 import React from 'react';
-import { TouchableOpacity, View, StyleSheet, Dimensions } from 'react-native';
+import { TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
-import { hapticLight } from '@/lib/haptics';
+import { getVideoThumbnailUrl } from '../../../lib/imageHelpers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GRID_SIZE = SCREEN_WIDTH / 3;
 
 interface ProfileGridItemProps {
   item: any;
@@ -16,113 +16,82 @@ interface ProfileGridItemProps {
   DEFAULT_IMAGE_URL: string;
 }
 
-const ProfileGridItem: React.FC<ProfileGridItemProps> = ({
+export const ProfileGridItem = React.memo(({
   item,
   index,
   onPress,
   normalizeMediaUrl,
   isVideoUrl,
   DEFAULT_IMAGE_URL
-}) => {
-  const rawMedia = [
-    item?.mediaUrls,
-    item?.media,
-    item?.imageUrls,
-    item?.videoUrls,
-    item?.images,
-    item?.videos
-  ].find(arr => Array.isArray(arr) && arr.length > 0);
-
-  const singleUrl = item?.imageUrl || item?.url || item?.mediaUrl || item?.videoUrl || item?.image || item?.video || (typeof item?.media === 'string' ? item.media : null);
+}: ProfileGridItemProps) => {
+  const isVideo = item.mediaType === 'video' || isVideoUrl(item.imageUrl || item.mediaUrl);
+  const mediaUrl = item.thumbnailUrl || 
+                   (isVideo ? getVideoThumbnailUrl(item.imageUrl || item.mediaUrl || '') : (item.imageUrl || (Array.isArray(item.mediaUrls) && item.mediaUrls[0]) || (Array.isArray(item.imageUrls) && item.imageUrls[0]))) || 
+                   '';
   
-  let firstMedia = '';
-  if (Array.isArray(rawMedia) && rawMedia.length > 0) {
-    const first = rawMedia[0];
-    firstMedia = typeof first === 'string' ? first : (first?.url || first?.uri || first?.secure_url || '');
-  } else if (typeof singleUrl === 'string') {
-    firstMedia = singleUrl;
-  }
-
-  const normalizedFirstMedia = normalizeMediaUrl(firstMedia);
-  const isVideo = isVideoUrl(normalizedFirstMedia) || item.postType === 'video' || item.mediaType === 'video' || !!item.videoUrl;
-  const thumbnailUrl = normalizeMediaUrl(item.thumbnailUrl || item.imageUrl || firstMedia);
-  const hasThumbnailImage = !!thumbnailUrl && !isVideoUrl(thumbnailUrl);
+  const normalizedUrl = normalizeMediaUrl(mediaUrl) || DEFAULT_IMAGE_URL;
 
   return (
     <TouchableOpacity
       style={styles.gridItem}
+      onPress={() => onPress(item, index)}
       activeOpacity={0.8}
-      onPress={() => {
-        hapticLight();
-        onPress(item, index);
-      }}
     >
-      {isVideo && !hasThumbnailImage ? (
-        <View style={styles.videoContainer}>
-          <Video
-            source={{ uri: normalizedFirstMedia }}
-            style={styles.video}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay={false}
-            isMuted={true}
-            useNativeControls={false}
-          />
-          <View style={styles.playIconOverlay}>
-            <Ionicons name="play" size={24} color="rgba(255,255,255,0.6)" />
-          </View>
-        </View>
-      ) : (
-        <ExpoImage
-          source={{ uri: hasThumbnailImage ? thumbnailUrl : (isVideo ? '' : (normalizedFirstMedia || DEFAULT_IMAGE_URL)) }}
-          style={styles.image}
-          contentFit="cover"
-          transition={0}
+      <ExpoImage
+        source={{ uri: normalizedUrl }}
+        style={styles.gridImage}
+        contentFit="cover"
+        transition={150}
+        cachePolicy="memory-disk"
+      />
+      {isVideo && (
+        <Ionicons
+          name="play-circle-outline"
+          size={24}
+          color="#fff"
+          style={styles.videoIcon}
         />
       )}
-      {isVideo && hasThumbnailImage && (
-        <View style={styles.playIconSmall}>
-          <Ionicons name="play" size={14} color="#fff" />
-        </View>
-      )}
+      {(Array.isArray(item.imageUrls) && item.imageUrls.length > 1) || 
+       (Array.isArray(item.mediaUrls) && item.mediaUrls.length > 1) ? (
+        <Ionicons
+          name="copy-outline"
+          size={18}
+          color="#fff"
+          style={styles.multiIcon}
+        />
+      ) : null}
     </TouchableOpacity>
   );
-};
+});
 
 const styles = StyleSheet.create({
   gridItem: {
-    width: SCREEN_WIDTH / 3,
-    aspectRatio: 1,
-    padding: 1,
+    width: GRID_SIZE,
+    height: GRID_SIZE,
+    borderWidth: 0.5,
+    borderColor: '#fff',
   },
-  videoContainer: {
+  gridImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#111',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
   },
-  video: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-  },
-  playIconOverlay: {
-    zIndex: 1,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#eee',
-  },
-  playIconSmall: {
+  videoIcon: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    padding: 4,
-    borderRadius: 12,
-  }
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+  },
+  multiIcon: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+  },
 });
-
-export default React.memo(ProfileGridItem);

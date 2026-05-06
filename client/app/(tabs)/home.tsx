@@ -174,9 +174,11 @@ export default function Home() {
     const locationFilter = params.location as string;
     const selectedPostId = params.postId as string;
 
+    let result = posts;
+
     if (locationFilter) {
       const key = String(locationFilter || '').trim().toLowerCase();
-      const locationPosts = posts.filter((p: any) => {
+      result = posts.filter((p: any) => {
         const pLoc = typeof p.location === 'object' ? p.location?.name : p.location;
         if ((pLoc || '').toLowerCase() === key) return true;
         const keys = Array.isArray(p?.locationKeys) ? p.locationKeys : [];
@@ -188,37 +190,18 @@ export default function Home() {
       });
 
       if (selectedPostId) {
-        const selected = locationPosts.find((p: any) => p.id === selectedPostId);
-        const others = locationPosts.filter((p: any) => p.id !== selectedPostId);
-        return selected ? [selected, ...others] : others;
+        const selected = result.find((p: any) => p.id === selectedPostId);
+        const others = result.filter((p: any) => p.id !== selectedPostId);
+        result = selected ? [selected, ...others] : others;
       }
-      return locationPosts;
     }
 
     if (filter) {
-      return posts.filter((p: any) => p.category?.toLowerCase() === filter.toLowerCase());
+      result = result.filter((p: any) => p.category?.toLowerCase() === filter.toLowerCase());
     }
 
-    return posts;
+    return result;
   }, [posts, filter, params.location, params.postId]);
-
-  const privacyFiltered = useMemo(() => {
-    if (!posts || posts.length === 0) return [];
-    const viewerId = currentUserId ? String(currentUserId) : undefined;
-    
-    if (!viewerId) return filteredRaw.filter(post => !post.isPrivate);
-
-    return filteredRaw.filter(post => {
-      const authorId = String(post.userId?._id || post.userId || '');
-      if (!authorId) return false;
-      if (authorId === viewerId) return true;
-      if (!post.isPrivate) return true;
-      if (post.isPrivate && Array.isArray(post.allowedFollowers)) {
-        return post.allowedFollowers.some((id: any) => String(id) === viewerId);
-      }
-      return false;
-    });
-  }, [filteredRaw, currentUserId, posts]);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -265,7 +248,7 @@ export default function Home() {
     </View>
   ), []);
 
-  const showInitialSkeleton = loading && privacyFiltered.length === 0;
+  const showInitialSkeleton = loading && filteredRaw.length === 0;
   const skeletonItems = useMemo(() => Array.from({ length: 4 }, (_, i) => ({ key: `sk-${i}` })), []);
 
   const listHeader = useMemo(() => (
@@ -329,7 +312,7 @@ export default function Home() {
       {showBanner && <OfflineBanner text="You’re offline — showing saved feed" style={{ position: 'absolute', top: 8, left: 16, right: 16, zIndex: 500 }} />}
       <FlashList
         ref={listRef}
-        data={showInitialSkeleton ? skeletonItems : privacyFiltered}
+        data={showInitialSkeleton ? skeletonItems : filteredRaw}
         renderItem={showInitialSkeleton ? (renderSkeletonItem as any) : renderPostItem}
         keyExtractor={(item: any, index: number) => showInitialSkeleton ? String(item?.key || `sk-${index}`) : keyExtractor(item)}
         ListHeaderComponent={listHeader}

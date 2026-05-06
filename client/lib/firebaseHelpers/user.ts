@@ -169,18 +169,12 @@ export async function searchUsers(queryText: string, resultLimit: number = 20) {
           uid: normalizedUid,
           firebaseUid: u?.firebaseUid || (typeof u?.uid === 'string' && u.uid.length > 0 ? u.uid : undefined),
           displayName: u?.displayName || u?.name || u?.username || u?.email?.split?.('@')?.[0] || 'User',
+          username: u?.username || '',
           photoURL: u?.photoURL || u?.avatar || null,
         };
       });
     }
 
-    if (queryText.trim().length > 0) {
-      const searchLower = queryText.toLowerCase();
-      results = results.filter((user: any) =>
-        (user.displayName || '').toLowerCase().includes(searchLower) ||
-        (user.email || '').toLowerCase().includes(searchLower)
-      ).slice(0, resultLimit);
-    }
     return { success: true, data: results };
   } catch (error: any) {
     return { success: false, error: error.message, data: [] };

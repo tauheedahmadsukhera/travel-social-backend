@@ -105,7 +105,7 @@ export const useCreatePost = (params: any = {}) => {
     if (after) setLoadingGallery(true);
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted' && status !== 'limited') return;
       const page = await MediaLibrary.getAssetsAsync({
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
@@ -445,13 +445,43 @@ export const useCreatePost = (params: any = {}) => {
   };
 
   useEffect(() => { 
-    loadGalleryAssets(); 
-    fetchNearbyVerifiedLocations();
+    // Initial load for creating a new post: we need the gallery
+    if (!params.editPostId && step === 'picker') {
+      loadGalleryAssets();
+    }
     
+    // Initial load for editing: just fetch the post data
     if (params.editPostId) {
       loadPostForEditing(params.editPostId as string);
     }
-  }, [params.editPostId]);
+
+    // Fetch user groups for visibility selection
+    (async () => {
+      try {
+        console.log('[useCreatePost] Starting group fetch...');
+        const uid = await getAuthenticatedUserId();
+        console.log('[useCreatePost] Got UID:', uid);
+        
+        if (uid) {
+          // Pass a unique timestamp to bypass apiService GET deduplication
+          const res = await apiService.get(`/groups?userId=${uid}&_t=${Date.now()}`, { bypassDedupe: true });
+          console.log('[useCreatePost] Raw API Response:', JSON.stringify(res));
+          
+          if (res?.success && Array.isArray(res.data)) {
+            console.log('[useCreatePost] Setting user groups:', res.data.length);
+            setUserGroups(res.data);
+          } else if (Array.isArray(res)) {
+            console.log('[useCreatePost] Setting user groups (fallback):', res.length);
+            setUserGroups(res);
+          } else {
+            console.warn('[useCreatePost] API returned unexpected format for groups');
+          }
+        }
+      } catch (err) {
+        console.error('[useCreatePost] Failed to fetch groups:', err);
+      }
+    })();
+  }, [params.editPostId, step]);
 
   return {
     step, setStep, loading, caption, setCaption, hashtags, setHashtags,
@@ -465,6 +495,7 @@ export const useCreatePost = (params: any = {}) => {
     userSearch, userResults, loadingUserResults, handleUserSearch,
     categorySearch, setCategorySearch, categories, setCategories,
     galleryAssets, loadingGallery, hasMoreGallery, galleryEndCursor, loadGalleryAssets,
-    handleShare, handleHashtagCommit, handleCamera, handleVerifiedSearch, isEditMode: !!params.editPostId
+    handleShare, handleHashtagCommit, handleCamera, handleVerifiedSearch, isEditMode: !!params.editPostId,
+    fetchNearbyVerifiedLocations
   };
 };

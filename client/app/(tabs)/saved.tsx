@@ -44,6 +44,8 @@ import { resolveCanonicalUserId, getAuthenticatedUserId } from '../../lib/curren
 import { hapticLight } from '../../lib/haptics';
 import { getCachedData, setCachedData, useOfflineBanner, useNetworkStatus } from '../../hooks/useOffline';
 import { OfflineBanner } from '@/src/_components/OfflineBanner';
+import { normalizeMediaUrl, isVideoUrl } from '../../lib/utils/media';
+import { getVideoThumbnailUrl } from '../../lib/imageHelpers';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -64,6 +66,12 @@ interface Collection {
 interface SavedPost {
   id: string;
   imageUrl: string;
+  gridThumb?: string;
+  mediaType?: 'image' | 'video';
+  mediaUrl?: string;
+  mediaUrls?: string[];
+  imageUrls?: string[];
+  thumbnailUrl?: string;
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -224,11 +232,23 @@ export default function SavedScreen() {
         });
       }
 
-      setAllSavedPosts(mergedSavedRaw.map((p: any) => ({
-        ...p,
-        id: p._id || p.id,
-        imageUrl: p.mediaUrl || p.imageUrl || (Array.isArray(p.mediaUrls) ? p.mediaUrls[0] : '') || '',
-      })));
+      setAllSavedPosts(mergedSavedRaw.map((p: any) => {
+        const isVideo = p.mediaType === 'video' || isVideoUrl(p.mediaUrl || p.imageUrl);
+        let thumb = p.thumbnailUrl;
+        if (!thumb && isVideo) {
+          thumb = getVideoThumbnailUrl(p.mediaUrl || p.imageUrl || '');
+        }
+        if (!thumb && !isVideo) {
+          thumb = p.mediaUrl || p.imageUrl || (Array.isArray(p.mediaUrls) ? p.mediaUrls[0] : '');
+        }
+
+        return {
+          ...p,
+          id: p._id || p.id,
+          imageUrl: p.mediaUrl || p.imageUrl || (Array.isArray(p.mediaUrls) ? p.mediaUrls[0] : '') || '',
+          gridThumb: thumb || p.mediaUrl || p.imageUrl || (Array.isArray(p.mediaUrls) ? p.mediaUrls[0] : ''),
+        };
+      }));
 
       // Initialize liked/saved maps
       const likes: Record<string, boolean> = {};
@@ -716,20 +736,41 @@ export default function SavedScreen() {
         keyExtractor={item => item.id}
         numColumns={3}
         contentContainerStyle={styles.grid}
-        scrollEnabled={false}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.gridItem}
-            onPress={() => {
-              hapticLight();
-              setSelectedPostIndex(index);
-              setPostViewerVisible(true);
-            }}
-            activeOpacity={0.8}
-          >
-            <Image source={{ uri: item.imageUrl }} style={styles.gridImg} />
-          </TouchableOpacity>
-        )}
+        scrollEnabled={true}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+        renderItem={({ item, index }) => {
+          const gridUri = normalizeMediaUrl(item.gridThumb || item.imageUrl);
+          const isVideo = item.mediaType === 'video' || isVideoUrl(item.imageUrl);
+          
+          return (
+            <TouchableOpacity
+              style={styles.gridItem}
+              onPress={() => {
+                hapticLight();
+                setSelectedPostIndex(index);
+                setPostViewerVisible(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <ExpoImage 
+                source={{ uri: gridUri }} 
+                style={styles.gridImg} 
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+              {isVideo && (
+                <View style={styles.playIconOverlay}>
+                  <Ionicons name="play" size={16} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        }}
       />
     );
   };
@@ -1095,9 +1136,9 @@ export default function SavedScreen() {
       </View>
 
       {/* All posts / filtered grid */}
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <View style={{ flex: 1 }}>
         {renderGrid()}
-      </ScrollView>
+      </View>
 
       {/* Collections bottom sheet */}
       {renderCollDropdown()}
@@ -1518,5 +1559,16 @@ const styles = StyleSheet.create({
   userHandleEdit: {
     fontSize: 13,
     color: '#888',
+  },
+  playIconOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

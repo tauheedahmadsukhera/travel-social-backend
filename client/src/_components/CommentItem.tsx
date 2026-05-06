@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from "@expo/vector-icons";
 import CommentAvatar from "./CommentAvatar";
@@ -15,7 +15,20 @@ interface CommentItemProps {
   onLongPress: (comment: Comment, isReply: boolean, parentId?: string) => void;
 }
 
-export const CommentItem: React.FC<CommentItemProps> = ({
+const getCommentTime = (timestamp: any) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const diff = (Date.now() - date.getTime()) / 1000;
+  if (diff < 60) return 'now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
+  if (diff < 2419200) return `${Math.floor(diff / 604800)}w`;
+  if (diff < 31536000) return `${Math.floor(diff / 2419200)}mo`;
+  return `${Math.floor(diff / 31536000)}y`;
+};
+
+const CommentItemComponent: React.FC<CommentItemProps> = ({
   comment,
   isReply = false,
   parentId,
@@ -25,30 +38,17 @@ export const CommentItem: React.FC<CommentItemProps> = ({
   onLike,
   onLongPress,
 }) => {
-  const isOwner = 
-    (currentUser?.uid && String(currentUser.uid) === String(comment.userId)) ||
-    (currentUser?._id && String(currentUser._id) === String(comment.userId)) ||
-    (currentUser?.id && String(currentUser.id) === String(comment.userId));
-  
-  const getCommentTime = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    const diff = (Date.now() - date.getTime()) / 1000;
-    if (diff < 60) return 'now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
-    if (diff < 2419200) return `${Math.floor(diff / 604800)}w`;
-    if (diff < 31536000) return `${Math.floor(diff / 2419200)}mo`;
-    return `${Math.floor(diff / 31536000)}y`;
-  };
+  const isOwner = useMemo(() => {
+    const uid = currentUser?.uid || currentUser?._id || currentUser?.id;
+    return uid && String(uid) === String(comment.userId);
+  }, [currentUser, comment.userId]);
 
-  const timeText = getCommentTime(comment.createdAt); 
+  const timeText = useMemo(() => getCommentTime(comment.createdAt), [comment.createdAt]);
   const isLiked = comment.likes?.includes(currentUserId);
   const likeCount = comment.likesCount || comment.likes?.length || 0;
 
   return (
-    <View key={comment.id} style={[styles.commentRow, isReply && styles.replyRow]}>
+    <View style={[styles.commentRow, isReply && styles.replyRow]}>
       <CommentAvatar userId={comment.userId} userAvatar={comment.userAvatar} size={isReply ? 24 : 36} />
       <View style={styles.commentContent}>
         <TouchableOpacity 
@@ -119,3 +119,5 @@ const styles = StyleSheet.create({
   likeButton: { padding: 10, alignItems: 'center', justifyContent: 'center', minWidth: 40 },
   likeCount: { fontSize: 10, color: '#999', marginTop: 2 },
 });
+
+export const CommentItem = React.memo(CommentItemComponent);

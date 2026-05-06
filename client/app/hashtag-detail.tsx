@@ -12,6 +12,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { feedEventEmitter } from '../lib/feedEventEmitter';
 import { hapticLight } from '../lib/haptics';
 import { safeRouterBack } from '@/lib/safeRouterBack';
+import { normalizeMediaUrl, isVideoUrl } from '../lib/utils/media';
+import { getVideoThumbnailUrl } from '../lib/imageHelpers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -106,10 +108,22 @@ export default function HashtagDetailsScreen() {
           index === self.findIndex((p) => (p.id || p._id) === (post.id || post._id))
         );
 
-        const normalizedPosts = uniquePosts.map((post: any) => ({
-          ...post,
-          id: post.id || post._id,
-        }));
+        const normalizedPosts = uniquePosts.map((post: any) => {
+          const isVideo = post.mediaType === 'video' || isVideoUrl(post.mediaUrl || post.imageUrl);
+          let thumb = post.thumbnailUrl;
+          if (!thumb && isVideo) {
+            thumb = getVideoThumbnailUrl(post.mediaUrl || post.imageUrl || '');
+          }
+          if (!thumb && !isVideo) {
+            thumb = post.mediaUrl || post.imageUrl || (Array.isArray(post.mediaUrls) ? post.mediaUrls[0] : '');
+          }
+          
+          return {
+            ...post,
+            id: post.id || post._id,
+            gridThumb: thumb || post.mediaUrl || post.imageUrl || (Array.isArray(post.mediaUrls) ? post.mediaUrls[0] : ''),
+          };
+        });
 
         setPosts(normalizedPosts);
       } else {
@@ -197,11 +211,17 @@ export default function HashtagDetailsScreen() {
                 }}
               >
                 <ExpoImage
-                  source={{ uri: post.imageUrl || (post.imageUrls && post.imageUrls[0]) || '' }}
+                  source={{ uri: normalizeMediaUrl((post as any).gridThumb || post.imageUrl) }}
                   style={styles.gridImage}
                   contentFit="cover"
                   transition={200}
+                  cachePolicy="memory-disk"
                 />
+                {(post.mediaType === 'video' || isVideoUrl(post.imageUrl)) && (
+                  <View style={styles.playIconOverlay}>
+                    <Ionicons name="play" size={16} color="#fff" />
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -368,5 +388,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#999',
+  },
+  playIconOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

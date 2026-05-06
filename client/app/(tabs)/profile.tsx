@@ -58,16 +58,21 @@ import { ResizeMode, Video } from 'expo-av';
 import { resolveCanonicalUserId } from '../../lib/currentUser';
 import { hapticLight, hapticMedium } from '../../lib/haptics';
 import { getCachedData, setCachedData, useNetworkStatus, useOfflineBanner } from '../../hooks/useOffline';
+
+// Shared Utilities & Components
+import { normalizeMediaUrl, normalizeAvatarUrl, isVideoUrl } from '../../lib/utils/media';
+import { toDate, getRelativeTime } from '../../lib/utils/date';
+import { ProfileGridItem } from '@/src/_components/profile/ProfileGridItem';
+import { ProfilePostMarker } from '@/src/_components/profile/ProfilePostMarker';
+
 import ProfileHeader from '@/src/_components/profile/ProfileHeader';
 import ProfileStats from '@/src/_components/profile/ProfileStats';
 import ProfileActions from '@/src/_components/profile/ProfileActions';
 import ProfileTabs from '@/src/_components/profile/ProfileTabs';
-import ProfileGridItem from '@/src/_components/profile/ProfileGridItem';
 import ProfileSections from '@/src/_components/profile/ProfileSections';
 import { UploadStoryModal } from '@/src/_components/profile/UploadStoryModal';
 import { CollectionsModal, UserMenuModal } from '@/src/_components/profile/ProfileModals';
 import { useProfileActions } from '@/hooks/useProfileActions';
-
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallDevice = SCREEN_HEIGHT < 700;
@@ -83,7 +88,6 @@ const responsiveValues = {
   modalPadding: isSmallDevice ? 20 : 20,
 };
 
-
 let MapView: any = null;
 let Marker: any = null;
 if (Platform.OS !== 'web') {
@@ -96,23 +100,6 @@ if (Platform.OS !== 'web') {
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
 const DEFAULT_IMAGE_URL = DEFAULT_AVATAR_URL;
 const DEFAULT_AVATAR_SOURCE = { uri: DEFAULT_AVATAR_URL };
-
-function normalizeAvatarUri(uri: any): string | null {
-  if (typeof uri === 'object' && uri !== null) {
-    const candidate = (uri as any).url || (uri as any).uri || (uri as any).secure_url || '';
-    if (typeof candidate === 'string') uri = candidate;
-  }
-  if (typeof uri !== 'string') return null;
-  const trimmed = uri.trim();
-  if (!trimmed) return null;
-  const lower = trimmed.toLowerCase();
-  if (lower === 'null' || lower === 'undefined' || lower === 'n/a' || lower === 'na') return null;
-  if (lower.includes('via.placeholder.com/200x200.png?text=profile')) return null;
-  if (lower.includes('/default%2fdefault-pic.jpg') || lower.includes('/default/default-pic.jpg')) return null;
-  if (lower.startsWith('http://')) return `https://${trimmed.slice(7)}`;
-  if (lower.startsWith('//')) return `https:${trimmed}`;
-  return trimmed;
-}
 
 function getInitials(nameOrUsername: any): string {
   if (typeof nameOrUsername !== 'string') return 'U';
@@ -194,24 +181,7 @@ function parseCoord(val: any): number | null {
   return null;
 }
 
-function isVideoUrl(url: any): boolean {
-  if (typeof url !== 'string' || !url) return false;
-  const lower = url.toLowerCase();
-
-  // If it has a clear image extension, it's NOT a video
-  if (/\.(jpg|jpeg|png|heic|heif|webp|gif)(\?|$)/i.test(lower)) {
-    return false;
-  }
-
-  // Standard extensions
-  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.quicktime'];
-  // Check for extension, 'video' in path, or signed cloud URLs that often contain 'video'
-  return videoExtensions.some(ext => lower.includes(ext)) || 
-         lower.startsWith('content://media/external/video/') ||
-         lower.includes('/video/') ||
-         lower.includes('ext-video') ||
-         (lower.startsWith('http') && (lower.includes('video') || lower.includes('mp4') || lower.includes('m4v')));
-}
+// isVideoUrl is imported from ../../lib/utils/media
 
 // Types
 type Highlight = {
@@ -219,60 +189,6 @@ type Highlight = {
   title: string;
   coverImage: string;
   stories: { id: string; image: string }[];
-};
-
-// Marker component to keep map re-rendering until images load (or timeout)
-const ProfilePostMarker: React.FC<{ lat: number; lon: number; imageUrl: string; avatarUrl: string; onPress: () => void }> = ({ lat, lon, imageUrl, avatarUrl, onPress }) => {
-  const [tracks, setTracks] = useState(true);
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [avatarLoaded, setAvatarLoaded] = useState(false);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setTracks(false), 20000); // allow very slow networks to finish
-    return () => clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
-    if (imgLoaded && avatarLoaded) setTracks(false);
-  }, [imgLoaded, avatarLoaded]);
-
-  // Use thumbnail for profile map markers (200px for small markers)
-  const markerImageUrl = getOptimizedImageUrl(imageUrl, 'map-marker');
-  const markerAvatarUrl = getOptimizedImageUrl(avatarUrl, 'thumbnail');
-
-  return (
-    Marker ? (
-      <Marker coordinate={{ latitude: lat, longitude: lon }} tracksViewChanges={tracks} onPress={onPress}>
-        <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={{ backgroundColor: 'transparent' }}>
-          <View style={{ position: 'relative', width: 48, height: 48 }}>
-            <View style={{ width: 48, height: 48, borderRadius: 12, borderWidth: 2, borderColor: '#ffa726', overflow: 'hidden', backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 3 }}>
-              <ExpoImage
-                source={{ uri: markerImageUrl }}
-                style={{ width: 44, height: 44, borderRadius: 10 }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                priority="high"
-                transition={150}
-                onLoad={() => setImgLoaded(true)}
-                onError={() => setImgLoaded(true)}
-              />
-            </View>
-            <View style={{ position: 'absolute', top: -2, right: -2, width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#fff', backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 4 }}>
-              <ExpoImage
-                source={{ uri: markerAvatarUrl }}
-                style={{ width: 16, height: 16, borderRadius: 8 }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                priority="high"
-                onLoad={() => setAvatarLoaded(true)}
-                onError={() => setAvatarLoaded(true)}
-              />
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Marker>
-    ) : null
-  );
 };
 
 type ProfileData = {
@@ -739,7 +655,7 @@ export default function Profile({ userIdProp }: any) {
                 id: story._id || story.id,
                 userId: viewedUserId,
                 userName: profileData?.username || profileData?.name || 'User',
-                userAvatar: normalizeAvatarUri(profileData?.avatar) || '',
+                userAvatar: normalizeAvatarUrl(profileData?.avatar) || '',
                 imageUrl: story.image || story.imageUrl || story.mediaUrl,
                 videoUrl: story.video || story.videoUrl,
                 mediaType: story.video ? 'video' : 'image',
@@ -1090,19 +1006,6 @@ export default function Profile({ userIdProp }: any) {
   const currentPostsArray = segmentTab === 'grid' 
     ? (selectedSection ? visiblePosts : posts) 
     : (segmentTab === 'saved' ? savedSectionPosts : taggedPosts);
-
-  const normalizeMediaUrl = useCallback((url: string) => {
-    if (!url) return '';
-    const trimmed = url.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('//') || trimmed.startsWith('data:') || trimmed.startsWith('file:') || trimmed.startsWith('ph:')) {
-      return trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
-    }
-    if (trimmed.includes('cloudinary.com')) {
-      return `https://${trimmed.replace(/^\/+/, '')}`;
-    }
-    const cleanUrl = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-    return `${BACKEND_URL}${cleanUrl}`;
-  }, []);
 
   const renderGridItem = useCallback(({ item, index }: { item: any, index: number }) => {
     return (

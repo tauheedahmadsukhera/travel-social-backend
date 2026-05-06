@@ -138,7 +138,7 @@ export async function sendMediaMessage(
       tempId: (options as any)?.tempId
     };
 
-    const res = await apiService.post(`/conversations/${conversationId}/messages/media`, payload);
+    const res = await apiService.post(`/conversations/${conversationId}/messages`, payload);
     return res;
   } catch (error: any) {
     console.error('❌ sendMediaMessage error:', error);
@@ -326,7 +326,7 @@ export async function sendPostMessage(
       }
     };
 
-    const res = await apiService.post(`/conversations/${conversationId}/messages/media`, payload);
+    const res = await apiService.post(`/conversations/${conversationId}/messages`, payload);
     console.log('[sendPostMessage] Success:', res);
     return res;
   } catch (error: any) {
@@ -371,7 +371,7 @@ export async function sendStoryMessage(
       }
     };
 
-    const res = await apiService.post(`/conversations/${conversationId}/messages/media`, payload);
+    const res = await apiService.post(`/conversations/${conversationId}/messages`, payload);
     console.log('[sendStoryMessage] Success:', res);
     return res;
   } catch (error: any) {

@@ -10,6 +10,8 @@ import { getAllPosts, searchUsers } from '../lib/firebaseHelpers/index';
 import { getPostsByHashtag, getTrendingHashtags } from '../lib/mentions';
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
 import { apiService } from '@/src/_services/apiService';
+import { normalizeMediaUrl, isVideoUrl } from '../lib/utils/media';
+import { getVideoThumbnailUrl } from '../lib/imageHelpers';
 
 
 // Cache for search results
@@ -321,7 +323,13 @@ export default function SearchScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/highlight/[id]', params: { id: item.id } })}>
                 <ExpoImage 
-                  source={{ uri: item.imageUrl || item.mediaUrls?.[0] || item.imageUrls?.[0] || 'https://via.placeholder.com/200x200.png?text=Post' }} 
+                  source={{ 
+                    uri: normalizeMediaUrl(
+                      (item.mediaType === 'video' || isVideoUrl(item.imageUrl || item.mediaUrls?.[0]))
+                        ? getVideoThumbnailUrl(item.imageUrl || item.mediaUrls?.[0] || '')
+                        : (item.imageUrl || item.mediaUrls?.[0] || item.imageUrls?.[0] || DEFAULT_AVATAR_URL)
+                    ) 
+                  }} 
                   style={styles.postImg}
                   contentFit="cover"
                   transition={200}
@@ -365,7 +373,13 @@ export default function SearchScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/highlight/[id]', params: { id: item.id } })}>
               <ExpoImage 
-                source={{ uri: item.imageUrl || item.mediaUrls?.[0] || item.imageUrls?.[0] || DEFAULT_AVATAR_URL }} 
+                source={{ 
+                  uri: normalizeMediaUrl(
+                    (item.mediaType === 'video' || isVideoUrl(item.imageUrl || item.mediaUrls?.[0]))
+                      ? getVideoThumbnailUrl(item.imageUrl || item.mediaUrls?.[0] || '')
+                      : (item.imageUrl || item.mediaUrls?.[0] || item.imageUrls?.[0] || DEFAULT_AVATAR_URL)
+                  ) 
+                }} 
                 style={styles.postImg}
                 contentFit="cover"
                 transition={200}
