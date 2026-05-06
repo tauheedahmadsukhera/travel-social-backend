@@ -225,8 +225,8 @@ export const useCreatePost = (params: any = {}) => {
         return {
           name: displayName,
           address: p.address || p.vicinity,
-          lat: p.lat || p.geometry?.location?.lat,
-          lon: p.lon || p.geometry?.location?.lng,
+          lat: p.latitude || p.lat || p.geometry?.location?.lat,
+          lon: p.longitude || p.lon || p.geometry?.location?.lng,
           placeId: p.placeId || p.place_id,
           verified: true
         };
