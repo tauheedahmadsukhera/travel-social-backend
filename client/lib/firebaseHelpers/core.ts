@@ -982,7 +982,7 @@ export async function createPost(
     return { success: true, postId };
   } catch (err: any) {
     console.error('[createPost] ❌ Error:', err.message);
-    throw err;
+    return { success: false, error: err.message || 'Post creation failed' };
   }
 }
 
