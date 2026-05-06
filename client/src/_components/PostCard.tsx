@@ -231,9 +231,29 @@ const PostCard: React.FC<PostCardProps> = ({
   }, [post?.media]);
 
   const isOwner = useMemo(() => {
-    const authorId = String(post?.userId?._id || post?.userId || '');
-    const viewerId = String(currentUser?._id || currentUser?.id || currentUser?.uid || '');
-    return authorId && viewerId && authorId === viewerId;
+    // Build all possible author IDs
+    const authorIds = [
+      post?.userId?._id,
+      post?.userId?.id,
+      post?.userId?.uid,
+      post?.userId?.firebaseUid,
+      // If userId is a plain string (not populated)
+      typeof post?.userId === 'string' ? post.userId : null,
+    ].filter(Boolean).map(String);
+
+    // Build all possible viewer IDs
+    const viewerIds: string[] = [];
+    if (typeof currentUser === 'string') {
+      // currentUser is just a userId string
+      viewerIds.push(currentUser);
+    } else if (currentUser) {
+      [currentUser._id, currentUser.id, currentUser.uid, currentUser.firebaseUid]
+        .filter(Boolean)
+        .forEach(id => viewerIds.push(String(id)));
+    }
+
+    if (authorIds.length === 0 || viewerIds.length === 0) return false;
+    return authorIds.some(aid => viewerIds.includes(aid));
   }, [post, currentUser]);
 
   const submitPostReport = async (reason: string) => {
