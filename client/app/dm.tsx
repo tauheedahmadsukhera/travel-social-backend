@@ -55,7 +55,7 @@ import ShareModal from '../src/_components/ShareModal';
 import StoriesViewer from '../src/_components/StoriesViewer';
 import EmojiPicker from 'rn-emoji-keyboard';
 
-const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
+const REACTIONS = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮'];
 
 /** Simple hook to fetch peer profile */
 function useUserProfile(uid: string | null) {
