@@ -39,6 +39,7 @@ type Props = {
   avatarUrl?: string | null;
   onReaction?: (emoji: string) => void;
   reactions?: { [emoji: string]: string[] };
+  failed?: boolean;
 };
 
 function MessageBubbleInner({
@@ -73,6 +74,7 @@ function MessageBubbleInner({
   avatarUrl,
   onReaction,
   reactions,
+  failed,
 }: Props) {
   const [playing, setPlaying] = React.useState(false);
   const [isLoaded, setIsLoaded] = React.useState(false);

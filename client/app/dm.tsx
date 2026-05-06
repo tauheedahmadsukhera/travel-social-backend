@@ -310,10 +310,11 @@ export default function DM() {
           return;
         }
       }
-      setMessages(prev => prev.filter(m => m.id !== tempId));
+      // Instead of filtering out, mark as failed
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, failed: true } : m));
     } catch (e) {
       console.error('Media send error:', e);
-      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, failed: true } : m));
     }
   };
 

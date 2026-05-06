@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet, Platform, KeyboardAvoidingView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 
 interface CommentInputProps {
@@ -59,4 +60,5 @@ const styles = StyleSheet.create({
   inputWrapper: { flex: 1, flexDirection: 'row', backgroundColor: '#f0f2f5', borderRadius: 25, paddingHorizontal: 15, alignItems: 'center', minHeight: 45 },
   input: { flex: 1, fontSize: 14, color: '#333', paddingVertical: 8 },
   postBtn: { color: '#0095f6', fontWeight: '700', marginLeft: 10 },
+  plusBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
 });

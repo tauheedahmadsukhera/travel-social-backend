@@ -32,6 +32,7 @@ import CommentAvatar from "./CommentAvatar";
 import { useUser } from "./UserContext";
 import { CommentItem } from "./CommentItem";
 import { CommentInput } from "./CommentInput";
+import EmojiPicker from 'rn-emoji-keyboard';
 
 // ─────────────────────────────────────────────
 // Types
@@ -187,6 +188,21 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
   };
 
   const handleReaction = async (emoji: string) => {
+    // OPTIMISTIC UPDATE: Add reaction instantly to UI
+    const optimisticReaction = {
+      userId: currentUserId,
+      userName: currentUser?.displayName || 'You',
+      userAvatar: resolvedCurrentAvatar,
+      emoji: emoji,
+      isOptimistic: true
+    };
+    
+    setReactions(prev => {
+      // Remove any existing reaction from this user first
+      const filtered = prev.filter(r => String(r.userId) !== String(currentUserId));
+      return [optimisticReaction, ...filtered];
+    });
+
     try {
       await apiService.post(`/posts/${postId}/react`, {
         userId: currentUserId,
@@ -194,9 +210,17 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
         userAvatar: resolvedCurrentAvatar,
         emoji
       });
-      await loadData();
+      // Silent refresh in background
+      const postRes: any = await apiService.get(`/posts/${postId}`);
+      if (postRes?.success && postRes.data?.reactions) {
+        setReactions(postRes.data.reactions);
+      }
       setShowEmojiPicker(false);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e);
+      // Rollback on error
+      loadData();
+    }
   };
 
   const handleDelete = async (comment: Comment, isReply = false, parentId?: string) => {
@@ -343,6 +367,11 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
               quickEmojis={quickEmojis} 
             />
           )}
+          <EmojiPicker 
+            onEmojiSelected={(emoji) => setNewComment(prev => prev + emoji.emoji)}
+            open={showEmojiPicker}
+            onClose={() => setShowEmojiPicker(false)}
+          />
         </View>
       ) : (
         <View style={{ flex: 1 }}>
@@ -356,6 +385,28 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
                 <Text style={styles.reactionEmojiText}>{item.emoji}</Text>
               </View>
             )}
+            ListEmptyComponent={loading ? <ActivityIndicator style={{ marginTop: 20 }} color="#000" /> : <View style={styles.emptyReactionContainer}><Ionicons name="star" size={60} color="#FFD700" /><Text style={styles.emptyReactionTitle}>No reactions yet</Text><Text style={styles.emptyReactionSub}>Be the first to react!</Text></View>}
+          />
+          <View style={styles.reactionEmojiBar}>
+            {quickEmojis.map(emoji => (
+              <TouchableOpacity key={emoji} onPress={() => handleReaction(emoji)}>
+                <Text style={{ fontSize: 32 }}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity 
+              style={styles.reactionPlusBtn} 
+              onPress={() => setShowEmojiPicker(true)}
+            >
+              <Ionicons name="add" size={28} color="#000" />
+            </TouchableOpacity>
+          </View>
+          <EmojiPicker 
+            onEmojiSelected={(emoji) => {
+              handleReaction(emoji.emoji);
+              setShowEmojiPicker(false);
+            }}
+            open={showEmojiPicker}
+            onClose={() => setShowEmojiPicker(false)}
           />
         </View>
       )}
@@ -388,6 +439,27 @@ const styles = StyleSheet.create({
   cancelText: { color: '#666', fontWeight: '600', padding: 10 },
   saveBtn: { backgroundColor: '#000', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
   saveBtnText: { color: '#fff', fontWeight: '600' },
+  reactionEmojiBar: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-around', 
+    alignItems: 'center',
+    paddingVertical: 15, 
+    paddingHorizontal: 10,
+    borderTopWidth: 1, 
+    borderTopColor: '#eee',
+    backgroundColor: '#fff'
+  },
+  reactionPlusBtn: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    backgroundColor: '#f0f0f0', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  emptyReactionContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 80 },
+  emptyReactionTitle: { fontSize: 18, fontWeight: '700', color: '#666', marginTop: 15 },
+  emptyReactionSub: { fontSize: 14, color: '#999', marginTop: 5 },
 });
 
 export default CommentSection;
