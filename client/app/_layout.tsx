@@ -18,6 +18,7 @@ import { disconnectSocket, getSocket, initializeSocket } from '@/src/_services/s
 import { AppDialogProvider } from '@/src/_components/AppDialogProvider';
 // Load location service (foreground passport checks + optional TaskManager shim)
 import '../services/locationService';
+import Toast from 'react-native-toast-message';
 
 let setupNotificationListeners: any = () => {};
 let initializeBackend: any = () => Promise.resolve();
@@ -228,6 +229,7 @@ export default function RootLayout() {
           </GestureHandlerRootView>
         </AppDialogProvider>
       </UserProvider>
+      <Toast />
     </ErrorBoundary>
   );
 }
