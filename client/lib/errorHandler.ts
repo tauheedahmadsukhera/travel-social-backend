@@ -45,6 +45,13 @@ const FIREBASE_ERROR_MAP: Record<string, AppError> = {
     severity: 'warning',
     retryable: false,
   },
+  'auth/invalid-credential': {
+    code: 'INVALID_CREDENTIALS',
+    message: 'Invalid email or password',
+    userMessage: 'Incorrect email or password. Please try again or sign up if you don\'t have an account.',
+    severity: 'warning',
+    retryable: false,
+  },
   'auth/email-already-in-use': {
     code: 'EMAIL_TAKEN',
     message: 'Email already registered',
