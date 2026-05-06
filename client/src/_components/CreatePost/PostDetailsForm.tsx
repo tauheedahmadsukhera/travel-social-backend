@@ -88,19 +88,54 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
         <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} onPress={onOpenLocation}>
           <Feather name="map-pin" size={20} color="#000" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, color: locationName ? '#000' : '#666' }}>
-              {locationName || 'Add a location'}
-            </Text>
+            {locationName ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ 
+                  backgroundColor: '#f5f5f5', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 20, 
+                  flexDirection: 'row', 
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: '#e0e0e0'
+                }}>
+                  <Feather name="map-pin" size={12} color="#666" style={{ marginRight: 6 }} />
+                  <Text style={{ color: '#333', fontSize: 14, fontWeight: '500' }}>{locationName}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 16, color: '#666' }}>Add a location</Text>
+            )}
           </View>
         </TouchableOpacity>
 
         {/* Verified Location Row */}
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} onPress={onOpenVerifiedLocation}>
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} 
+          onPress={onOpenVerifiedLocation}
+        >
           <Feather name="award" size={20} color="#000" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, color: verifiedLocationName ? '#000' : '#666' }}>
-              {verifiedLocationName || 'Add a verified location'}
-            </Text>
+            {verifiedLocationName ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ 
+                  backgroundColor: '#E3F2FD', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 20, 
+                  flexDirection: 'row', 
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: '#90CAF9'
+                }}>
+                  <Feather name="check-circle" size={14} color="#1976D2" style={{ marginRight: 6 }} />
+                  <Text style={{ color: '#1976D2', fontSize: 14, fontWeight: '600' }}>{verifiedLocationName}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 16, color: '#666' }}>Add a verified location</Text>
+            )}
           </View>
         </TouchableOpacity>
 
