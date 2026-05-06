@@ -11,7 +11,6 @@ import PostActions from './PostCard/PostActions';
 import PostCaption from './PostCard/PostCaption';
 import { CommentSection } from "./CommentSection";
 import { feedEventEmitter } from "../../lib/feedEventEmitter";
-import Toast from 'react-native-toast-message';
 import ShareModal from "./ShareModal";
 import { useUser } from "./UserContext";
 import { likePost, unlikePost, sendPostMessage } from "../../lib/firebaseHelpers";
@@ -576,18 +575,10 @@ const PostCard: React.FC<PostCardProps> = ({
                   recipientId: String(recipientId)
                 });
               }
-              Toast.show({
-                type: 'success',
-                text1: 'Shared',
-                text2: `Post shared with ${userIds.length} user${userIds.length > 1 ? 's' : ''}`
-              });
+              Alert.alert('Shared', `Post shared with ${userIds.length} user${userIds.length > 1 ? 's' : ''}`);
             } catch (err) {
               console.error('[PostCard] Share error:', err);
-              Toast.show({
-                type: 'error',
-                text1: 'Error',
-                text2: 'Failed to share post'
-              });
+              Alert.alert('Error', 'Failed to share post');
             }
           }}
           currentUserId={currentUser?._id || currentUser?.id || currentUser?.uid}

@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Stack } from "expo-router";
 // import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useState } from "react";
-import { AppState, LogBox, View } from "react-native";
+import { Alert, AppState, LogBox, View } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SystemUI from 'expo-system-ui';
 import 'react-native-gesture-handler';
@@ -18,7 +18,6 @@ import { disconnectSocket, getSocket, initializeSocket } from '@/src/_services/s
 import { AppDialogProvider } from '@/src/_components/AppDialogProvider';
 // Load location service (foreground passport checks + optional TaskManager shim)
 import '../services/locationService';
-import Toast from 'react-native-toast-message';
 
 let setupNotificationListeners: any = () => {};
 let initializeBackend: any = () => Promise.resolve();
@@ -229,7 +228,6 @@ export default function RootLayout() {
           </GestureHandlerRootView>
         </AppDialogProvider>
       </UserProvider>
-      <Toast />
     </ErrorBoundary>
   );
 }
