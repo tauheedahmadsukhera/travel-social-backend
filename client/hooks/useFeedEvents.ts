@@ -64,6 +64,24 @@ export function useFeedEvents(
         setPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
         setAllLoadedPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
       }
+      if (event.type === 'USER_BLOCKED' && event.userId) {
+        const blockedUserId = String(event.userId);
+        
+        const filterFn = (prev: any[]) => (Array.isArray(prev) ? prev.filter(p => {
+          const authorId = p?.userId && typeof p.userId === 'object' 
+            ? String(p.userId._id || p.userId.id || '') 
+            : String(p?.userId || '');
+          return authorId !== blockedUserId;
+        }) : []);
+
+        setPosts(prev => filterFn(prev));
+        setAllLoadedPosts(prev => filterFn(prev));
+        
+        // Refresh feed to get new content without the blocked user
+        if (isOnline) {
+          loadInitialFeed(0, { silent: true, _t: Date.now() }).catch(() => {});
+        }
+      }
     });
     return unsub;
   }, [isOnline, loadInitialFeed, setPosts, setAllLoadedPosts]);

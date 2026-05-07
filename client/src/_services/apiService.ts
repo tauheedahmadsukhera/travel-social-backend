@@ -251,8 +251,9 @@ async function apiRequestWithRetry(method: string, url: string, data?: any, conf
 
       // ✅ Cache Buster — only for real-time endpoints that must never be stale
       if (method === 'get') {
-        const needsFreshData = /\/(conversations|messages|notifications|inbox)/i.test(url);
+        const needsFreshData = /\/(conversations|messages|notifications|inbox|posts|feed)/i.test(url);
         if (needsFreshData) {
+
           requestConfig.params = { ...requestConfig.params, _t: Date.now() };
         }
       }
@@ -399,6 +400,10 @@ export const apiService = {
   // ✅ Moderation & Reporting
   reportContent: (data: { targetId: string; targetType: 'post' | 'user' | 'comment'; reason: string; details?: string }) =>
     apiRequest('post', '/moderation/report', data),
+
+  blockUser: (myId: string, targetId: string) => apiRequest('put', `/users/${myId}/block/${targetId}`),
+  unblockUser: (myId: string, targetId: string) => apiRequest('delete', `/users/${myId}/block/${targetId}`),
+  getBlockedUsers: (myId: string) => apiRequest('get', `/users/${myId}/blocked`),
 
   // ✅ Status Check
   checkStatus: () => apiRequest('get', '/status'),

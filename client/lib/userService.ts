@@ -7,7 +7,7 @@ export const userService = {
   // Block a user
   async blockUser(userId: string, blockUserId: string): Promise<boolean> {
     try {
-      const response = await axios.post(
+      const response = await axios.put(
         `${API_URL}/${userId}/block/${blockUserId}`
       );
       console.log('[userService] Blocked user:', blockUserId);

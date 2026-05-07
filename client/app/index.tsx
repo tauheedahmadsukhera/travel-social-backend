@@ -58,8 +58,14 @@ export default function Index() {
       console.log('🔐 Auth state check:', token ? 'Has token' : 'No token');
 
       if (token && userId) {
-        console.log('✅ User logged in, navigating to home');
-        router.replace('/(tabs)/home');
+        const eulaAccepted = await AsyncStorage.getItem('eula_accepted_v2');
+        if (eulaAccepted === 'true') {
+          console.log('✅ User logged in & EULA accepted, navigating to home');
+          router.replace('/(tabs)/home');
+        } else {
+          console.log('⚠️ User logged in but EULA NOT accepted, navigating to EULA screen');
+          router.replace('/auth/eula-screen');
+        }
         // Do canonicalization in background (never block navigation).
         Promise.resolve()
           .then(() => resolveCanonicalUserId(userId))

@@ -35,21 +35,7 @@ export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
 
   const createMixedFeed = useCallback((postsArray: any[]) => {
     if (postsArray.length === 0) return [];
-    if (Platform.OS === 'ios') {
-      const getPostTimestamp = (createdAt: any): number => {
-        if (!createdAt) return 0;
-        if (typeof createdAt.toMillis === 'function') return createdAt.toMillis();
-        if (typeof createdAt === 'string') return new Date(createdAt).getTime();
-        if (typeof createdAt === 'number') return createdAt;
-        return 0;
-      };
-      return [...postsArray].sort((a: any, b: any) => getPostTimestamp(b?.createdAt) - getPostTimestamp(a?.createdAt));
-    }
     
-    const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
-    const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000;
-
     const getPostTimestamp = (createdAt: any): number => {
       if (!createdAt) return 0;
       if (typeof createdAt.toMillis === 'function') return createdAt.toMillis();
@@ -58,24 +44,23 @@ export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
       return 0;
     };
 
-    const recentPosts = postsArray.filter(p => getPostTimestamp(p.createdAt) > oneDayAgo);
-    const mediumPosts = postsArray.filter(p => {
-      const t = getPostTimestamp(p.createdAt);
-      return t <= oneDayAgo && t > threeDaysAgo;
-    });
-    const olderPosts = postsArray.filter(p => getPostTimestamp(p.createdAt) <= threeDaysAgo);
+    // 1. Separate very recent posts (last 6 hours) to keep them prioritized
+    const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+    const veryRecent = postsArray.filter(p => getPostTimestamp(p.createdAt) > sixHoursAgo);
+    const older = postsArray.filter(p => getPostTimestamp(p.createdAt) <= sixHoursAgo);
 
-    const shuffledRecent = shufflePosts(recentPosts);
-    const shuffledMedium = shufflePosts(mediumPosts);
-    const shuffledOlder = shufflePosts(olderPosts);
+    // 2. Sort very recent by date (newest first)
+    const sortedRecent = [...veryRecent].sort((a: any, b: any) => getPostTimestamp(b.createdAt) - getPostTimestamp(a.createdAt));
 
-    const mixed: any[] = [];
-    const recentCount = Math.min(5, shuffledRecent.length);
-    mixed.push(...shuffledRecent.slice(0, recentCount));
+    // 3. Shuffle older posts to provide "freshness" on every reload
+    const shuffledOlder = [...older];
+    for (let i = shuffledOlder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledOlder[i], shuffledOlder[j]] = [shuffledOlder[j], shuffledOlder[i]];
+    }
 
-    const remaining = [...shuffledRecent.slice(recentCount), ...shuffledMedium, ...shuffledOlder];
-    mixed.push(...shufflePosts(remaining));
-    return mixed;
+    // 4. Combine: Top 3 newest, then a mix of recent and shuffled older
+    return [...sortedRecent.slice(0, 3), ...shufflePosts([...sortedRecent.slice(3), ...shuffledOlder])];
   }, [shufflePosts]);
 
   const normalizeAvatar = useCallback((value: any): string => {
@@ -139,10 +124,25 @@ export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
         allowedFollowers: p.allowedFollowers || [],
       }));
 
+      // Redundant safety filter for blocked users
+      const blockedSet = new Set<string>();
+      try {
+        const { fetchBlockedUserIds } = await import('../services/moderation');
+        const ids = await fetchBlockedUserIds(currentUserId || '');
+        ids.forEach(id => blockedSet.add(String(id)));
+      } catch {}
+
+      const filteredPosts = normalizedPosts.filter(p => {
+        const authorId = p.userId && typeof p.userId === 'object' 
+          ? String(p.userId._id || p.userId.id || '') 
+          : String(p.userId || '');
+        return !blockedSet.has(authorId);
+      });
+
       if (pageNum === 0) {
-        try { await setCachedData(HOME_CACHE_KEY, normalizedPosts, { ttl: 24 * 60 * 60 * 1000 }); } catch {}
-        setAllLoadedPosts(normalizedPosts);
-        setPosts(createMixedFeed(normalizedPosts));
+        try { await setCachedData(HOME_CACHE_KEY, filteredPosts, { ttl: 24 * 60 * 60 * 1000 }); } catch {}
+        setAllLoadedPosts(filteredPosts);
+        setPosts(createMixedFeed(filteredPosts));
         nextPageRef.current = 0;
 
         avatarHydrateReqIdRef.current += 1;

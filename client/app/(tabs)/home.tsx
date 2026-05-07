@@ -15,8 +15,9 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Platform
+  Platform,
 } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FlashList } from '@shopify/flash-list';
 import PostCard from '@/src/_components/PostCard';
 import LiveStreamsRow from '@/src/_components/LiveStreamsRow';
@@ -124,6 +125,13 @@ export default function Home() {
   useEffect(() => {
     const getUserId = async () => {
       try {
+        // EULA Validation Check
+        const eulaAccepted = await AsyncStorage.getItem('eula_accepted_v2');
+        if (eulaAccepted !== 'true') {
+          router.replace('/auth/eula-screen');
+          return;
+        }
+
         const userId = await resolveCanonicalUserId();
         setCurrentUserId(userId);
         currentUserIdRef.current = userId;

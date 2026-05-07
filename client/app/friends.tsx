@@ -26,7 +26,7 @@ type UserItem = {
   isFollowingYou?: boolean;
 };
 
-type TabType = 'followers' | 'following' | 'friends' | 'blocked';
+type TabType = 'followers' | 'following' | 'friends';
 
 export default function FriendsScreen() {
   const router = useRouter();
@@ -110,14 +110,7 @@ export default function FriendsScreen() {
         setFriends(friendsData.data || []);
       }
 
-      // Fetch blocked users (only for own profile)
-      if (isOwnProfile) {
-        const blockedRes = await fetch(`${API_URL}/follow/users/${userId}/blocked`);
-        const blockedData = await blockedRes.json();
-        if (blockedData.success) {
-          setBlockedUsers(blockedData.data || []);
-        }
-      }
+      // Removed blocked users fetch from here
 
       // Get profile name
       const userRes = await fetch(`${API_URL}/users/${userId}`);
@@ -256,9 +249,6 @@ export default function FriendsScreen() {
       case 'friends':
         data = friends;
         break;
-      case 'blocked':
-        data = blockedUsers;
-        break;
     }
 
     if (!searchQuery.trim()) return data;
@@ -309,13 +299,13 @@ export default function FriendsScreen() {
 
         </View>
 
-        {isMe && activeTab !== 'blocked' && (
+        {isMe && (
           <View style={styles.youPill}>
             <Text style={styles.youPillText}>You</Text>
           </View>
         )}
 
-        {!isMe && activeTab !== 'blocked' && (
+        {!isMe && (
           <TouchableOpacity
             style={[
               styles.followBtn,
@@ -337,14 +327,6 @@ export default function FriendsScreen() {
           </TouchableOpacity>
         )}
 
-        {activeTab === 'blocked' && (
-          <TouchableOpacity
-            style={styles.unblockBtn}
-            onPress={() => handleUnblock(item.uid)}
-          >
-            <Text style={styles.unblockBtnText}>Unblock</Text>
-          </TouchableOpacity>
-        )}
 
         {activeTab === 'followers' && isOwnProfile && !isMe && (
           <TouchableOpacity
@@ -374,11 +356,6 @@ export default function FriendsScreen() {
         icon: 'heart-outline',
         title: 'No Friends Yet',
         subtitle: 'Friends are people who follow each other.',
-      },
-      blocked: {
-        icon: 'ban-outline',
-        title: 'No Blocked Users',
-        subtitle: 'When you block someone, they\'ll appear here.',
       },
     };
 
@@ -438,19 +415,6 @@ export default function FriendsScreen() {
           </Text>
         </TouchableOpacity>
 
-        {isOwnProfile && (
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'blocked' && styles.activeTab]}
-            onPress={() => {
-              hapticLight();
-              setActiveTab('blocked');
-            }}
-          >
-            <Text style={[styles.tabText, activeTab === 'blocked' && styles.activeTabText]}>
-              Blocked
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Search */}

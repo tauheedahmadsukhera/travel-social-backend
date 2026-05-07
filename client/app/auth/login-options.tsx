@@ -30,15 +30,9 @@ export default function LoginOptionsScreen() {
   const handleTikTokSignIn = async () => {
     setLoading(true);
     try {
-      console.log('Starting TikTok Sign-In...');
       const result = await signInWithTikTok();
-      console.log('TikTok Sign-In Result:', JSON.stringify(result, null, 2));
-
       if (result.success) {
-        console.log('TikTok Sign-In Success! Navigating to home...');
         await handleSocialAuthResult(result, router);
-      } else {
-        console.log('TikTok Sign-In Failed:', result.error);
       }
     } catch (error) {
       console.error('TikTok sign-in error:', error);
@@ -126,7 +120,7 @@ export default function LoginOptionsScreen() {
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Don&apos;t have an account?{' '}
+              Don't have an account?{' '}
               <Text
                 style={styles.footerLink}
                 onPress={() => router.push('/auth/signup-options')}
@@ -199,4 +193,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

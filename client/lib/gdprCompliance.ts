@@ -108,7 +108,7 @@ export async function cancelAccountDeletion(userId: string): Promise<boolean> {
 export async function permanentlyDeleteAccount(userId: string): Promise<boolean> {
   try {
     console.log('🗑️ Permanently deleting account:', userId);
-    await apiService.delete(`/api/users/${userId}`);
+    await apiService.delete(`/users/${userId}`);
     console.log('✅ Account permanently deleted');
     return true;
   } catch (error) {

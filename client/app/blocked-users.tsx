@@ -57,14 +57,15 @@ export default function BlockedUsersScreen() {
                 id: u._id || u.uid,
                 userId: u.uid || u.firebaseUid,
                 name: u.name || u.displayName || 'User',
-                avatar: u.avatar || u.photoURL,
-                username: u.username,
+                avatar: u.avatar || u.photoURL || u.profilePicture,
+                username: u.username || u.displayName?.toLowerCase().replace(/\s+/g, ''),
                 blockedAt: Date.now()
             })));
         } catch (e) {
             console.warn('Failed to fetch blocked users:', e);
             setBlockedUsers([]);
         }
+
         setLoading(false);
     };
 
@@ -136,7 +137,7 @@ export default function BlockedUsersScreen() {
                                 transition={200}
                             />
                             <View style={styles.userInfo}>
-                                <Text style={styles.userName}>{item.name}</Text>
+                                <Text style={styles.userName}>{item.name || 'User'}</Text>
                                 {item.username && (
                                     <Text style={styles.userHandle}>@{item.username}</Text>
                                 )}

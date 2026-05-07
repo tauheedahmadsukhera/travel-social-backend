@@ -288,16 +288,15 @@ const PostCard: React.FC<PostCardProps> = ({
           if (uid) router.push(`/user-profile?uid=${uid}`);
         }}
         onLocationPress={() => {
-          if (post?.locationData?.placeId) {
-            router.push({
-              pathname: '/location/[placeId]',
-              params: {
-                placeId: post.locationData.placeId,
-                locationName: post.locationData.name || locationName,
-                locationAddress: post.locationData.address || locationName
-              }
-            } as any);
-          }
+          const pid = post?.locationData?.placeId || 'unknown';
+          router.push({
+            pathname: '/location/[placeId]',
+            params: {
+              placeId: pid,
+              locationName: post?.locationData?.name || locationName,
+              locationAddress: post?.locationData?.address || locationName
+            }
+          } as any);
         }}
         onMenuPress={() => setShowPostMenu(true)}
         showMenu={showMenu}
@@ -461,7 +460,7 @@ const PostCard: React.FC<PostCardProps> = ({
                             const myId = currentUser?._id || currentUser?.id || currentUser?.uid;
                             const targetId = post?.userId?._id || post?.userId;
                             if (myId && targetId) {
-                              await apiService.put(`/users/${myId}/block/${targetId}`);
+                              await apiService.blockUser(String(myId), String(targetId));
                               Alert.alert("Blocked", "You will no longer see posts from this user.");
                               feedEventEmitter.emitFeedUpdate({ type: 'USER_BLOCKED', userId: targetId });
                             }
@@ -579,7 +578,8 @@ const PostCard: React.FC<PostCardProps> = ({
                   recipientId: String(recipientId)
                 });
               }
-              Alert.alert('Shared', `Post shared with ${userIds.length} user${userIds.length > 1 ? 's' : ''}`);
+              // Removed success alert as requested
+
             } catch (err) {
               console.error('[PostCard] Share error:', err);
               Alert.alert('Error', 'Failed to share post');

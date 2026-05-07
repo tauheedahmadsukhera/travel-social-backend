@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { handleSocialAuthResult, signInWithApple, signInWithGoogle, signInWithSnapchat, signInWithTikTok } from '../../services/socialAuthService';
 import { AuthBrandHeader } from '@/src/_components/auth/AuthBrandHeader';
@@ -12,21 +13,11 @@ export default function WelcomeScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
-    if (loading) {
-      console.log('âš ï¸ Sign-in already in progress, ignoring duplicate tap');
-      return;
-    }
-
     setLoading(true);
     try {
       const result = await signInWithGoogle();
       await handleSocialAuthResult(result, router);
     } catch (error) {
-      const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
-      if (msg.includes('cancel')) {
-        setLoading(false);
-        return;
-      }
       console.error('Google Sign-In error:', error);
       Alert.alert('Error', 'Failed to sign in with Google. Please try again.');
     } finally {
@@ -35,7 +26,6 @@ export default function WelcomeScreen() {
   };
 
   const handleAppleSignIn = async () => {
-    if (loading) return;
     setLoading(true);
     try {
       const result = await signInWithApple();
@@ -49,7 +39,6 @@ export default function WelcomeScreen() {
   };
 
   const handleTikTokSignIn = async () => {
-    if (loading) return;
     setLoading(true);
     try {
       const result = await signInWithTikTok();
@@ -63,7 +52,6 @@ export default function WelcomeScreen() {
   };
 
   const handleSnapchatSignIn = async () => {
-    if (loading) return;
     setLoading(true);
     try {
       const result = await signInWithSnapchat();
@@ -110,13 +98,13 @@ export default function WelcomeScreen() {
               <View style={styles.line} />
             </View>
 
-            <Text style={styles.agreementText}>
-              By continuing, you agree to our{' '}
-              <Text style={styles.footerLink} onPress={() => router.push('/legal/terms' as any)}>Terms of Service</Text> and{' '}
-              <Text style={styles.footerLink} onPress={() => router.push('/legal/privacy' as any)}>Privacy Policy</Text>.
-              {'\n'}
-              <Text style={{ fontWeight: 'bold' }}>Zero Tolerance Policy:</Text> There is no tolerance for objectionable content or abusive users.
-            </Text>
+            <View style={{ marginBottom: 15 }}>
+              <Text style={styles.agreementText}>
+                By continuing, you agree to our{' '}
+                <Text style={styles.footerLink} onPress={() => router.push('/legal/terms' as any)}>Terms of Service</Text> and{' '}
+                <Text style={styles.footerLink} onPress={() => router.push('/legal/privacy' as any)}>Privacy Policy</Text>.
+              </Text>
+            </View>
 
             <SocialButton provider="google" onPress={handleGoogleSignIn} style={styles.socialButton} disabled={loading} />
             <SocialButton provider="apple" onPress={handleAppleSignIn} style={styles.socialButton} disabled={loading} />
@@ -218,11 +206,9 @@ const styles = StyleSheet.create({
   },
   agreementText: {
     fontSize: 12,
-    color: '#666',
+    color: '#888',
     textAlign: 'center',
-    marginBottom: 20,
     lineHeight: 18,
-    paddingHorizontal: 10,
   },
   legalLinks: {
     flexDirection: 'row',
@@ -234,10 +220,4 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     textDecorationLine: 'underline',
   },
-  legalSeparator: {
-    fontSize: 12,
-    color: '#999',
-    marginHorizontal: 8,
-  },
 });
-

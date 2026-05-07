@@ -334,24 +334,29 @@ export default function StoriesViewer({ stories, onClose, initialIndex = 0 }: { 
     async function applyBlockedFilter() {
       try {
         if (!currentUser?.uid) return;
-        // TODO: Implement backend API to fetch blocked users list
-        // const response = await fetch(`/api/users/${currentUser.uid}/blocked`);
-        // const data = await response.json();
-        const blockedIds = new Set<string>();
-        setLocalStories(prev => prev.filter(s => !blockedIds.has(s.userId)));
-        // Adjust index if filtered list shrinks before currentIndex
-        setCurrentIndex(idx => {
-          const len = localStories.length;
-          if (len === 0) return 0;
-          return Math.min(idx, len - 1);
-        });
+        
+        const { apiService } = await import('@/src/_services/apiService');
+        const response = await apiService.getBlockedUsers(currentUser.uid);
+        
+        if (response?.success && Array.isArray(response.data)) {
+          const blockedIds = new Set<string>(response.data.map((u: any) => String(u._id || u.id || '')));
+          
+          if (blockedIds.size > 0) {
+            setLocalStories(prev => {
+              const filtered = prev.filter(s => !blockedIds.has(String(s.userId)));
+              if (filtered.length !== prev.length) {
+                // If the current story is now blocked, the hook will handle index adjustment
+                return filtered;
+              }
+              return prev;
+            });
+          }
+        }
       } catch (e) {
-        // Fail open: if blocked list cannot be fetched, keep original stories
-        console.warn('Failed to fetch blocked users for stories:', e);
+        console.warn('[StoriesViewer] Failed to fetch blocked users for stories:', e);
       }
     }
     applyBlockedFilter();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
   // Initialize liked comments when current story changes
