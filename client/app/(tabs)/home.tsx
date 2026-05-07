@@ -253,7 +253,6 @@ export default function Home() {
 
   const listHeader = useMemo(() => (
     <View>
-      <LiveStreamsRow mirror={MIRROR_HOME} />
       <View style={styles.headerSection}>
         <TouchableOpacity
           style={[styles.searchBar, MIRROR_HOME && { flexDirection: 'row-reverse', justifyContent: 'flex-start' }]}

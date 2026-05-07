@@ -1,9 +1,9 @@
-import {
-  SNAPCHAT_CLIENT_ID,
-  SNAPCHAT_CLIENT_SECRET,
-  TIKTOK_CLIENT_KEY,
-  TIKTOK_CLIENT_SECRET,
-} from '@env';
+import { 
+  SNAPCHAT_CLIENT_ID, 
+  SNAPCHAT_CLIENT_SECRET, 
+  TIKTOK_CLIENT_KEY, 
+  TIKTOK_CLIENT_SECRET 
+} from '../config/environment';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { GoogleAuthProvider, OAuthProvider, signInWithCredential, signInWithPopup } from 'firebase/auth';
@@ -14,10 +14,10 @@ import { DEFAULT_AVATAR_URL } from '@/lib/api';
 
 
 // Read env with safe fallback to undefined (avoids accidental string "undefined")
+// Safe environment variable getter
 const getEnv = (key: string, envValue?: string) => {
   if (envValue && envValue !== 'undefined') return envValue;
-  const val = (process as any).env?.[key];
-  return val && val !== 'undefined' ? val : undefined;
+  return undefined;
 };
 
 const requireAuth = () => {
@@ -301,8 +301,8 @@ export async function signInWithTikTok() {
     try { await WebBrowser.warmUpAsync(); } catch { }
 
     // TikTok OAuth configuration from developer console (read from env for security)
-    const TIKTOK_CLIENT_KEY_VAL = getEnv('TIKTOK_CLIENT_KEY', TIKTOK_CLIENT_KEY) || TIKTOK_CLIENT_KEY;
-    const TIKTOK_CLIENT_SECRET_VAL = getEnv('TIKTOK_CLIENT_SECRET', TIKTOK_CLIENT_SECRET) || TIKTOK_CLIENT_SECRET;
+    const TIKTOK_CLIENT_KEY_VAL = TIKTOK_CLIENT_KEY;
+    const TIKTOK_CLIENT_SECRET_VAL = TIKTOK_CLIENT_SECRET;
 
     console.log('🔑 TikTok credentials:', TIKTOK_CLIENT_KEY_VAL ? '✓ Key loaded' : '✗ Missing');
 
@@ -503,8 +503,8 @@ export async function signInWithSnapchat() {
     });
 
     // Snapchat client credentials (read from env for security)
-    const SNAPCHAT_CLIENT_ID_VAL = getEnv('SNAPCHAT_CLIENT_ID', SNAPCHAT_CLIENT_ID) || SNAPCHAT_CLIENT_ID;
-    const SNAPCHAT_CLIENT_SECRET_VAL = getEnv('SNAPCHAT_CLIENT_SECRET', SNAPCHAT_CLIENT_SECRET) || SNAPCHAT_CLIENT_SECRET;
+    const SNAPCHAT_CLIENT_ID_VAL = SNAPCHAT_CLIENT_ID;
+    const SNAPCHAT_CLIENT_SECRET_VAL = SNAPCHAT_CLIENT_SECRET;
 
     console.log('🔑 Snapchat credentials loaded:', SNAPCHAT_CLIENT_ID_VAL ? '✓' : '✗');
 
