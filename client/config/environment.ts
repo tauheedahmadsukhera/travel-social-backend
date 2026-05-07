@@ -112,13 +112,13 @@ function getEnvVar(key: string, defaultValue?: string): string {
 /* eslint-enable expo/no-dynamic-env-var */
 
 export const FIREBASE_CONFIG = {
-  apiKey: getEnvVar('EXPO_PUBLIC_FIREBASE_API_KEY', ''),
-  authDomain: getEnvVar('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', ''),
-  projectId: getEnvVar('EXPO_PUBLIC_FIREBASE_PROJECT_ID', ''),
-  storageBucket: getEnvVar('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', ''),
-  messagingSenderId: getEnvVar('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', ''),
-  appId: getEnvVar('EXPO_PUBLIC_FIREBASE_APP_ID', ''),
-  measurementId: getEnvVar('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID', '')
+  apiKey: getEnvVar('EXPO_PUBLIC_FIREBASE_API_KEY', 'AIzaSyC_0pHFGAK5YySB--8hL3Ctz-u1cx4vaCk'),
+  authDomain: getEnvVar('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', 'travel-app-3da72.firebaseapp.com'),
+  projectId: getEnvVar('EXPO_PUBLIC_FIREBASE_PROJECT_ID', 'travel-app-3da72'),
+  storageBucket: getEnvVar('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', 'travel-app-3da72.firebasestorage.app'),
+  messagingSenderId: getEnvVar('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', '709095117662'),
+  appId: getEnvVar('EXPO_PUBLIC_FIREBASE_APP_ID', '1:709095117662:web:5f00f45bb4e392ee17f5cf'),
+  measurementId: getEnvVar('EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID', 'G-PFZRL4FDFD')
 } as const;
 
 if (__DEV__) {
@@ -129,7 +129,7 @@ if (__DEV__) {
 
 // Google Maps Configuration
 // Prefer EXPO_PUBLIC_* (Expo inlines at bundle time). Only use legacy keys if explicitly set.
-const EXPO_GOOGLE_MAPS_KEY = getEnvVar('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', '');
+const EXPO_GOOGLE_MAPS_KEY = getEnvVar('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'AIzaSyCQ1Fe55xOwt9fFfAiGIDVoEt01i2hL-zs');
 const LEGACY_GOOGLE_MAPS_KEY =
   EXPO_GOOGLE_MAPS_KEY ||
   String(env['GOOGLE_MAPS_API_KEY'] || process.env.GOOGLE_MAPS_API_KEY || '').trim() ||
