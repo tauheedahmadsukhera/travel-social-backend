@@ -17,11 +17,17 @@ export async function signUpWithUsername(username: string, name: string, avatar?
     };
 
     const res = await apiService.post('/auth/username/signup', payload);
+    
+    if (res && res.success === false) {
+      return { success: false, error: res.error || 'Sign-up failed' };
+    }
+    
     return {
       success: true,
       user: res?.user,
       username: payload.username,
       internalEmail: res?.internalEmail,
+      token: res?.token,
     };
   } catch (error: any) {
     console.error('Username Sign-Up Error:', error);
@@ -42,7 +48,17 @@ export async function loginWithUsername(username: string) {
     const res = await apiService.post('/auth/username/login', {
       username: username.toLowerCase().trim(),
     });
-    return { success: true, user: res?.user, token: res?.token };
+    
+    if (res && res.success === false) {
+      return { success: false, error: res.error || 'Login failed' };
+    }
+    
+    // Also fail if token is missing
+    if (!res || !res.token) {
+       return { success: false, error: 'Invalid response from server' };
+    }
+    
+    return { success: true, user: res.user, token: res.token };
   } catch (error: any) {
     console.error('Username Login Error:', error);
     const msg = error?.response?.data?.error || error?.message || 'Login failed';
