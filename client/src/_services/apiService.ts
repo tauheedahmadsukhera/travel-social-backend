@@ -11,7 +11,7 @@ function normalizeApiBase(url: string): string {
 }
 
 // ✅ SIMPLIFIED API URL RESOLUTION - Clean & Efficient
-const getAPIBaseURL = () => {
+export const getAPIBaseURL = () => {
   return normalizeApiBase(getBaseUrl());
 };
 
@@ -127,7 +127,8 @@ function getAxiosInstance() {
     axiosInstance = axios.create({
       baseURL: API_BASE,
       timeout: 20000,
-      validateStatus: () => true,
+      // Use standard HTTP error semantics — 4xx/5xx throw errors
+      // (previously `validateStatus: () => true` was masking all errors as success)
       headers: {
         'Content-Type': 'application/json',
         // Prevent aggressive GET caching on iOS URLSession
@@ -152,19 +153,9 @@ function getAxiosInstance() {
 
     // ✅ Response Interceptor - Handle auth & errors
     axiosInstance.interceptors.response.use(
-      async (response: any) => {
-        // Handle 401 Unauthorized - Clear auth (since validateStatus: () => true)
-        if (response.status === 401) {
-          try {
-            await AsyncStorage.multiRemove(['token', 'userId']);
-            if (__DEV__) console.log('⚠️ [API] Auth cleared - 401 response');
-          } catch (e) {
-            if (__DEV__) console.error('[API] Failed to clear storage:', e);
-          }
-        }
-
+      (response: any) => {
         if (__DEV__ && response.config.url !== '/api/posts') {
-          console.log(`${response.status === 401 ? '⚠️' : '✅'} [API] ${response.config.method?.toUpperCase()} ${response.config.url}:`, {
+          console.log(`✅ [API] ${response.config.method?.toUpperCase()} ${response.config.url}:`, {
             status: response.status,
             success: response.data?.success,
           });
@@ -172,7 +163,15 @@ function getAxiosInstance() {
         return response;
       },
       async (error: any) => {
-        // Handle network errors or other non-2xx/4xx if validateStatus was different
+        // Handle 401 Unauthorized - Clear auth and let caller handle
+        if (error.response?.status === 401) {
+          try {
+            await AsyncStorage.multiRemove(['token', 'userId']);
+            if (__DEV__) console.log('⚠️ [API] Auth cleared - 401 response');
+          } catch (e) {
+            if (__DEV__) console.error('[API] Failed to clear storage:', e);
+          }
+        }
         return Promise.reject(error);
       }
     );
@@ -259,6 +258,7 @@ async function apiRequestWithRetry(method: string, url: string, data?: any, conf
       }
 
       // Make the request
+      if (__DEV__) console.log(`📡 [API Request] ${method.toUpperCase()} ${getAPIBaseURL()}${url}`);
       const response = await axiosInstance(requestConfig);
 
       // ✅ Standardized response handling
@@ -388,7 +388,8 @@ export const apiService = {
   sendMessage: (conversationId: string, data: any) => apiRequest('post', `/conversations/${conversationId}/messages`, data),
 
   // ✅ Categories & Locations
-  getCategories: () => apiRequest('get', '/categories'),
+  getCategories: () => apiRequest('get', `/categories?t=${Date.now()}`),
+  getRegions: () => apiRequest('get', `/all-regions?t=${Date.now()}`),
   getLocationCount: () => apiRequest('get', '/posts/location-count'),
   getLocationSuggestions: (q: string, limit: number = 10) =>
     apiRequest('get', '/locations/suggest', undefined, { q, limit }),

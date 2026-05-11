@@ -531,6 +531,29 @@ export default function SavedScreen() {
           }
         })();
       }
+
+      if (event.type === 'POST_UPDATED' && event.postId) {
+        const patch = event.data || {};
+        if (patch.isSaved === false) {
+          // If a post is unsaved, remove it from the local list immediately
+          const targetId = String(event.postId).split('-loop')[0];
+          const filterFn = (prev: any[]) => (Array.isArray(prev) ? prev.filter(p => {
+            const pid = String(p?.id || p?._id || '').split('-loop')[0];
+            return pid !== targetId;
+          }) : []);
+          
+          setAllSavedPosts(prev => filterFn(prev));
+          setCollections(prev => prev.map(col => ({
+            ...col,
+            postIds: Array.isArray(col.postIds) ? col.postIds.filter(id => String(id).split('-loop')[0] !== targetId) : []
+          })));
+        } else if (patch.isSaved === true) {
+           // If it's a new save, it's better to refresh to get the full post object 
+           // but for now, the focus effect will handle it when they come back.
+           // Or we could trigger a silent refresh:
+           if (uid) loadData(uid);
+        }
+      }
     });
 
     return () => {

@@ -92,7 +92,9 @@ export async function signInWithEmailPassword(
     const firebaseUser = userCredential.user;
 
     // Step 2: Sync with backend (save to MongoDB)
+    const idToken = await firebaseUser.getIdToken();
     const response = await apiService.post('/auth/login-firebase', {
+      idToken,
       firebaseUid: firebaseUser.uid,
       email: firebaseUser.email || (email && email.includes('@') ? email : `${firebaseUser.uid}@trips.app`), 
       displayName: firebaseUser.displayName || (email && email.includes('@') ? email.split('@')[0] : 'User'),
@@ -174,7 +176,9 @@ export async function registerWithEmailPassword(
     }
 
     // Step 2: Sync with backend (save to MongoDB)
+    const idToken = await firebaseUser.getIdToken();
     let response = await apiService.post('/auth/register-firebase', {
+      idToken,
       firebaseUid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: displayName || email.split('@')[0],
@@ -183,6 +187,7 @@ export async function registerWithEmailPassword(
 
     if (!response.success) {
       response = await apiService.post('/auth/login-firebase', {
+        idToken,
         firebaseUid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: displayName || email.split('@')[0],
@@ -788,10 +793,12 @@ export const DEFAULT_CATEGORIES = [
 
 export async function getCategories() {
   try {
-    const res = await apiService.get('/categories');
-    const categories = Array.isArray(res) ? res : res?.categories;
-    return categories?.length ? categories : DEFAULT_CATEGORIES;
-  } catch {
+    const res = await apiService.get(`/categories?t=${Date.now()}`);
+    // Standardize: backend returns { success: true, data: [...] }
+    const categories = Array.isArray(res) ? res : (res?.data || res?.categories);
+    return (Array.isArray(categories) && categories.length > 0) ? categories : DEFAULT_CATEGORIES;
+  } catch (error) {
+    console.error('[getCategories] Error:', error);
     return DEFAULT_CATEGORIES;
   }
 }
@@ -1292,7 +1299,7 @@ export default {
 // ============= SEARCH & REGIONS =============
 export async function getRegions() {
   try {
-    const response = await apiService.get('/public/regions');
+    const response = await apiService.get('/regions');
     if (response && response.success && Array.isArray(response.data) && response.data.length > 0) {
       return { success: true, data: response.data };
     }

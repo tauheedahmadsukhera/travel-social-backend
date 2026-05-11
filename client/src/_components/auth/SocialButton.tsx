@@ -44,18 +44,6 @@ const providerConfig = {
 export default function SocialButton({ provider, onPress, style, disabled = false }: SocialButtonProps) {
 	const config = providerConfig[provider];
 
-	if (provider === 'apple' && Platform.OS === 'ios') {
-		return (
-			<AppleAuthentication.AppleAuthenticationButton
-				buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-				buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-				cornerRadius={8}
-				style={[styles.button, styles.appleButton, style]}
-				onPress={onPress}
-			/>
-		);
-	}
-
 	return (
 		<TouchableOpacity
 			style={[

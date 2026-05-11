@@ -21,12 +21,12 @@ const TAB_BAR = {
   icon: 36,
   text: 20,
   // Reduce icon ↔ text gap (iOS looks wider by default)
-  textMarginLeft: -2,
+  textMarginLeft: -6,
   letter: -0.45,
   weight: '800' as const,
 };
 
-const DEFAULT_TEXT_TIGHTEN = -2;
+const DEFAULT_TEXT_TIGHTEN = -10; // Added space between logo and text
 
 type Props = {
   /** Optional remote logo from `/branding`; otherwise bundled Trips mark is used. */
@@ -85,7 +85,7 @@ export function AppBrandMark({
       {showIcon ? (
         <ExpoImage
           source={iconSource}
-          style={{ width: iconPx, height: iconPx }}
+          style={{ width: iconPx, height: iconPx, marginLeft: -15 }}
           contentFit="contain"
           cachePolicy="memory-disk"
         />
@@ -111,6 +111,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 0,
+  },
+  logoContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 40, // Increased shift to move Icon closer to left edge
   },
   rowTextOnly: {
     gap: 0,

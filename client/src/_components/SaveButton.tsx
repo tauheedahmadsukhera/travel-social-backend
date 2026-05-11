@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
@@ -94,9 +94,9 @@ export default function SaveButton({ post, currentUser }: any) {
   return (
     <>
       <TouchableOpacity onPress={handleSavePress} style={{ marginLeft: 0 }}>
-        <MaterialCommunityIcons
+        <Ionicons
           name={saved ? "bookmark" : "bookmark-outline"}
-          size={24}
+          size={22}
           color={saved ? "#0A3D62" : "#222"}
         />
       </TouchableOpacity>

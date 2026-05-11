@@ -1,7 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'react-native';
@@ -857,7 +858,7 @@ function Inbox() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
+      <FlashList
         data={filteredSortedConversations}
         keyExtractor={(item: any) => String(item.conversationId || item.id || item._id)}
         renderItem={({ item }: { item: any }) => (
@@ -896,6 +897,7 @@ function Inbox() {
             tintColor="#007aff"
           />
         }
+        estimatedItemSize={80}
       />
 
       <Modal
@@ -945,7 +947,7 @@ function Inbox() {
                 })}
               </View>
 
-              <FlatList
+              <FlashList
                 data={groupSearchResults}
                 keyExtractor={(u: any, index: number) => {
                   const id = String(u?._id || u?.id || u?.firebaseUid || u?.uid || '');

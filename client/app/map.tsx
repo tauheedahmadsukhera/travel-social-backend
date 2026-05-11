@@ -13,13 +13,8 @@ import { PostLocationModal } from '@/src/_components/PostLocationModal';
 import { useUser } from '@/src/_components/UserContext';
 import PostCard from '@/src/_components/PostCard';
 
-let MapView: any = null;
-let Marker: any = null;
-if (Platform.OS !== 'web') {
-  const RNMaps = require('react-native-maps');
-  MapView = RNMaps.default ?? RNMaps;
-  Marker = RNMaps.Marker;
-}
+const MapView = Platform.OS === 'web' ? null : require('react-native-maps').default;
+const Marker = Platform.OS === 'web' ? null : require('react-native-maps').Marker;
 
 
 import { getAllPosts } from '../lib/firebaseHelpers';

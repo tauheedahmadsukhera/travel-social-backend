@@ -1,7 +1,7 @@
 // ✅ SIMPLE API TESTING - Using curl/axios directly
 const axios = require('axios');
 
-const API_BASE = 'https://trave-social-backend.onrender.com/api';
+const API_BASE = 'https://travel-social-backend.onrender.com/api';
 
 const testEndpoint = async (endpoint, name) => {
   try {

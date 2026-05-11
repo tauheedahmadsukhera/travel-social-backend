@@ -73,7 +73,7 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
     const insets = useSafeAreaInsets();
     const sheetTranslateY = useRef(new Animated.Value(0)).current;
     // Ref so PanResponder (created once) always calls the latest close handler
-    const handleModalCloseRef = useRef<() => void>(() => {});
+    const handleModalCloseRef = useRef<(skipAnimate?: boolean) => void>(() => {});
     const sheetPanResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
@@ -84,14 +84,27 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
                 if (gesture.dy > 0) sheetTranslateY.setValue(gesture.dy);
             },
             onPanResponderRelease: (_evt, gesture) => {
-                const shouldClose = gesture.dy > 100 || gesture.vy > 0.5;
+                const shouldClose = gesture.dy > 120 || gesture.vy > 0.5;
                 if (shouldClose) {
-                    Animated.timing(sheetTranslateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(() => {
-                        sheetTranslateY.setValue(0);
-                        handleModalCloseRef.current();
+                    // Close with velocity-aware timing
+                    const remainingDistance = SCREEN_H - gesture.dy;
+                    const duration = Math.min(Math.max(remainingDistance / Math.abs(gesture.vy || 1), 100), 300);
+                    
+                    Animated.timing(sheetTranslateY, { 
+                        toValue: SCREEN_H, 
+                        duration: duration, 
+                        useNativeDriver: true 
+                    }).start(() => {
+                        handleModalCloseRef.current(true);
                     });
                 } else {
-                    Animated.spring(sheetTranslateY, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 220 }).start();
+                    Animated.spring(sheetTranslateY, { 
+                        toValue: 0, 
+                        useNativeDriver: true, 
+                        damping: 20, 
+                        stiffness: 150,
+                        mass: 0.8
+                    }).start();
                 }
             },
             onPanResponderTerminate: () => {
@@ -146,16 +159,31 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
     };
 
     // Close handler that syncs the final save state before dismissing
-    const handleModalClose = useCallback(() => {
+    const handleModalClose = useCallback((skipAnimate = false) => {
         const inAnyCollection = collections.some(c => c.postIds?.includes(postId));
         const finalSaved = isGloballySaved || inAnyCollection;
         onSaveChange?.(finalSaved);
+        
+        if (skipAnimate) {
+            onClose();
+            return;
+        }
+
         // Smooth slide-down before closing
-        Animated.timing(sheetTranslateY, { toValue: SCREEN_H, duration: 250, useNativeDriver: true }).start(() => {
-            sheetTranslateY.setValue(0);
+        Animated.timing(sheetTranslateY, { 
+            toValue: SCREEN_H, 
+            duration: 280, 
+            useNativeDriver: true 
+        }).start(() => {
             onClose();
         });
     }, [collections, postId, isGloballySaved, onSaveChange, onClose, sheetTranslateY]);
+
+    const backdropOpacity = sheetTranslateY.interpolate({
+        inputRange: [0, SCREEN_H * 0.7],
+        outputRange: [1, 0],
+        extrapolate: 'clamp'
+    });
 
     // Keep ref updated so PanResponder always calls the latest version
     useEffect(() => {
@@ -274,6 +302,8 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
             didAutoGlobalSaveRef.current = false;
             loadCollections();
             loadGroups();
+            // Reset position on open
+            sheetTranslateY.setValue(0);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible, loadCollections, loadGroups]);
@@ -348,6 +378,11 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
                 );
                 setCollections(updatedCols);
                 syncGlobalState(isGloballySaved, updatedCols);
+                
+                // Emit granular update to sync UI across the app
+                const inAnyCollection = updatedCols.some(c => c.postIds?.includes(postId));
+                feedEventEmitter.emitPostUpdated(postId, { isSaved: isGloballySaved || inAnyCollection });
+                
                 showToast(isCurrentlySaved ? `Removed from ${col.name}` : `Saved to ${col.name}`);
             } else {
                 Alert.alert('Error', 'Failed to update collection');
@@ -366,8 +401,6 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
         // Optimistic UI update
         setIsGloballySaved(nextState);
         syncGlobalState(nextState, collections);
-        feedEventEmitter.emit('feedUpdated');
-        
         setIsUpdating(true);
         try {
             if (nextState) {
@@ -379,6 +412,8 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
                 await apiService.delete(`/users/${currentUid}/saved/${postId}`);
                 showToast('Removed from Saved');
             }
+            // Emit granular update instead of full feed refresh
+            feedEventEmitter.emitPostUpdated(postId, { isSaved: nextState });
         } catch (e) {
             console.error('[SaveToCollectionModal] handleGlobalToggle error', e);
             // Revert on error
@@ -414,8 +449,8 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
                 await loadCollections();
                 if (postId) {
                     onSaveChange?.(true);
+                    feedEventEmitter.emitPostUpdated(postId, { isSaved: true });
                 }
-                feedEventEmitter.emit('feedUpdated');
                 createdSuccessfully = true;
             } else {
                 Alert.alert('Error', res?.error || 'Failed to create collection');
@@ -428,7 +463,7 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
         }
 
         if (createdSuccessfully) {
-            onClose();
+            handleModalClose(true);
         }
     };
 
@@ -863,7 +898,7 @@ export default function SaveToCollectionModal({ visible, onClose, postId, postIm
                     handleModalClose();
                 }}
             >
-                <View style={styles.backdrop} />
+                <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
             </TouchableWithoutFeedback>
 
             <KeyboardAvoidingView

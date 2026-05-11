@@ -128,11 +128,20 @@ const Users = () => {
               <tr key={user._id} className="hover:bg-white/[0.02] transition-colors group">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <img 
-                      src={user.avatar || 'https://via.placeholder.com/40'} 
-                      alt="" 
-                      className="w-10 h-10 rounded-full bg-slate-800 border border-white/10"
-                    />
+                    {user.avatar ? (
+                      <img 
+                        src={user.avatar} 
+                        alt="" 
+                        className="w-10 h-10 rounded-full bg-slate-800 border border-white/10 object-cover"
+                        onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                      />
+                    ) : null}
+                    <div 
+                      className="w-10 h-10 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-500 font-bold text-sm"
+                      style={{ display: user.avatar ? 'none' : 'flex' }}
+                    >
+                      {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                    </div>
                     <div>
                       <p className="text-white font-bold">{user.displayName || 'Unnamed Traveler'}</p>
                       <p className="text-slate-500 text-xs">{user.email}</p>

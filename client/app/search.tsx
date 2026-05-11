@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,6 +13,7 @@ import { DEFAULT_AVATAR_URL } from '@/lib/api';
 import { apiService } from '@/src/_services/apiService';
 import { normalizeMediaUrl, isVideoUrl } from '../lib/utils/media';
 import { getVideoThumbnailUrl } from '../lib/imageHelpers';
+import { resolveCanonicalUserId } from '../lib/currentUser';
 
 
 // Cache for search results
@@ -43,10 +45,10 @@ export default function SearchScreen() {
   useEffect(() => {
     const getCurrentUserId = async () => {
       try {
-        const userId = await AsyncStorage.getItem('userId');
+        const userId = await resolveCanonicalUserId();
         setCurrentUserId(userId);
       } catch (error) {
-        console.error('Failed to get userId:', error);
+        console.error('Failed to resolve userId:', error);
       }
     };
     getCurrentUserId();
@@ -276,7 +278,7 @@ export default function SearchScreen() {
       {loading ? (
         <ActivityIndicator size="large" color="#FFB800" style={{ marginTop: 32 }} />
       ) : activeTab === 'users' ? (
-        <FlatList
+        <FlashList
           data={userResults}
           keyExtractor={item => item.uid || item.id}
           renderItem={({ item }) => (
@@ -310,14 +312,11 @@ export default function SearchScreen() {
           ListEmptyComponent={<Text style={{ color: '#888', marginTop: 32, textAlign: 'center' }}>No users found</Text>}
           refreshing={loading}
           onRefresh={() => handleSearch(query)}
-          initialNumToRender={15}
-          maxToRenderPerBatch={10}
-          windowSize={7}
-          removeClippedSubviews={true}
+          estimatedItemSize={75}
         />
       ) : activeTab === 'hashtags' ? (
         query.trim() ? (
-          <FlatList
+          <FlashList
             data={postResults}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (
@@ -343,9 +342,10 @@ export default function SearchScreen() {
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={{ color: '#888', marginTop: 32, textAlign: 'center' }}>No posts with this hashtag</Text>}
+            estimatedItemSize={80}
           />
         ) : (
-          <FlatList
+          <FlashList
             data={trendingHashtags}
             keyExtractor={(item, idx) => `${item.hashtag}-${idx}`}
             renderItem={({ item }) => (
@@ -364,10 +364,11 @@ export default function SearchScreen() {
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={{ color: '#888', marginTop: 32, textAlign: 'center' }}>No trending hashtags</Text>}
+            estimatedItemSize={70}
           />
         )
       ) : (
-        <FlatList
+        <FlashList
           data={postResults}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
@@ -395,10 +396,7 @@ export default function SearchScreen() {
           ListEmptyComponent={<Text style={{ color: '#888', marginTop: 32, textAlign: 'center' }}>No posts found</Text>}
           refreshing={loading}
           onRefresh={() => handleSearch(query)}
-          initialNumToRender={15}
-          maxToRenderPerBatch={10}
-          windowSize={7}
-          removeClippedSubviews={true}
+          estimatedItemSize={80}
         />
       )}
     </View>

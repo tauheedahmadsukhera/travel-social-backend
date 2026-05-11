@@ -102,8 +102,15 @@ export default function Home() {
     HOME_CACHE_KEY 
   } = useHomeFeed(currentUserId, !!isOnline);
 
-  const { categories } = useCategories();
+  const { categories, loadCategories } = useCategories();
   
+  // Refresh categories on focus to sync with Admin Panel
+  useFocusEffect(
+    useCallback(() => {
+      loadCategories();
+    }, [loadCategories])
+  );
+
   useFeedEvents(setPosts, setAllLoadedPosts, !!isOnline, loadInitialFeed);
 
   // Use official hook for basic tap

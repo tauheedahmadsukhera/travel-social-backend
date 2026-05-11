@@ -5,7 +5,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import {
   View,
   KeyboardAvoidingView,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import {
   addComment,
   addCommentReply,
@@ -339,8 +339,8 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
       </View>
 
       {activeTab === 'comment' ? (
-        <View style={{ flex: 1 }}>
-          <FlatList
+        <View style={{ flex: 1, minHeight: 2 }}>
+          <FlashList
             data={comments}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
@@ -355,6 +355,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
             )}
             contentContainerStyle={{ paddingBottom: 20 }}
             ListEmptyComponent={loading ? <ActivityIndicator style={{ marginTop: 20 }} color="#000" /> : <Text style={styles.emptyText}>No comments yet</Text>}
+            estimatedItemSize={80}
           />
           {showInput && (
             <CommentInput 
@@ -374,8 +375,8 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
           />
         </View>
       ) : (
-        <View style={{ flex: 1 }}>
-          <FlatList
+        <View style={{ flex: 1, minHeight: 2 }}>
+          <FlashList
             data={reactions}
             keyExtractor={(item, index) => `${item.userId}-${index}`}
             renderItem={({ item }) => (
@@ -386,6 +387,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
               </View>
             )}
             ListEmptyComponent={loading ? <ActivityIndicator style={{ marginTop: 20 }} color="#000" /> : <View style={styles.emptyReactionContainer}><Ionicons name="star" size={60} color="#FFD700" /><Text style={styles.emptyReactionTitle}>No reactions yet</Text><Text style={styles.emptyReactionSub}>Be the first to react!</Text></View>}
+            estimatedItemSize={60}
           />
           <View style={styles.reactionEmojiBar}>
             {quickEmojis.map(emoji => (

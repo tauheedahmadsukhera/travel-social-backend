@@ -346,19 +346,7 @@ const PostCard: React.FC<PostCardProps> = ({
 
       </View>
 
-      <Pressable 
-        style={{ 
-          paddingHorizontal: 12, 
-          paddingTop: 6, 
-          paddingBottom: 10,
-          marginTop: 0
-        }}
-        onPress={() => setShowComments('comment')}
-      >
-        <View style={{ backgroundColor: '#f0f2f5', padding: 12, borderRadius: 10 }}>
-          <Text style={{ color: '#65676b', fontSize: 14 }}>Write a comment...</Text>
-        </View>
-      </Pressable>
+
 
       {/* Post Options Menu (Edit, Delete, Report) */}
       <Modal

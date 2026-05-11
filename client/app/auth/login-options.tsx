@@ -54,19 +54,21 @@ export default function LoginOptionsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          {/* Header */}
-          <View style={styles.header}>
+          {/* Balanced Header & Logo Section */}
+          <View style={styles.headerRow}>
             <TouchableOpacity
               onPress={() => safeRouterBack()}
               style={styles.backButton}
             >
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
-          </View>
+            
+            <View style={styles.logoContainer}>
+              <AuthBrandHeader subtitle="How would you like to login?" />
+            </View>
 
-          {/* Title Section */}
-          <View style={styles.titleSection}>
-            <AuthBrandHeader subtitle="How would you like to login?" />
+            {/* Empty placeholder to balance the back button width */}
+            <View style={styles.headerPlaceholder} />
           </View>
 
           {/* Login Method Selection */}
@@ -150,22 +152,31 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 16,
     paddingBottom: 10,
   },
-  header: {
-    marginBottom: 10,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    minHeight: 50,
+    width: '100%',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
+    width: 44,
+    height: 44,
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
-  titleSection: {
+  logoContainer: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 10,
+    justifyContent: 'center',
+    marginRight: 24, // Shifted left to reduce space on icon side
+  },
+  headerPlaceholder: {
+    width: 44,
   },
   methodContainer: {
     marginBottom: 15,

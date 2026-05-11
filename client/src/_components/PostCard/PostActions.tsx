@@ -44,7 +44,7 @@ const PostActions: React.FC<PostActionsProps> = ({
     <View style={styles.iconRow}>
       <View style={styles.iconRowLeft}>
         <TouchableOpacity onPress={onLikePress} style={styles.actionItem}>
-          <MaterialCommunityIcons 
+          <Ionicons 
             name={isLiked ? "heart" : "heart-outline"} 
             size={24} 
             color={isLiked ? "#ff4d4d" : "#222"} 
@@ -53,7 +53,7 @@ const PostActions: React.FC<PostActionsProps> = ({
         </TouchableOpacity>
         
         <TouchableOpacity onPress={onCommentPress} style={styles.actionItem}>
-          <Ionicons name="chatbubble-outline" size={26} color="#000" />
+          <Ionicons name="chatbubble-outline" size={22} color="#000" />
           {commentCount > 0 && <Text style={styles.actionCount}>{commentCount}</Text>}
         </TouchableOpacity>
 
@@ -72,7 +72,7 @@ const PostActions: React.FC<PostActionsProps> = ({
         </View>
 
         <TouchableOpacity onPress={onSharePress} style={styles.actionItem}>
-          <Feather name="send" size={26} color="#222" />
+          <Ionicons name="paper-plane-outline" size={22} color="#222" />
         </TouchableOpacity>
       </View>
     </View>

@@ -88,13 +88,8 @@ const responsiveValues = {
   modalPadding: isSmallDevice ? 20 : 20,
 };
 
-let MapView: any = null;
-let Marker: any = null;
-if (Platform.OS !== 'web') {
-  const RNMaps = require('react-native-maps');
-  MapView = RNMaps.default ?? RNMaps;
-  Marker = RNMaps.Marker;
-}
+const MapView = Platform.OS === 'web' ? null : require('react-native-maps').default;
+const Marker = Platform.OS === 'web' ? null : require('react-native-maps').Marker;
 
 // Default avatar URL
 import { DEFAULT_AVATAR_URL } from '@/lib/api';

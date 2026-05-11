@@ -99,6 +99,8 @@ export default function LocationDetailsScreen() {
   const [showStoriesViewer, setShowStoriesViewer] = useState(false);
   const [selectedStories, setSelectedStories] = useState<Story[]>([]);
   const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const flatListRef = React.useRef<FlatList>(null);
 
   // --- NEW: PAGINATION & SKELETON STATES ---
   const [page, setPage] = useState(0);
@@ -608,12 +610,19 @@ export default function LocationDetailsScreen() {
             const delta = y - prevY;
             if (Math.abs(delta) < 6) return; // ignore jitters
 
+            if (y > 400) {
+              if (!showScrollTop) setShowScrollTop(true);
+            } else {
+              if (showScrollTop) setShowScrollTop(false);
+            }
+
             if (y <= 8) {
               applyHeaderState(false);
             } else if (y > 56) {
               applyHeaderState(true);
             }
           }}
+          ref={flatListRef}
           keyExtractor={(item, index) => {
             const id = String(item?.id || item?._id || '').trim();
             return id || `post-${index}`;
@@ -753,6 +762,19 @@ export default function LocationDetailsScreen() {
             onClose={() => setShowStoriesViewer(false)}
           />
         </Modal>
+      )}
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <TouchableOpacity
+          style={[styles.scrollTopButton, { bottom: 30 + (insets.bottom || 0) }]}
+          onPress={() => {
+            hapticLight();
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }}
+        >
+          <Feather name="arrow-up" size={24} color="#007AFF" />
+        </TouchableOpacity>
       )}
 
       {/* Notifications Modal */}
@@ -932,5 +954,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999',
     marginTop: 16,
+  },
+  scrollTopButton: {
+    position: 'absolute',
+    right: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
   },
 });

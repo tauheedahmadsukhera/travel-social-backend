@@ -5,7 +5,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: '#fff',
-    marginBottom: 0,
+    marginBottom: 4,
   },
 
   cardHeader: {
@@ -14,15 +14,13 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: '#fff',
-    gap: 12,
+    gap: 10,
   },
   cardHeaderAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 22.5,
+    borderRadius: 20,
     backgroundColor: '#eee',
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
     overflow: 'hidden',
   },
   cardHeaderInfo: {
@@ -30,7 +28,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardHeaderName: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     color: '#111',
     lineHeight: 17,
@@ -42,7 +40,7 @@ export const styles = StyleSheet.create({
     marginTop: 0,
   },
   cardHeaderLocation: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#222',
     fontWeight: '400',
   },
@@ -54,7 +52,7 @@ export const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   cardHeaderDate: {
-    fontSize: 14,
+    fontSize: 10,
     color: '#222',
     fontWeight: '400',
   },
@@ -75,8 +73,8 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: 'space-between',
-    paddingHorizontal: 11,
-    paddingTop: 4,
+    paddingHorizontal: 12,
+    paddingTop: 6,
     paddingBottom: 0,
   },
   iconRowLeft: {
@@ -123,9 +121,12 @@ export const styles = StyleSheet.create({
     gap: 3,
   },
   captionWrap: {
-    paddingHorizontal: 11,
-    marginTop: 0,
-    paddingBottom: 0,
+    backgroundColor: '#f0f2f5',
+    padding: 12,
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 0,
   },
   caption: {
     fontSize: 14,
@@ -144,16 +145,12 @@ export const styles = StyleSheet.create({
   hashtags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
     gap: 6,
   },
   hashtag: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 2,
   },
   hashtagText: {
     color: '#667eea',

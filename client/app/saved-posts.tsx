@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, FlatList, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -220,14 +221,14 @@ export default function SavedPostsScreen() {
           <Text style={styles.emptySubtitle}>Save posts to view them later</Text>
         </ScrollView>
       ) : (
-        <FlatList
+        <FlashList
           data={savedPosts}
           renderItem={renderPost}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
           onRefresh={handleRefresh}
-          scrollEnabled={true}
+          estimatedItemSize={320}
         />
       )}
     </SafeAreaView>

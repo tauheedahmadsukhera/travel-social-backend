@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, TouchableOpacity, Image, Text, Dimensions, FlatList } from 'react-native';
+import { View, TouchableOpacity, Text, Dimensions } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
 import { GalleryAsset, isVideoUri } from '../../../hooks/useCreatePost';
 
@@ -28,7 +30,12 @@ const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSel
         onPress={() => onSelect(item.uri)}
         style={{ width: GRID_ITEM_SIZE, height: GRID_ITEM_SIZE, padding: 1 }}
       >
-        <Image source={{ uri: item.uri }} style={{ flex: 1 }} />
+        <ExpoImage 
+          source={{ uri: item.uri }} 
+          style={{ flex: 1 }} 
+          contentFit="cover"
+          transition={200}
+        />
         {item.mediaType === 'video' && (
           <View style={{ position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 2, flexDirection: 'row', alignItems: 'center' }}>
             <Feather name="video" size={10} color="#fff" />
@@ -68,7 +75,7 @@ const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSel
           </TouchableOpacity>
         </View>
       </View>
-      <FlatList
+      <FlashList
         data={assets}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
@@ -76,6 +83,7 @@ const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSel
         onEndReached={onLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={loading ? <View style={{ padding: 20 }}><Text>Loading...</Text></View> : null}
+        estimatedItemSize={GRID_ITEM_SIZE}
       />
     </View>
   );

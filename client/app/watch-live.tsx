@@ -36,13 +36,8 @@ import ZeegocloudStreamingService from '../services/implementations/ZeegocloudSt
 import ZeegocloudLiveViewer from '@/src/_components/ZeegocloudLiveViewer';
 import { addLiveComment, joinLiveStreamWithProfile, leaveLiveStream, subscribeToLiveComments, subscribeToLiveViewers } from '../lib/firebaseHelpers/live';
 
-let MapView: any = null;
-let Marker: any = null;
-if (Platform.OS !== 'web') {
-  const RNMaps = require('react-native-maps');
-  MapView = RNMaps.default ?? RNMaps;
-  Marker = RNMaps.Marker;
-}
+const MapView = Platform.OS === 'web' ? null : require('react-native-maps').default;
+const Marker = Platform.OS === 'web' ? null : require('react-native-maps').Marker;
 
 const { width, height } = Dimensions.get('window');
 

@@ -33,15 +33,28 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('⚠️ [ErrorBoundary] Caught error:', error, errorInfo);
-    
+    // Log to console in dev only
+    if (__DEV__) {
+      console.error('⚠️ [ErrorBoundary] Caught error:', error, errorInfo);
+    }
+
     // Call custom error handler if provided
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
 
-    // In a real app, log to Sentry here:
-    // Sentry.captureException(error, { extra: errorInfo });
+    // Report to Sentry (production error tracking)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Sentry = require('@sentry/react-native');
+      Sentry.captureException(error, {
+        extra: {
+          componentStack: errorInfo.componentStack,
+        },
+      });
+    } catch {
+      // Sentry not initialized — silently ignore
+    }
   }
 
   handleReset = () => {
@@ -65,7 +78,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <Text style={styles.emoji}>😕</Text>
             <Text style={styles.title}>Oops! Something went wrong</Text>
             <Text style={styles.message}>
-              {this.state.error?.message || 'An unexpected error occurred'}
+              {'Something went wrong. Please try again or restart the app.'}
             </Text>
             <TouchableOpacity style={styles.button} onPress={this.handleReset}>
               <Text style={styles.buttonText}>Try Again</Text>

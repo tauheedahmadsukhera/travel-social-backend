@@ -2,7 +2,8 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_BASE_URL } from '../lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -445,17 +446,14 @@ export default function FriendsScreen() {
           <ActivityIndicator size="large" color="#0A3D62" />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredData}
           keyExtractor={(item) => item.uid}
           renderItem={renderUserItem}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={renderEmptyState}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={10}
+          estimatedItemSize={75}
         />
       )}
     </SafeAreaView>

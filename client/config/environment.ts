@@ -303,7 +303,6 @@ export const STORAGE_KEYS = {
 // API Base URL Helper
 export function getAPIBaseURL(): string {
   const prodUrl = 'https://travel-social-backend.onrender.com/api';
-  const localIp = 'http://10.36.246.154:5000/api';
   // Avoid runtime crashes in release when env resolution fails.
   const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL || getEnvVar('EXPO_PUBLIC_API_BASE_URL', '');
   const normalizedEnvUrl = String(envUrl || '').trim().toLowerCase();
@@ -315,29 +314,31 @@ export function getAPIBaseURL(): string {
   const derivedLocalUrl = hostIp ? `http://${hostIp}:5000/api` : '';
 
   if (__DEV__) {
-    console.log('📡 [environment] EXPO_PUBLIC_API_BASE_URL from env:', envUrl || 'Not set');
+    console.log('📡 [environment] EXPO_PUBLIC_API_BASE_URL check:', {
+      envProcess: process.env.EXPO_PUBLIC_API_BASE_URL,
+      resolved: envUrl
+    });
     
-    // If a remote URL is explicitly provided in the environment, honor it!
-    if (envUrl && !envLooksLocal) {
-      console.log('📡 [environment] Dev mode: Using explicit remote URL from env:', envUrl);
+    // 1. ALWAYS prefer the explicit environment variable if it's set and NOT a placeholder!
+    if (envUrl && envUrl.startsWith('http')) {
+      console.log('📡 [environment] Using URL:', envUrl);
       return envUrl;
     }
 
-    // Always prefer local backend in development to test new backend code!
-    // If we have a derived host IP (Expo Go / physical device on same wifi), use it.
+    // 2. If no env var, try to derive from Metro host IP (Expo Go)
     if (derivedLocalUrl) {
-      console.log('📡 [environment] Dev mode: Overriding with derived host URL:', derivedLocalUrl);
+      console.log('📡 [environment] Using derived host URL:', derivedLocalUrl);
       return derivedLocalUrl;
     }
     
-    // Fallback for Android Emulator
+    // Fallback for Android Emulator (only if no envUrl)
     if (Platform.OS === 'android') {
-      console.log('📡 [environment] Dev mode: Overriding with Android Emulator URL');
+      console.log('📡 [environment] Falling back to Android Emulator local URL');
       return 'http://10.0.2.2:5000/api';
     }
 
     // Fallback for iOS Simulator / Web
-    console.log('📡 [environment] Dev mode: Overriding with localhost URL');
+    console.log('📡 [environment] Falling back to localhost');
     return 'http://localhost:5000/api';
   }
 

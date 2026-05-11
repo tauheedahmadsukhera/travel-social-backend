@@ -4,7 +4,7 @@ const axios = require('axios');
 const testAPIs = [
   {
     name: 'Production Backend',
-    url: 'https://trave-social-backend.onrender.com/api'
+    url: 'https://travel-social-backend.onrender.com/api'
   },
   {
     name: 'Localhost Backend', 

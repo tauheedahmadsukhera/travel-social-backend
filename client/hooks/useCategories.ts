@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../src/_services/apiService';
 import { DEFAULT_CATEGORIES } from '../lib/firebaseHelpers/index';
 
@@ -11,27 +11,28 @@ export function useCategories() {
 
   const [categories, setCategories] = useState(defaultCategoryObjects);
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       const cats = await apiService.getCategories();
-      const mappedCats = Array.isArray(cats?.data)
-        ? cats.data.map((c: any) => {
+      if (cats?.success && Array.isArray(cats.data)) {
+        const mappedCats = cats.data.map((c: any) => {
           if (typeof c === 'string') return { name: c, image: '' };
           return {
             name: typeof c.name === 'string' ? c.name : '',
             image: typeof c.image === 'string' ? c.image : ''
           };
-        }).filter((c: any) => c.name)
-        : [];
-      setCategories(mappedCats.length > 0 ? mappedCats : defaultCategoryObjects);
+        }).filter((c: any) => c.name);
+        setCategories(mappedCats);
+      }
     } catch (error) {
+      console.error('[useCategories] Load error:', error);
       setCategories(defaultCategoryObjects);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadCategories();
-  }, []);
+  }, [loadCategories]);
 
   return { categories, loadCategories };
 }

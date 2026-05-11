@@ -105,7 +105,7 @@ export const useCreatePost = (params: any = {}) => {
     if (after) setLoadingGallery(true);
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted' && status !== 'limited') return;
+      if (status !== 'granted' && (status as any) !== 'limited') return;
       const page = await MediaLibrary.getAssetsAsync({
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
@@ -479,6 +479,18 @@ export const useCreatePost = (params: any = {}) => {
         }
       } catch (err) {
         console.error('[useCreatePost] Failed to fetch groups:', err);
+      }
+    })();
+    // Fetch categories from database
+    (async () => {
+      try {
+        const cats = await getCategories();
+        if (Array.isArray(cats)) {
+          const mapped = cats.map(c => typeof c === 'string' ? { name: c, image: '' } : c);
+          setCategories(mapped);
+        }
+      } catch (err) {
+        console.error('[useCreatePost] Failed to fetch categories:', err);
       }
     })();
   }, [params.editPostId, step]);

@@ -39,7 +39,7 @@ export function AuthBrandHeader({
 const styles = StyleSheet.create({
   welcomeOuter: {
     alignItems: 'center',
-    marginTop: 56,
+    marginTop: 20,
     marginBottom: 10,
   },
   defaultOuter: {
@@ -47,12 +47,13 @@ const styles = StyleSheet.create({
   },
   markWrap: {
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 0,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: '#000',
+    marginTop: -4,
     marginBottom: 6,
     textAlign: 'center',
     paddingHorizontal: 8,
@@ -61,6 +62,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+    marginTop: -4,
     textAlign: 'center',
     paddingHorizontal: 8,
   },

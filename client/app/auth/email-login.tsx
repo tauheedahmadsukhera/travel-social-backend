@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   titleSection: {
-    marginBottom: 15,
+    marginBottom: 10,
   },
   inputContainer: {
     marginBottom: 12,

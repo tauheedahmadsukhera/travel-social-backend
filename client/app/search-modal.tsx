@@ -1,10 +1,24 @@
 import { DEFAULT_AVATAR_URL } from '../lib/api';
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  TextInput, 
+  StyleSheet, 
+  Keyboard, 
+  Platform, 
+  ActivityIndicator, 
+  FlatList,
+  Alert,
+  Image,
+  KeyboardAvoidingView
+} from "react-native";
 import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { getOrCreateConversation, getRegions, searchUsers } from "../lib/firebaseHelpers/index";
@@ -54,10 +68,14 @@ const LEGACY_IMAGE_ALIASES: Record<string, string> = {
 };
 
 function getCardImageSource(item: Region) {
+  // 1. If it's a direct URL (Cloudinary/Unsplash), use it
   if (item.image && (item.image.startsWith('http') || item.image.startsWith('https'))) {
     return { uri: item.image };
   }
-  const key = LEGACY_IMAGE_ALIASES[item.image] ?? item.image;
+  
+  // 2. Otherwise, use the 'image' field or 'name' as a key for local assets
+  const key = LEGACY_IMAGE_ALIASES[item.image || item.name] ?? (item.image || item.name);
+  
   if (item.section === 'country') {
     return COUNTRY_CARD_IMAGES[key] ?? DEFAULT_CARD_IMAGE;
   }
@@ -218,40 +236,56 @@ export default function SearchModal() {
     }).catch(err => console.error('[SearchModal] Failed to get userId:', err));
   }, []);
 
-  // Fetch regions from Firebase on mount
-  useEffect(() => {
-    async function fetchRegions() {
-      setLoadingRegions(true);
-      try {
-        // Offline: rely on cache/defaults (avoid blocking spinner loops)
-        if (!isOnline) {
+  // Fetch regions from Backend on mount and focus
+  const fetchRegions = useCallback(async () => {
+    setLoadingRegions(true);
+    try {
+      const { apiService, getAPIBaseURL } = await import('@/src/_services/apiService');
+      const url = `${getAPIBaseURL()}/all-regions?t=${Date.now()}`;
+      console.log('[SearchModal] 📡 Fetching from:', url);
+      let result = await apiService.getRegions();
+      
+      if (typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (e) {
+          // Suppressing region fetch error for now
           setLoadingRegions(false);
           return;
         }
-        const result = await getRegions();
-        if (result.success && result.data && result.data.length > 0) {
-          const raw = result.data as Region[];
-          const normalized: Region[] = raw.map((r: any, i: number) => {
-            if (r?.section === 'country' || r?.section === 'region' || r?.section === 'city') return r as Region;
-            // Legacy flat list: first 3 countries, next 3 regions, rest cities
-            if (i < 3) return { ...r, section: 'country' as const };
-            if (i < 6) return { ...r, section: 'region' as const };
-            return { ...r, section: 'city' as const };
-          });
-          setRegions(normalized);
-          try { await setCachedData(REGIONS_CACHE_KEY, normalized, { ttl: 7 * 24 * 60 * 60 * 1000 }); } catch { }
-        } else {
-          // Use default regions if Firebase fetch fails
-          setRegions(defaultRegions);
-        }
-      } catch (error) {
-        console.error('Error loading regions:', error);
+      }
+
+      // Ultra-flexible parsing
+      let dataToSet = null;
+      if (Array.isArray(result)) {
+        dataToSet = result;
+      } else if (result && Array.isArray(result.data)) {
+        dataToSet = result.data;
+      } else if (result && result.success && Array.isArray(result.data)) {
+        dataToSet = result.data;
+      }
+
+      if (dataToSet && dataToSet.length > 0) {
+        console.log(`[SearchModal] ✅ Success! Received ${dataToSet.length} regions.`);
+        setRegions(dataToSet);
+        await setCachedData(REGIONS_CACHE_KEY, dataToSet, { ttl: 24 * 60 * 60 * 1000 });
+      } else {
+        console.warn('[SearchModal] ⚠️ API structure mismatched or empty.');
         setRegions(defaultRegions);
       }
+    } catch (error: any) {
+      console.error('[SearchModal] ❌ Error loading regions:', error.message);
+      setRegions(defaultRegions);
+    } finally {
       setLoadingRegions(false);
     }
-    fetchRegions();
-  }, [REGIONS_CACHE_KEY, isOnline]);
+  }, [REGIONS_CACHE_KEY]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRegions();
+    }, [fetchRegions])
+  );
 
   // Reset data when tab changes
   useEffect(() => {
