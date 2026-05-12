@@ -89,7 +89,7 @@ const corsOptions = {
 };
 app.use(compression());
 app.use(cors(corsOptions));
-app.get('/api/ping', (req, res) => res.json({ success: true, message: 'pong', timestamp: new Date() }));
+app.get('/api/ping-v2', (req, res) => res.json({ success: true, message: 'pong-v2', timestamp: new Date() }));
 // Request Logger for debugging mobile connections
 app.use((req, res, next) => {
   if (process.env.NODE_ENV !== 'production') {
