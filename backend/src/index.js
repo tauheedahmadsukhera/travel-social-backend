@@ -134,7 +134,7 @@ app.use('/api', routes);
 setupSentryErrorHandler(app);
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Trips API is running', version: '1.1.0' });
+  res.json({ message: 'Trips API is running', version: '1.2.0' });
 });
 
 // ============= 404 HANDLER =============
