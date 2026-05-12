@@ -162,38 +162,38 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       processMediaItem(p.videoUrl, 'videoUrl');
       processMediaItem(p.url, 'url');
 
+      // Unified media array for modern frontend
       p.media = mediaList;
+      
+      // Preserve original imageUrl for legacy frontend compatibility
+      if (!p.imageUrl && mediaList.length > 0 && mediaList[0].type === 'image') {
+        p.imageUrl = mediaList[0].url;
+      }
       // -------------------------------
       
-      const authorRef = String(p.userId?._id || p.userId || '');
-      const author = userMap[authorRef];
+      const authorRef = String(p.userId?._id || p.userId || p.authorData?._id || '');
+      const author = userMap[authorRef] || p.authorData; // Use batch map or pre-enriched data
 
       if (author) {
-        if (typeof p.userId === 'string' || !p.userId) {
-          p.userId = {
-            _id: authorRef,
-            id: authorRef,
-            displayName: author.displayName || author.name || 'User',
-            name: author.name || author.displayName || 'User',
-            avatar: author.avatar || author.photoURL || author.profilePicture || null,
-            photoURL: author.photoURL || author.avatar || author.profilePicture || null,
-            profilePicture: author.profilePicture || author.avatar || author.photoURL || null
-          };
-        } else if (typeof p.userId === 'object') {
-          p.userId = {
-            ...p.userId,
-            avatar: author.avatar || p.userId.avatar || p.userId.photoURL || p.userId.profilePicture || null,
-            photoURL: author.photoURL || p.userId.photoURL || p.userId.avatar || p.userId.profilePicture || null,
-            profilePicture: author.profilePicture || p.userId.profilePicture || p.userId.avatar || p.userId.photoURL || null,
-            displayName: p.userId.displayName || author.displayName || author.name,
-            name: p.userId.name || author.name || author.displayName
-          };
-        }
+        // Construct the structured user object the frontend expects
+        const enrichedUser = {
+          _id: author._id || authorRef,
+          id: authorRef,
+          displayName: author.displayName || author.name || 'User',
+          name: author.name || author.displayName || 'User',
+          username: author.username || undefined,
+          avatar: author.avatar || author.photoURL || author.profilePicture || null,
+          photoURL: author.photoURL || author.avatar || author.profilePicture || null,
+          profilePicture: author.profilePicture || author.avatar || author.photoURL || null
+        };
 
-        p.userName = author.displayName || author.name || p.userName || 'User';
-        if (isBadAvatar(p.userAvatar)) {
-          p.userAvatar = author.avatar || author.photoURL || author.profilePicture || p.userAvatar || null;
-        }
+        // Standardize naming
+        p.userId = enrichedUser;
+        p.userName = enrichedUser.displayName;
+        p.userAvatar = enrichedUser.avatar;
+      } else {
+        // Fallback for missing authors
+        p.userName = p.userName || 'User';
       }
 
       if (Array.isArray(p.reactions)) {

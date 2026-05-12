@@ -29,7 +29,7 @@ async function getEnrichedPosts(query, { skip = 0, limit = 20, sort = { createdA
     { $sort: sort },
     { $skip: skip },
     { $limit: limit },
-    // 1. Author Lookup
+    // 1. Author Lookup (Supporting both string and ObjectId userId)
     {
       $lookup: {
         from: 'users',
@@ -40,13 +40,14 @@ async function getEnrichedPosts(query, { skip = 0, limit = 20, sort = { createdA
               $expr: {
                 $or: [
                   { $eq: ['$_id', '$$authorId'] },
+                  { $eq: [{ $toString: '$_id' }, '$$authorId'] },
                   { $eq: ['$firebaseUid', '$$authorId'] },
                   { $eq: ['$uid', '$$authorId'] }
                 ]
               }
             }
           },
-          { $project: { displayName: 1, name: 1, avatar: 1, profilePicture: 1, photoURL: 1, isPrivate: 1 } }
+          { $project: { displayName: 1, name: 1, avatar: 1, profilePicture: 1, photoURL: 1, isPrivate: 1, username: 1 } }
         ],
         as: 'author'
       }
@@ -93,13 +94,9 @@ async function getEnrichedPosts(query, { skip = 0, limit = 20, sort = { createdA
         },
         isSaved: { $gt: [{ $size: '$savedStatus' }, 0] },
         commentCount: { $add: [{ $size: '$commentsList' }, { $ifNull: ["$commentsCount", 0] }] },
-        // Structured user object for frontend compatibility
-        userId: {
-          $ifNull: [
-            "$author",
-            { _id: "$userId", displayName: "User", name: "User", avatar: null }
-          ]
-        }
+        // Enrich the userId field with the author object for frontend (common pattern)
+        // while preserving the original ID in a field if needed.
+        authorData: { $ifNull: ["$author", { displayName: "User", name: "User", avatar: null }] }
       }
     },
     { $project: { commentsList: 0, savedStatus: 0, author: 0 } }
