@@ -18,7 +18,7 @@ const toObjectId = (id) => {
 // --- Post Comments ---
 
 // GET /api/posts/:postId/comments - Get all comments for a post (with visibility check)
-router.get('/posts/:postId/comments', optionalAuth, async (req, res) => {
+router.get('/:postId/comments', optionalAuth, async (req, res) => {
   try {
     const cleanPostId = String(req.params.postId).split('-loop')[0];
     const postId = cleanPostId;
@@ -154,7 +154,7 @@ router.get('/posts/:postId/comments', optionalAuth, async (req, res) => {
 });
 
 // POST /api/posts/:postId/comments/:commentId/like - Like a comment
-router.post('/posts/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
+router.post('/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const cleanPostId = String(req.params.postId).split('-loop')[0];
@@ -219,7 +219,7 @@ router.post('/posts/:postId/comments/:commentId/like', verifyToken, async (req, 
 });
 
 // DELETE /api/posts/:postId/comments/:commentId/like - Unlike a comment
-router.delete('/posts/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
+router.delete('/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const cleanPostId = String(req.params.postId).split('-loop')[0];
@@ -281,7 +281,7 @@ router.delete('/posts/:postId/comments/:commentId/like', verifyToken, async (req
 });
 
 // POST /api/posts/:postId/comments - Add a comment to a post
-router.post('/posts/:postId/comments', verifyToken, async (req, res) => {
+router.post('/:postId/comments', verifyToken, async (req, res) => {
   try {
     const { text, userName, userAvatar } = req.body;
     const userId = req.userId;
@@ -340,7 +340,7 @@ router.post('/posts/:postId/comments', verifyToken, async (req, res) => {
 });
 
 // PATCH /api/posts/:postId/comments/:commentId - Edit a comment
-router.patch('/posts/:postId/comments/:commentId', verifyToken, async (req, res) => {
+router.patch('/:postId/comments/:commentId', verifyToken, async (req, res) => {
   try {
     const { text } = req.body;
     const userId = req.userId;
@@ -363,7 +363,7 @@ router.patch('/posts/:postId/comments/:commentId', verifyToken, async (req, res)
 });
 
 // DELETE /api/posts/:postId/comments/:commentId - Delete a comment
-router.delete('/posts/:postId/comments/:commentId', verifyToken, async (req, res) => {
+router.delete('/:postId/comments/:commentId', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const { candidates } = await resolveUserIdentifiers(userId);
@@ -395,7 +395,7 @@ router.delete('/posts/:postId/comments/:commentId', verifyToken, async (req, res
 // --- Comment Reactions & Likes ---
 
 // POST /api/posts/:postId/comments/:commentId/like - Like a comment
-router.post('/posts/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
+router.post('/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const { commentId } = req.params;
@@ -426,7 +426,7 @@ router.post('/posts/:postId/comments/:commentId/like', verifyToken, async (req, 
 
 
 // DELETE /api/posts/:postId/comments/:commentId/like - Unlike a comment
-router.delete('/posts/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
+router.delete('/:postId/comments/:commentId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const { commentId } = req.params;
@@ -453,7 +453,7 @@ router.delete('/posts/:postId/comments/:commentId/like', verifyToken, async (req
 
 
 // POST /api/posts/:postId/comments/:commentId/replies/:replyId/like - Like a reply
-router.post('/posts/:postId/comments/:commentId/replies/:replyId/like', verifyToken, async (req, res) => {
+router.post('/:postId/comments/:commentId/replies/:replyId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const { commentId, replyId } = req.params;
@@ -487,7 +487,7 @@ router.post('/posts/:postId/comments/:commentId/replies/:replyId/like', verifyTo
 });
 
 // DELETE /api/posts/:postId/comments/:commentId/replies/:replyId/like - Unlike a reply
-router.delete('/posts/:postId/comments/:commentId/replies/:replyId/like', verifyToken, async (req, res) => {
+router.delete('/:postId/comments/:commentId/replies/:replyId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
     const { commentId, replyId } = req.params;
@@ -526,7 +526,7 @@ router.delete('/posts/:postId/comments/:commentId/replies/:replyId/like', verify
 // --- Comment Replies ---
 
 // POST /api/posts/:postId/comments/:commentId/replies - Add reply
-router.post('/posts/:postId/comments/:commentId/replies', verifyToken, async (req, res) => {
+router.post('/:postId/comments/:commentId/replies', verifyToken, async (req, res) => {
   try {
     const { text, userName, userAvatar } = req.body;
     const userId = req.userId;
@@ -567,7 +567,7 @@ router.post('/posts/:postId/comments/:commentId/replies', verifyToken, async (re
 });
 
 // DELETE /api/posts/:postId/comments/:commentId/replies/:replyId - Delete reply
-router.delete('/posts/:postId/comments/:commentId/replies/:replyId', verifyToken, async (req, res) => {
+router.delete('/:postId/comments/:commentId/replies/:replyId', verifyToken, async (req, res) => {
   try {
     const { commentId, replyId, postId } = req.params;
     const userId = req.userId;
@@ -601,7 +601,7 @@ router.delete('/posts/:postId/comments/:commentId/replies/:replyId', verifyToken
 });
 
 // PATCH /api/posts/:postId/comments/:commentId/replies/:replyId - Edit reply
-router.patch('/posts/:postId/comments/:commentId/replies/:replyId', verifyToken, async (req, res) => {
+router.patch('/:postId/comments/:commentId/replies/:replyId', verifyToken, async (req, res) => {
   try {
     const { commentId, replyId } = req.params;
     const { text } = req.body;

@@ -7,7 +7,7 @@ const { verifyToken } = require('../src/middleware/authMiddleware');
 const Message = require('../src/models/Message');
 
 // Get all messages for a conversation with populated user data
-router.get('/conversations/:conversationId/messages', verifyToken, async (req, res) => {
+router.get('/:conversationId/messages', verifyToken, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const userId = req.userId;
@@ -76,7 +76,7 @@ router.get('/conversations/:conversationId/messages', verifyToken, async (req, r
 });
 
 // Edit a message
-router.patch('/conversations/:conversationId/messages/:messageId', verifyToken, async (req, res) => {
+router.patch('/:conversationId/messages/:messageId', verifyToken, async (req, res) => {
   try {
     const { text } = req.body;
     const userId = req.userId; // Use userId from verified token
@@ -98,7 +98,7 @@ router.patch('/conversations/:conversationId/messages/:messageId', verifyToken, 
 });
 
 // Delete a message
-router.delete('/conversations/:conversationId/messages/:messageId', verifyToken, async (req, res) => {
+router.delete('/:conversationId/messages/:messageId', verifyToken, async (req, res) => {
   try {
     const userId = req.userId; // Use userId from verified token
     const message = await Message.findById(req.params.messageId);

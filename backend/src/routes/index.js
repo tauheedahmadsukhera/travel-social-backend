@@ -21,9 +21,9 @@ const locationRoutes = require('../../routes/locations');
 const conversationRoutes = require('./conversations');
 
 // Register routes
-router.use('/', messageRoutes);
+router.use('/conversations', messageRoutes);
 router.use('/conversations', conversationRoutes);
-router.use('/', commentRoutes);
+router.use('/posts', commentRoutes);
 router.use('/posts', postRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
