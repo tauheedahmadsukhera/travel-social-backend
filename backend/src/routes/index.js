@@ -3,18 +3,20 @@ const router = express.Router();
 
 // Import all routes
 const messageRoutes = require('../../routes/messages');
-const postRoutes = require('./post');
-const livestreamRoutes = require('./livestream');
+const postRoutes = require('../../routes/posts'); // Restored full featured posts
+const livestreamRoutes = require('../../routes/livestream');
 const notificationRoutes = require('../../routes/notification');
 const savedRoutes = require('../../routes/saved');
 const sectionRoutes = require('../../routes/sections');
-const storyRoutes = require('./story');
-const userRoutes = require('./user');
+const storyRoutes = require('../../routes/stories'); // Restored full featured stories
+const userRoutes = require('../../routes/users');   // Restored full featured users
 const categoriesRoutes = require('../../routes/categories');
 const brandingRoutes = require('./branding');
 const presenceRoutes = require('./presence');
 const adminRoutes = require('../../routes/admin');
 const locationRoutes = require('../../routes/locations');
+const moderationRoutes = require('../../routes/moderation');
+const gdprRoutes = require('../../routes/gdpr');
 
 // Note: Conversations route was moved from root/routes to src/routes
 const conversationRoutes = require('./conversations');
@@ -25,8 +27,6 @@ router.use('/conversations', conversationRoutes);
 router.use('/posts', postRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
-router.use('/users', savedRoutes);
-router.use('/sections', sectionRoutes);
 router.use('/stories', storyRoutes);
 router.use('/users', userRoutes);
 router.use('/categories', categoriesRoutes);
@@ -34,6 +34,8 @@ router.use('/branding', brandingRoutes);
 router.use('/presence', presenceRoutes);
 router.use('/admin', adminRoutes);
 router.use('/locations', locationRoutes);
+router.use('/moderation', moderationRoutes);
+router.use('/gdpr', gdprRoutes);
 
 // Register newly restored routes
 router.use('/auth', require('./auth'));
@@ -44,8 +46,6 @@ router.use('/public', require('./public'));
 router.use('/follow', require('./follow'));
 router.use('/highlights', require('./highlight'));
 router.use('/media', require('./media'));
-router.use('/moderation', require('../../routes/moderation'));
-router.use('/gdpr', require('../../routes/gdpr'));
 router.get('/all-regions', async (req, res) => {
   try {
     const mongoose = require('mongoose');
