@@ -26,12 +26,12 @@ router.get('/active', optionalAuth, async (req, res) => {
 
 /**
  * GET /api/stories
- * Get stories (Requires Auth)
+ * Get stories (Public/Auth compatible)
  */
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { userId } = req.query;
-    const requesterUserId = req.userId; // Use authenticated userId
+    const requesterUserId = req.userId || null; // Use authenticated userId if available
     const limit = Math.min(parseInt(req.query.limit || '50'), 100);
     
     // Build initial match query

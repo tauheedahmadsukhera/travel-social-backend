@@ -728,4 +728,50 @@ router.delete('/:postId/like', verifyToken, async (req, res) => {
   }
 });
 
+// GET /:postId/comments - Get comments for a specific post
+router.get('/:postId/comments', optionalAuth, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const viewerId = req.userId || null;
+    
+    const Post = mongoose.model('Post');
+    const Comment = mongoose.model('Comment');
+    
+    // Resolve post
+    const post = await Post.findOne(resolvePostQuery(postId)).lean();
+
+    if (!post) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    // Fetch comments
+    const comments = await Comment.find({ 
+      postId: { $in: [String(post._id), String(post.id)].filter(Boolean) } 
+    }).sort({ createdAt: -1 }).lean();
+
+    // Enrich comments with author data
+    const User = mongoose.model('User');
+    const enriched = await Promise.all(comments.map(async (c) => {
+      const author = await User.findOne({
+        $or: [
+          { _id: mongoose.Types.ObjectId.isValid(c.userId) ? new mongoose.Types.ObjectId(c.userId) : null },
+          { firebaseUid: c.userId },
+          { uid: c.userId }
+        ].filter(q => q._id !== null || q.firebaseUid || q.uid)
+      }).select('displayName name avatar photoURL profilePicture').lean();
+
+      return {
+        ...c,
+        userName: author?.displayName || author?.name || 'Anonymous',
+        userAvatar: author?.avatar || author?.photoURL || author?.profilePicture || null
+      };
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
+
