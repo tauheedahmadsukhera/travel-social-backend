@@ -159,6 +159,64 @@ router.get('/location-count', optionalAuth, async (req, res) => {
 // Get post by ID (GET /api/posts/:id) — optionalAuth
 router.get('/:id', optionalAuth, postController.getPostById);
 
+// Get comments for a post (GET /api/posts/:postId/comments)
+router.get('/:postId/comments', optionalAuth, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const viewerId = req.userId || null;
+    
+    const Post = mongoose.model('Post');
+    const Comment = mongoose.model('Comment');
+    
+    // Resolve post
+    const post = await Post.findOne({
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(postId) ? new mongoose.Types.ObjectId(postId) : null },
+        { id: postId }
+      ].filter(q => q._id !== null || q.id)
+    }).lean();
+
+    if (!post) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    // Security: Check visibility (Basic implementation)
+    if (post.isPrivate && (!viewerId || String(post.userId) !== String(viewerId))) {
+       // Check for follow status if needed, for now just allow owner
+       if (String(post.userId) !== String(viewerId)) {
+         return res.status(403).json({ success: false, error: 'Private content' });
+       }
+    }
+
+    // Fetch comments
+    const comments = await Comment.find({ 
+      postId: { $in: [String(post._id), String(post.id)].filter(Boolean) } 
+    }).sort({ createdAt: -1 }).lean();
+
+    // Enrich comments with author data
+    const User = mongoose.model('User');
+    const enriched = await Promise.all(comments.map(async (c) => {
+      const author = await User.findOne({
+        $or: [
+          { _id: mongoose.Types.ObjectId.isValid(c.userId) ? new mongoose.Types.ObjectId(c.userId) : null },
+          { firebaseUid: c.userId },
+          { uid: c.userId }
+        ].filter(q => q._id !== null || q.firebaseUid || q.uid)
+      }).select('displayName name avatar photoURL profilePicture').lean();
+
+      return {
+        ...c,
+        userName: author?.displayName || author?.name || 'Anonymous',
+        userAvatar: author?.avatar || author?.photoURL || author?.profilePicture || null
+      };
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Like post (POST /api/posts/:postId/like) — must be authenticated
 router.post('/:postId/like', verifyToken, async (req, res) => {
   try {

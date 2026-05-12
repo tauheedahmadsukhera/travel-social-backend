@@ -3,14 +3,13 @@ const router = express.Router();
 
 // Import all routes
 const messageRoutes = require('../../routes/messages');
-const commentRoutes = require('../../routes/comments');
-const postRoutes = require('../../routes/posts');
+const postRoutes = require('./post');
 const livestreamRoutes = require('./livestream');
 const notificationRoutes = require('../../routes/notification');
 const savedRoutes = require('../../routes/saved');
 const sectionRoutes = require('../../routes/sections');
-const storyRoutes = require('../../routes/stories');
-const userRoutes = require('../../routes/users');
+const storyRoutes = require('./story');
+const userRoutes = require('./user');
 const categoriesRoutes = require('../../routes/categories');
 const brandingRoutes = require('./branding');
 const presenceRoutes = require('./presence');
@@ -23,7 +22,6 @@ const conversationRoutes = require('./conversations');
 // Register routes
 router.use('/conversations', messageRoutes);
 router.use('/conversations', conversationRoutes);
-router.use('/posts', commentRoutes);
 router.use('/posts', postRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
