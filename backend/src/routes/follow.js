@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 console.log('📌 Loading follow routes...');
 const express = require('express');
 const router = express.Router();
@@ -15,12 +16,14 @@ const { resolveUserIdentifiers } = require('../utils/userUtils');
 // Follow a user (POST /api/follow) — authenticated
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const { followerId, followingId } = req.body;
+    // SECURITY: Always use authenticated user's ID from JWT, not from request body
+    const followerId = String(req.userId);
+    const { followingId } = req.body;
 
-    console.log('[POST /follow] followerId:', followerId, 'followingId:', followingId);
+    logger.info('[POST /follow] followerId: %s, followingId: %s', followerId, followingId);
 
     if (!followerId || !followingId) {
-      return res.status(400).json({ success: false, error: 'followerId and followingId required' });
+      return res.status(400).json({ success: false, error: 'followingId required' });
     }
 
     const follower = await resolveUserIdentifiers(followerId);
@@ -103,25 +106,25 @@ router.post('/', verifyToken, async (req, res) => {
     );
     console.log('[POST /follow] Following count updated:', followingUpdateResult);
 
-    console.log('[POST /follow] Follow relationship created and counts updated');
+    logger.info('[POST /follow] Follow relationship created and counts updated');
     res.json({ success: true });
   } catch (err) {
-    console.error('[POST /follow] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('[POST /follow] Error: %s', err.message);
+    res.status(500).json({ success: false, error: 'Follow failed' });
   }
 });
 
 // Unfollow a user (DELETE /api/follow) — authenticated
 router.delete('/', verifyToken, async (req, res) => {
   try {
-    const { followerId, followingId } = req.body;
+    // SECURITY: Always use authenticated user's ID from JWT
+    const followerId = String(req.userId);
+    const { followingId } = req.body;
 
-    console.log('[DELETE /follow] Request body:', JSON.stringify(req.body));
-    console.log('[DELETE /follow] followerId:', followerId, 'followingId:', followingId);
+    logger.info('[DELETE /follow] followerId: %s, followingId: %s', followerId, followingId);
 
     if (!followerId || !followingId) {
-      console.log('[DELETE /follow] Missing parameters - body:', req.body);
-      return res.status(400).json({ success: false, error: 'followerId and followingId required' });
+      return res.status(400).json({ success: false, error: 'followingId required' });
     }
 
     const follower = await resolveUserIdentifiers(followerId);
@@ -131,7 +134,7 @@ router.delete('/', verifyToken, async (req, res) => {
     const followingIdCanonical = following.canonicalId;
 
     // Delete follow relationship
-    console.log('[DELETE /follow] Attempting to delete follow relationship...');
+    logger.info('[DELETE /follow] Attempting to delete follow relationship...');
     let result = await Follow.deleteOne({ followerId: followerIdCanonical, followingId: followingIdCanonical });
     if (result.deletedCount === 0) {
       result = await Follow.deleteOne({
@@ -139,10 +142,10 @@ router.delete('/', verifyToken, async (req, res) => {
         followingId: { $in: following.candidates }
       });
     }
-    console.log('[DELETE /follow] Delete result:', result);
+    logger.info('[DELETE /follow] Delete result: %O', result);
 
     if (result.deletedCount === 0) {
-      console.log('[DELETE /follow] Follow relationship not found');
+      logger.info('[DELETE /follow] Follow relationship not found');
       return res.json({ success: true, message: 'Not following' });
     }
 
@@ -178,11 +181,11 @@ router.delete('/', verifyToken, async (req, res) => {
     // Clamp to prevent negative counts (best-effort)
     await User.updateOne(followingQuery, { $max: { followersCount: 0 } });
 
-    console.log('[DELETE /follow] Follow relationship deleted and counts updated');
+    logger.info('[DELETE /follow] Follow relationship deleted and counts updated');
     res.json({ success: true });
   } catch (err) {
-    console.error('[DELETE /follow] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('[DELETE /follow] Error: %s', err.message);
+    res.status(500).json({ success: false, error: 'Unfollow failed' });
   }
 });
 
@@ -209,7 +212,7 @@ router.get('/status', optionalAuth, async (req, res) => {
     res.json({ success: true, isFollowing: !!follow });
   } catch (err) {
     console.error('[GET /follow/status] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -280,7 +283,7 @@ router.get('/users/:userId/followers', optionalAuth, async (req, res) => {
     res.json({ success: true, data: userItems });
   } catch (err) {
     console.error('[GET /followers] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -365,7 +368,7 @@ router.get('/users/:userId/following', optionalAuth, async (req, res) => {
     res.json({ success: true, data: userItems });
   } catch (err) {
     console.error('[GET /following] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -407,7 +410,7 @@ router.post('/request', verifyToken, async (req, res) => {
     res.json({ success: true, data: followRequest });
   } catch (err) {
     console.error('[Follow Request] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -459,7 +462,7 @@ router.post('/request/:requestId/accept', verifyToken, async (req, res) => {
     res.json({ success: true, data: follow });
   } catch (err) {
     console.error('[Accept Follow Request] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -482,7 +485,7 @@ router.delete('/request/:requestId', verifyToken, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Reject Follow Request] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -495,7 +498,7 @@ router.get('/requests/:userId', verifyToken, async (req, res) => {
     res.json({ success: true, data: requests });
   } catch (err) {
     console.error('[Get Follow Requests] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -511,7 +514,7 @@ router.get('/request/check', optionalAuth, async (req, res) => {
     res.json({ success: true, exists: !!request, data: request });
   } catch (err) {
     console.error('[Check Follow Request] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -562,7 +565,7 @@ router.get('/users/:userId/blocked', verifyToken, async (req, res) => {
     res.json({ success: true, data: userItems });
   } catch (err) {
     console.error('[GET /blocked] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -617,7 +620,7 @@ router.get('/users/:userId/friends', optionalAuth, async (req, res) => {
     res.json({ success: true, data: userItems });
   } catch (err) {
     console.error('[GET /friends] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 

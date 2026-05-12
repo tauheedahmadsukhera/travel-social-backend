@@ -5,7 +5,7 @@ import React from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { useNotifications } from '../hooks/useNotifications';
 import AcceptDeclineButtons from '@/src/_components/AcceptDeclineButtons';
 import { getNotificationActionText } from '../lib/notificationText';

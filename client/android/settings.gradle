@@ -8,7 +8,7 @@ pluginManagement {
 }
 plugins { id("com.facebook.react.settings") }
 
-rootProject.name = 'trips'
+rootProject.name = 'Trips'
 
 dependencyResolutionManagement {
   versionCatalogs {
@@ -27,12 +27,12 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   // would not link native modules. Use Expo's `react-native-config` output (RN-shaped JSON) instead.
   def command = [
     'node',
-    "${rootDir}/../scripts/filterAutolinking.js",
+    "${rootDir}/../scripts/filterAutolinking.js".toString(),
     'react-native-config',
     '--json',
     '--platform',
     'android'
-  ].toList()
+  ]
   ex.autolinkLibrariesFromCommand(command, rootDir.parentFile)
 }
 

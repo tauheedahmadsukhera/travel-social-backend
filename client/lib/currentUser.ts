@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { apiService } from '@/src/_services/apiService';
 
 function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {

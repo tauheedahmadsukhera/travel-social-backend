@@ -9,7 +9,7 @@ import { safeRouterBack } from '@/lib/safeRouterBack';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { ResizeMode, Video } from 'expo-av';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { compressVideoSafe, compressImageSafe } from '../lib/mediaUtils';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';

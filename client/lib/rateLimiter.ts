@@ -4,7 +4,7 @@
  * Uses device storage + timestamp checks
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { RATE_LIMITS } from '../config/environment';
 
 const RATE_LIMIT_KEYS = {

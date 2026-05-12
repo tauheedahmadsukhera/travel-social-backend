@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { Platform } from 'react-native';
 import { getAPIBaseURL as getBaseUrl } from '../../config/environment';
 

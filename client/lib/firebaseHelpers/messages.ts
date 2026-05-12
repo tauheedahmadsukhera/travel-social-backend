@@ -1,6 +1,6 @@
 
 import { apiService } from '@/src/_services/apiService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { API_BASE_URL } from '@/lib/api';
 import * as FileSystem from 'expo-file-system';
 

@@ -3,7 +3,7 @@
  * Kept as a thin compatibility layer.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 export type { CacheEntry as _DeprecatedCacheEntry } from '../hooks/useOffline';
 export { getCachedData, setCachedData, fetchWithCache } from '../hooks/useOffline';

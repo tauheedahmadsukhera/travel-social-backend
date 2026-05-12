@@ -13,9 +13,10 @@ const initSentry = (app) => {
         nodeProfilingIntegration(),
       ],
       // Performance Monitoring
-      tracesSampleRate: 1.0, //  Capture 100% of the transactions
+      // Performance Monitoring — sample 20% of transactions in production to reduce cost
+      tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
       // Set sampling rate for profiling - this is relative to tracesSampleRate
-      profilesSampleRate: 1.0,
+      profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
     });
 
     // The request handler must be the first middleware on the app

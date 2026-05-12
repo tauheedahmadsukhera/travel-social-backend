@@ -10,7 +10,7 @@
  * 3. Usage: import and call cache functions
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 interface CacheEntry {
   data: any;

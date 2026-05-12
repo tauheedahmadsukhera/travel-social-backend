@@ -4,10 +4,10 @@ const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const logger = require('../utils/logger');
 
 const { verifyToken } = require('../middleware/authMiddleware');
 const { resolveUserIdentifiers } = require('../utils/userUtils');
-const logger = require('../utils/logger');
 const validate = require('../middleware/validateMiddleware');
 const { sendMessageSchema, createConversationSchema } = require('../validations/messageValidation');
 
@@ -87,7 +87,11 @@ router.get('/', verifyToken, async (req, res) => {
     const firebaseUidFromToken = req.user?.firebaseUid;
     const userId = userIdFromToken;
 
-    console.log('[GET] /conversations - Fetching for userId:', userId);
+    // Pagination support (P1 fix: prevent loading ALL conversations at once)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+    const skip = Math.max(0, parseInt(req.query.skip) || 0);
+
+    logger.info('[GET] /conversations - Fetching for userId: %s (skip=%d, limit=%d)', userId, skip, limit);
 
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -102,7 +106,7 @@ router.get('/', verifyToken, async (req, res) => {
         if (rid) idsToMatchSet.add(String(rid));
       }
     } catch (e) {
-      console.warn('[GET] /conversations - resolveUserIdVariants failed:', e?.message || e);
+      logger.warn('[GET] /conversations - resolveUserIdVariants failed: %s', e?.message || e);
     }
 
     const idsToMatch = Array.from(idsToMatchSet);
@@ -110,12 +114,9 @@ router.get('/', verifyToken, async (req, res) => {
     const conversations = await Conversation.find({
       participants: { $in: idsToMatch },
       deletedBy: { $nin: idsToMatch }
-    }).sort({ lastMessageAt: -1 }).lean();
+    }).sort({ lastMessageAt: -1 }).skip(skip).limit(limit).lean();
     
-    console.log('[GET] /conversations - Found', conversations.length, 'conversations for user:', userId);
-    conversations.forEach((c, i) => {
-      console.log(`  [${i}] conversationId: ${c.conversationId}, participants: ${c.participants}, messages: ${c.messages?.length || 0}`);
-    });
+    logger.info('[GET] /conversations - Found %d conversations for user: %s', conversations.length, userId);
 
     // Populate participant data
     const db = mongoose.connection.db;
@@ -259,11 +260,11 @@ router.get('/', verifyToken, async (req, res) => {
     });
 
 
-    console.log('[GET] /conversations - Returning', enrichedConversations.length, 'enriched conversations');
-    res.json({ success: true, data: enrichedConversations || [] });
+    logger.info('[GET] /conversations - Returning %d enriched conversations', enrichedConversations.length);
+    res.json({ success: true, data: enrichedConversations || [], pagination: { skip, limit, count: enrichedConversations.length, hasMore: conversations.length === limit } });
   } catch (err) {
-    console.error('[GET /conversations] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('[GET /conversations] Error: %s', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch conversations' });
   }
 });
 
@@ -323,7 +324,7 @@ router.post('/resolve', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('[POST] /conversations/resolve - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -357,7 +358,7 @@ router.get('/:id', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('[GET] /conversations/:id - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -400,7 +401,7 @@ router.post('/group', verifyToken, validate(createConversationSchema), async (re
     return res.json({ success: true, data: conversation, conversationId });
   } catch (err) {
     console.error('[POST] /conversations/group - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -444,7 +445,7 @@ router.patch('/:id/group-members', verifyToken, async (req, res) => {
     return res.json({ success: true, data: conversation });
   } catch (err) {
     console.error('[PATCH] /conversations/:id/group-members - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -489,7 +490,7 @@ router.post('/:id/archive', verifyToken, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('[POST] /conversations/:id/archive - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -531,7 +532,7 @@ router.post('/:id/unarchive', verifyToken, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('[POST] /conversations/:id/unarchive - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -576,7 +577,7 @@ router.post('/:id/delete', verifyToken, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('[POST] /conversations/:id/delete - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -608,7 +609,7 @@ router.post('/:id/clear', verifyToken, async (req, res) => {
     return res.json({ success: true, clearedAt: now });
   } catch (err) {
     console.error('[POST] /conversations/:id/clear - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -729,7 +730,7 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('[GET] /:id/messages - Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -840,7 +841,7 @@ router.patch('/:id/read', verifyToken, async (req, res) => {
     return res.json({ success: true, markedCount });
   } catch (err) {
     console.error('[PATCH] /:id/read - Error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1137,7 +1138,7 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
     res.json({ success: true, message });
   } catch (err) {
     console.error('[POST] /:id/messages - Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1188,7 +1189,7 @@ router.post('/get-or-create', verifyToken, async (req, res) => {
 
     res.json({ success: true, id: conversation._id, conversationId });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1233,7 +1234,7 @@ router.get('/users/:userId', async (req, res) => {
     res.json({ success: true, data: enrichedConversations });
   } catch (err) {
     console.error('[GET /conversations/users/:userId] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1290,7 +1291,7 @@ router.patch('/:conversationId/messages/:messageId', verifyToken, async (req, re
     res.json({ success: true, data: message });
   } catch (err) {
     console.error('[PATCH] /:conversationId/messages/:messageId error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1343,7 +1344,7 @@ router.delete('/:conversationId/messages/:messageId', verifyToken, async (req, r
     res.json({ success: true, message: 'Message deleted' });
   } catch (err) {
     console.error('[DELETE] /:conversationId/messages/:messageId error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1431,7 +1432,7 @@ router.post('/:conversationId/messages/:messageId/reactions', verifyToken, async
     res.json({ success: true, data: { reactions: message.reactions } });
   } catch (err) {
     console.error('[POST] /:conversationId/messages/:messageId/reactions error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1468,7 +1469,7 @@ router.post('/upload-media', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('[POST] /upload-media error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1665,7 +1666,7 @@ router.post('/:conversationId/messages/media', verifyToken, validate(sendMessage
   } catch (err) {
     console.error('[POST] /messages/media error:', err.message);
     console.error('[POST] /messages/media stack:', err.stack);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1696,7 +1697,7 @@ router.post('/stories', verifyToken, async (req, res) => {
     res.status(201).json({ success: true, data: story });
   } catch (err) {
     console.error('[POST] /stories error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1714,7 +1715,7 @@ router.get('/stories/user/:userId', async (req, res) => {
     res.json({ success: true, data: stories });
   } catch (err) {
     console.error('[GET] /stories/user/:userId error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1729,7 +1730,7 @@ router.get('/stories/feed', async (req, res) => {
     res.json({ success: true, data: stories });
   } catch (err) {
     console.error('[GET] /stories/feed error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -1757,7 +1758,7 @@ router.post('/stories/:storyId/view', async (req, res) => {
     res.json({ success: true, data: story });
   } catch (err) {
     console.error('[POST] /stories/:storyId/view error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 

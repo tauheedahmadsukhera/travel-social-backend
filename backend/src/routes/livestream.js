@@ -34,7 +34,7 @@ router.post('/', async (req, res) => {
       data: { ...livestream, _id: result.insertedId } 
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -73,7 +73,7 @@ router.get('/:id', async (req, res) => {
     
     res.json({ success: true, data: livestream });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -104,7 +104,7 @@ router.put('/:id/end', async (req, res) => {
     
     res.json({ success: true, data: result.value });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -141,7 +141,7 @@ router.post('/:id/join', async (req, res) => {
     
     res.json({ success: true, data: result.value });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -167,7 +167,7 @@ router.post('/:id/leave', async (req, res) => {
     
     res.json({ success: true, data: result.value });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -193,7 +193,7 @@ router.post('/:id/like', async (req, res) => {
     
     res.json({ success: true, data: result.value });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -225,7 +225,7 @@ router.post('/:id/comments', async (req, res) => {
     
     res.json({ success: true, data: comment });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -244,7 +244,7 @@ router.get('/user/:userId', async (req, res) => {
     
     res.json({ success: true, data: livestream });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 

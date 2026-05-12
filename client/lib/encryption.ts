@@ -4,9 +4,18 @@
  * Uses React Native Crypto for encryption
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import CryptoJS from 'crypto-js';
 import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
+
+// SECURITY: Use hardware-backed secure storage for encryption keys on mobile
+let SecureStore: any = null;
+try {
+  SecureStore = require('expo-secure-store');
+} catch {
+  // expo-secure-store not available (e.g. web) — fallback to AsyncStorage
+}
 
 export interface EncryptedMessage {
   text: string;
@@ -22,17 +31,54 @@ export interface DecryptedMessage {
 }
 
 /**
- * Generate or retrieve user's encryption key from local storage
+ * Secure key storage helpers — uses SecureStore on native, AsyncStorage fallback on web
+ */
+async function secureGetItem(key: string): Promise<string | null> {
+  if (SecureStore && Platform.OS !== 'web') {
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch {
+      // Fallback to AsyncStorage if SecureStore fails
+      return AsyncStorage.getItem(key);
+    }
+  }
+  return AsyncStorage.getItem(key);
+}
+
+async function secureSetItem(key: string, value: string): Promise<void> {
+  if (SecureStore && Platform.OS !== 'web') {
+    try {
+      await SecureStore.setItemAsync(key, value);
+      return;
+    } catch {
+      // Fallback to AsyncStorage if SecureStore fails
+    }
+  }
+  await AsyncStorage.setItem(key, value);
+}
+
+/**
+ * Generate or retrieve user's encryption key from secure storage
  */
 export async function getOrCreateEncryptionKey(userId: string): Promise<string> {
   const storageKey = `encryption_key_${userId}`;
   
   try {
-    // Try to get existing key
-    const storedKey = await AsyncStorage.getItem(storageKey);
+    // Try to get existing key from secure storage
+    const storedKey = await secureGetItem(storageKey);
     
     if (storedKey) {
       return storedKey;
+    }
+    
+    // Migrate from AsyncStorage to SecureStore if key exists there
+    if (SecureStore && Platform.OS !== 'web') {
+      const legacyKey = await AsyncStorage.getItem(storageKey);
+      if (legacyKey) {
+        await secureSetItem(storageKey, legacyKey);
+        await AsyncStorage.removeItem(storageKey); // Clean up unencrypted copy
+        return legacyKey;
+      }
     }
     
     // Generate new 256-bit key
@@ -41,8 +87,8 @@ export async function getOrCreateEncryptionKey(userId: string): Promise<string> 
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
       
-    // Store securely
-    await AsyncStorage.setItem(storageKey, hexKey);
+    // Store in secure storage
+    await secureSetItem(storageKey, hexKey);
     console.log('🔐 Generated new encryption key for user:', userId);
     
     return hexKey;

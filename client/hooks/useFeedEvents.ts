@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { feedEventEmitter } from '../lib/feedEventEmitter';
 
 export function useFeedEvents(

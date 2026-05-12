@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, AppState, LogBox, View } from "react-native";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import * as SystemUI from 'expo-system-ui';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

@@ -15,11 +15,15 @@ const logger = winston.createLogger({
       // Write all logs with level `error` and below to `error.log`
       new winston.transports.File({ 
         filename: path.join(__dirname, '../../logs/error.log'), 
-        level: 'error' 
+        level: 'error',
+        maxsize: 5 * 1024 * 1024, // 5MB per file
+        maxFiles: 5, // Keep 5 rotated files
       }),
       // Write all logs with level `info` and below to `combined.log`
       new winston.transports.File({ 
-        filename: path.join(__dirname, '../../logs/combined.log') 
+        filename: path.join(__dirname, '../../logs/combined.log'),
+        maxsize: 5 * 1024 * 1024, // 5MB per file
+        maxFiles: 5, // Keep 5 rotated files
       }),
     ] : []),
   ],

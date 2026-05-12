@@ -61,7 +61,7 @@ router.post('/:userId/saved', async (req, res) => {
 
     } catch (err) {
         console.error('[SAVED] POST /users/:userId/saved error:', err.message);
-        return res.status(500).json({ success: false, error: err.message });
+        return res.status(500).json({ success: false, error: 'Operation failed' });
     }
 });
 
@@ -111,7 +111,7 @@ router.delete('/:userId/saved/:postId', async (req, res) => {
 
     } catch (err) {
         console.error('[SAVED] DELETE /users/:userId/saved/:postId error:', err.message);
-        return res.status(500).json({ success: false, error: err.message });
+        return res.status(500).json({ success: false, error: 'Operation failed' });
     }
 });
 

@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, StyleSheet, Switch, Text, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { toggleUserPrivacy } from '../lib/firebaseHelpers';
 import { useUser } from '@/src/_components/UserContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 
 export default function PrivacyScreen() {

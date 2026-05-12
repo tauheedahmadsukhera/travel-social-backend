@@ -114,3 +114,11 @@ keystore-backup/
 # One-off migration/refactor scripts
 refactor_avatars.js
 replace_avatars.js
+
+# Large Client Assets
+client/assets/fake data/
+client/assets/fake profile/
+client/assets/cities/
+client/assets/countries/
+client/assets/images/
+client/admin/node_modules/

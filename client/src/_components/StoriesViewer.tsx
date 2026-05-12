@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_AVATAR_URL, API_BASE_URL } from '../../lib/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { deleteStory } from '../../lib/firebaseHelpers/deleteStory';
 import { addCommentReply, addStoryToHighlight } from '../../lib/firebaseHelpers/index';
 import { getUserHighlights } from '../../lib/firebaseHelpers/core';

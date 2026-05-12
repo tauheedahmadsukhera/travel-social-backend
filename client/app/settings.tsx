@@ -8,7 +8,7 @@ import { safeRouterBack } from '@/lib/safeRouterBack';
 import { permanentlyDeleteAccount } from '@/lib/gdprCompliance';
 import { resolveCanonicalUserId } from '@/lib/currentUser';
 import { auth } from '@/config/firebase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 export default function SettingsScreen() {
   const router = useRouter();

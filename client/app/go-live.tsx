@@ -32,7 +32,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '../config/firebase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { logger } from '../utils/logger';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';

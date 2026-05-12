@@ -8,7 +8,7 @@ import PostCard from '@/src/_components/PostCard';
 import PostViewerModal from '@/src/_components/PostViewerModal';
 import CommentSection from '@/src/_components/CommentSection';
 import { apiService } from '@/src/_services/apiService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { feedEventEmitter } from '../lib/feedEventEmitter';
 import { hapticLight } from '../lib/haptics';
 import { safeRouterBack } from '@/lib/safeRouterBack';

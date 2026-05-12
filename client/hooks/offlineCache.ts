@@ -1,4 +1,4 @@
-                         import AsyncStorage from '@react-native-async-storage/async-storage';
+                         import AsyncStorage from '@/lib/storage';
 
 interface CacheEntry<T> {
   data: T;

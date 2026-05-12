@@ -17,6 +17,7 @@ const UserSchema = new mongoose.Schema({
   },
   password: {
     type: String,
+    select: false, // SECURITY: Never returned in queries by default. Use .select('+password') when needed for auth.
     // Password is required only for email/password auth
     // Optional if using Firebase only
   },

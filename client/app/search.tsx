@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { debounce } from 'lodash';
 import { Image as ExpoImage } from 'expo-image';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { getAllPosts, searchUsers } from '../lib/firebaseHelpers/index';
 import { getPostsByHashtag, getTrendingHashtags } from '../lib/mentions';
 import { DEFAULT_AVATAR_URL } from '@/lib/api';

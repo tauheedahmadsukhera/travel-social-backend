@@ -28,7 +28,7 @@ router.post('/:notificationId/read', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -46,7 +46,7 @@ router.post('/user/:userId/read-all', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -65,7 +65,7 @@ router.delete('/:notificationId', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 

@@ -6,7 +6,7 @@ import { flattenStoryPayload, getCachedHighlightStories, pickStoryId, pickStoryM
 import CommentSection from './CommentSection';
 import { Video, ResizeMode } from 'expo-av';
 import { highlightManager } from '../../lib/highlightManager';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { feedEventEmitter } from '../../lib/feedEventEmitter';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');

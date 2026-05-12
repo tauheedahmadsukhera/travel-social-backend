@@ -29,7 +29,7 @@ router.post('/', async (req, res) => {
       data: result
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
@@ -97,7 +97,7 @@ router.put('/:messageId/read', async (req, res) => {
 
     res.json({ success: true, data: result });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 

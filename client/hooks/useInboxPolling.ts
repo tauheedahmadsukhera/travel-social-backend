@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { startConversationsPolling, startMessagesPolling, stopPolling } from '../lib/pollingService';
 import { getCachedUserProfile, cacheUserProfile } from '../lib/redisCache';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 interface UseInboxPollingOptions {
   pollingInterval?: number;

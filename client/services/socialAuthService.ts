@@ -1,8 +1,6 @@
 import { 
   SNAPCHAT_CLIENT_ID, 
-  SNAPCHAT_CLIENT_SECRET, 
-  TIKTOK_CLIENT_KEY, 
-  TIKTOK_CLIENT_SECRET 
+  TIKTOK_CLIENT_KEY
 } from '../config/environment';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
@@ -302,7 +300,6 @@ export async function signInWithTikTok() {
 
     // TikTok OAuth configuration from developer console (read from env for security)
     const TIKTOK_CLIENT_KEY_VAL = TIKTOK_CLIENT_KEY;
-    const TIKTOK_CLIENT_SECRET_VAL = TIKTOK_CLIENT_SECRET;
 
     console.log('🔑 TikTok credentials:', TIKTOK_CLIENT_KEY_VAL ? '✓ Key loaded' : '✗ Missing');
 
@@ -504,11 +501,10 @@ export async function signInWithSnapchat() {
 
     // Snapchat client credentials (read from env for security)
     const SNAPCHAT_CLIENT_ID_VAL = SNAPCHAT_CLIENT_ID;
-    const SNAPCHAT_CLIENT_SECRET_VAL = SNAPCHAT_CLIENT_SECRET;
 
     console.log('🔑 Snapchat credentials loaded:', SNAPCHAT_CLIENT_ID_VAL ? '✓' : '✗');
 
-    if (!SNAPCHAT_CLIENT_ID_VAL || !SNAPCHAT_CLIENT_SECRET_VAL) {
+    if (!SNAPCHAT_CLIENT_ID_VAL) {
       throw new Error('Snapchat credentials not configured');
     }
 
@@ -524,84 +520,9 @@ export async function signInWithSnapchat() {
       if (!code) {
         throw new Error('No authorization code received');
       }
-      // Exchange code for access token
-      // Add timeout to token exchange
-      const tokenAbort = new AbortController();
-      const tokenTimeout = setTimeout(() => tokenAbort.abort(), 12000);
-      const tokenResponse = await fetch(discovery.tokenEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          client_id: SNAPCHAT_CLIENT_ID_VAL,
-          client_secret: SNAPCHAT_CLIENT_SECRET_VAL,
-          code: code,
-          grant_type: 'authorization_code',
-          redirect_uri: redirectUri,
-        }).toString(),
-        signal: tokenAbort.signal,
-      });
-      clearTimeout(tokenTimeout);
-      const tokenData = await tokenResponse.json();
-      if (!tokenData.access_token) {
-        throw new Error('Failed to get access token');
-      }
-      // Get user info from Snapchat (Bitmoji, display name)
-      // Add timeout to user info fetch
-      const userAbort = new AbortController();
-      const userTimeout = setTimeout(() => userAbort.abort(), 12000);
-      const userResponse = await fetch('https://kit.snapchat.com/v1/me', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${tokenData.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        signal: userAbort.signal,
-      });
-      clearTimeout(userTimeout);
-      const userData = await userResponse.json();
-      if (!userData.data) {
-        throw new Error('Failed to get user info');
-      }
-      // Create Firebase user (similar to TikTok logic)
-      const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = await import('firebase/auth');
-      const { doc, setDoc, getDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('../config/firebase');
-      const snapchatEmail = `snapchat_${userData.data.me.external_id}@trave-social.app`;
-      // Use a deterministic password based on the user ID (not client secret which might change)
-      const snapchatPassword = `Snapchat${userData.data.me.external_id.substring(0, 16)}!@#`;
-      let firebaseUser;
-      try {
-        console.log('📸 Trying to sign in existing Snapchat user:', snapchatEmail);
-        const signInResult = await signInWithEmailAndPassword(requireAuth(), snapchatEmail, snapchatPassword);
-        firebaseUser = signInResult.user;
-        console.log('✅ Signed in existing Snapchat user');
-      } catch (signInError) {
-        const errorAny = signInError as any;
-        console.log('⚠️ Snapchat sign-in failed, error code:', errorAny.code);
-        if (errorAny.code === 'auth/user-not-found') {
-          console.log('🆕 Creating new Snapchat user...');
-          const createResult = await createUserWithEmailAndPassword(requireAuth(), snapchatEmail, snapchatPassword);
-          firebaseUser = createResult.user;
-          console.log('✅ New Snapchat user created');
-
-          // No Firestore write - backend sync handled by handleSocialAuthResult
-          console.log('✅ Snapchat user auth ready');
-        } else if (errorAny.code === 'auth/wrong-password') {
-          console.error('❌ Snapchat password mismatch detected');
-          throw new Error('Password mismatch with stored Snapchat credentials');
-        } else {
-          console.error('❌ Snapchat auth error:', errorAny.code, errorAny.message);
-          throw signInError;
-        }
-      }
-
-      console.log('✅ Snapchat authentication successful for user:', firebaseUser?.uid);
-      return {
-        success: true,
-        user: firebaseUser,
-      };
+      // Security Fix: Client secret removed from frontend. 
+      // Token exchange MUST happen on a secure backend endpoint similar to TikTok.
+      throw new Error('Snapchat auth requires server-side token exchange (frontend secrets removed for security).');
     } else if (snapResult.type === 'cancel' || snapResult.type === 'dismiss') {
       // User explicitly canceled
       console.log('Snapchat sign-in canceled by user');

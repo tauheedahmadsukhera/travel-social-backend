@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, Animated, FlatList, Image, KeyboardAvoidingVi
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 import { Audio } from 'expo-av';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import * as FileSystem from 'expo-file-system';
 import {
     addNotification,

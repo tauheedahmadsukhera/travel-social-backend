@@ -42,11 +42,11 @@ function getExpoPublicVar(key: string): string {
     case 'EXPO_PUBLIC_SNAPCHAT_CLIENT_ID':
       return process.env.EXPO_PUBLIC_SNAPCHAT_CLIENT_ID || '';
     case 'EXPO_PUBLIC_SNAPCHAT_CLIENT_SECRET':
-      return process.env.EXPO_PUBLIC_SNAPCHAT_CLIENT_SECRET || '';
+      return ''; // SECURITY: Secrets must not be in mobile bundles
     case 'EXPO_PUBLIC_TIKTOK_CLIENT_KEY':
       return process.env.EXPO_PUBLIC_TIKTOK_CLIENT_KEY || '';
     case 'EXPO_PUBLIC_TIKTOK_CLIENT_SECRET':
-      return process.env.EXPO_PUBLIC_TIKTOK_CLIENT_SECRET || '';
+      return ''; // SECURITY: Secrets must not be in mobile bundles
     default:
       return '';
   }
@@ -159,11 +159,11 @@ export const AGORA_CONFIG = {
   tokenServerUrl: getEnvVar('EXPO_PUBLIC_AGORA_TOKEN_URL', ''),
 } as const;
 
-// Social Config
+// Social Config — ONLY client IDs (semi-public). Secrets must be server-side only.
 export const SNAPCHAT_CLIENT_ID = getEnvVar('EXPO_PUBLIC_SNAPCHAT_CLIENT_ID', '');
-export const SNAPCHAT_CLIENT_SECRET = getEnvVar('EXPO_PUBLIC_SNAPCHAT_CLIENT_SECRET', '');
+// SECURITY: SNAPCHAT_CLIENT_SECRET removed — must be handled server-side only
 export const TIKTOK_CLIENT_KEY = getEnvVar('EXPO_PUBLIC_TIKTOK_CLIENT_KEY', '');
-export const TIKTOK_CLIENT_SECRET = getEnvVar('EXPO_PUBLIC_TIKTOK_CLIENT_SECRET', '');
+// SECURITY: TIKTOK_CLIENT_SECRET removed — must be handled server-side only
 
 // App Configuration
 export const APP_CONFIG = {

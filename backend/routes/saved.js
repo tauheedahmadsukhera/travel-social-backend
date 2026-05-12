@@ -35,12 +35,12 @@ router.post('/:userId/saved', verifyToken, async (req, res) => {
 
     const cleanPostId = String(postId).split('-loop')[0];
     // Check if already saved
-    const existing = await SavedPost.findOne({ userId: { $in: idCandidates }, postId: cleanPostId });
+    const existing = await SavedPost.findOne({ userId: { $in: resolved.candidates }, postId: cleanPostId });
     if (existing) {
       return res.json({ success: true, message: 'Already saved' });
     }
     
-    const savedPost = new SavedPost({ userId: canonicalUserId, postId: cleanPostId });
+    const savedPost = new SavedPost({ userId: resolved.canonicalId, postId: cleanPostId });
     await savedPost.save();
 
     // Keep Post.savedBy in sync for newer APIs
@@ -53,10 +53,10 @@ router.post('/:userId/saved', verifyToken, async (req, res) => {
     });
     if (targetPost) {
       const alreadyInSavedBy = Array.isArray(targetPost.savedBy)
-        && targetPost.savedBy.some((id) => idCandidates.includes(String(id)));
+        && targetPost.savedBy.some((id) => resolved.candidates.includes(String(id)));
       if (!alreadyInSavedBy) {
         targetPost.savedBy = Array.isArray(targetPost.savedBy) ? targetPost.savedBy : [];
-        targetPost.savedBy.push(canonicalUserId);
+        targetPost.savedBy.push(resolved.canonicalId);
         targetPost.savesCount = targetPost.savedBy.length;
         await targetPost.save();
       }
@@ -82,10 +82,9 @@ router.delete('/:userId/saved/:postId', verifyToken, async (req, res) => {
     if (!isSelf) {
       return res.status(403).json({ success: false, error: 'Forbidden' });
     }
-    const idCandidates = [...new Set(resolved.candidates.map((v) => String(v)))];
 
     const cleanPostId = String(postId).split('-loop')[0];
-    await SavedPost.deleteMany({ userId: { $in: idCandidates }, postId: cleanPostId });
+    await SavedPost.deleteMany({ userId: { $in: resolved.candidates }, postId: cleanPostId });
 
     const Post = mongoose.model('Post');
     const targetPost = await Post.findOne({
@@ -95,7 +94,7 @@ router.delete('/:userId/saved/:postId', verifyToken, async (req, res) => {
       ]
     });
     if (targetPost) {
-      targetPost.savedBy = (Array.isArray(targetPost.savedBy) ? targetPost.savedBy : []).filter((id) => !idCandidates.includes(String(id)));
+      targetPost.savedBy = (Array.isArray(targetPost.savedBy) ? targetPost.savedBy : []).filter((id) => !resolved.candidates.includes(String(id)));
       targetPost.savesCount = targetPost.savedBy.length;
       await targetPost.save();
     }

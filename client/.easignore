@@ -9,3 +9,11 @@ ios/build
 ios/Pods
 *.apk
 *.aab
+
+# Large Assets
+assets/fake data
+assets/fake profile
+assets/cities
+assets/countries
+assets/images
+admin/node_modules

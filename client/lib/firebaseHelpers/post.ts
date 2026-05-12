@@ -1,5 +1,5 @@
 import { apiService } from '@/src/_services/apiService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { getAPIBaseURL as getBaseUrl } from '../../config/environment';
 
 function stripApiSuffix(url: string): string {

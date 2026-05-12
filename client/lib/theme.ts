@@ -1,9 +1,9 @@
-﻿/**
+/**
  * Dark Mode & Theme System
  * Supports light and dark themes with system preferences
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
 
@@ -96,7 +96,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       setThemeState(newTheme);
       await AsyncStorage.setItem('app-theme', newTheme);
-      console.log('âœ… Theme changed to:', newTheme);
+      console.log('✅ Theme changed to:', newTheme);
     } catch (error) {
       console.error('Set theme error:', error);
     }

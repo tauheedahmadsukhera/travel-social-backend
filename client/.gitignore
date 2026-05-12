@@ -143,3 +143,10 @@ serviceAccount*.json
 # Keystore files (keep secret)
 keystore-backup/
 *.keystore
+
+# Large Assets
+assets/fake data/
+assets/fake profile/
+assets/cities/
+assets/countries/
+assets/images/

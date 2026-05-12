@@ -31,7 +31,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import CollectionDeleteModal from '@/src/_components/CollectionDeleteModal';
 import SaveToCollectionModal from '@/src/_components/SaveToCollectionModal';
 import PostViewerModal from '@/src/_components/PostViewerModal';

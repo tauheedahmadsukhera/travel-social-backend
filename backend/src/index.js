@@ -137,6 +137,24 @@ app.get('/', (req, res) => {
   res.json({ message: 'Trips API is running', version: '1.1.0' });
 });
 
+// ============= 404 HANDLER =============
+// Must be after all routes
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: 'Endpoint not found' });
+});
+
+// ============= GLOBAL ERROR HANDLER =============
+// Must be last middleware — catches all unhandled errors to prevent process crash
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('🔴 Unhandled Error:', err.stack || err.message);
+  // Never leak stack traces or internal details to the client
+  res.status(err.status || 500).json({
+    success: false,
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
+  });
+});
+
 const initSockets = require('./loaders/socket');
 
 // Start server
@@ -147,6 +165,30 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 // Initialize Socket.IO
 const JWT_SECRET = process.env.JWT_SECRET;
-initSockets(server, JWT_SECRET);
+const io = initSockets(server, JWT_SECRET);
+
+// ============= GRACEFUL SHUTDOWN =============
+// Properly close connections on deploy/restart to avoid interrupted DB writes
+function gracefulShutdown(signal) {
+  console.log(`\n⚠️ ${signal} received. Shutting down gracefully...`);
+  server.close(() => {
+    console.log('✅ HTTP server closed.');
+    if (io) {
+      io.close(() => console.log('✅ Socket.IO closed.'));
+    }
+    mongoose.connection.close(false).then(() => {
+      console.log('✅ MongoDB connection closed.');
+      process.exit(0);
+    }).catch(() => process.exit(0));
+  });
+  // Force shutdown after 10s if graceful shutdown fails
+  setTimeout(() => {
+    console.error('🔴 Forced shutdown after timeout.');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = server;

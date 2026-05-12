@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from '@/lib/storage';
 import React, { useEffect, useState } from "react";
 import { TouchableOpacity, Alert } from "react-native";
 import { useUser } from "./UserContext";

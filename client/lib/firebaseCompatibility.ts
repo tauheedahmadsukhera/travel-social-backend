@@ -3,7 +3,7 @@
  * These provide Firebase-like functionality using the backend API
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 // Mock Firebase Timestamp for serverTimestamp()
 export function serverTimestamp() {

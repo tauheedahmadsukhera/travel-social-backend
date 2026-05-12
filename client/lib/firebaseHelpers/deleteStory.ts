@@ -1,5 +1,5 @@
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { API_BASE_URL } from '../api';
 
 export async function deleteStory(storyId: string) {

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getUserErrorMessage } from '../../lib/errorHandler';
 import { signInUser } from '../../lib/firebaseHelpers';
@@ -93,7 +93,7 @@ export default function EmailLoginScreen() {
 
       if (result && result.success) {
         // Handle social auth result (create user profile if needed)
-        await handleSocialAuthResult(result.user, provider);
+        await handleSocialAuthResult((result as any).user, provider);
         router.replace('/(tabs)/home');
       } else {
         setError(getUserErrorMessage(result?.error || 'Login failed'));

@@ -91,7 +91,7 @@ android {
         applicationId 'com.tauhee56.travesocial'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 118
+        versionCode 122
         versionName "1.1.0"
 
         // Manifest placeholders for react-native-app-auth

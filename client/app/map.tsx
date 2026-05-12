@@ -7,7 +7,7 @@ import { ActivityIndicator, AppState, BackHandler, Dimensions, FlatList, Keyboar
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 
 import { PostLocationModal } from '@/src/_components/PostLocationModal';
 import { useUser } from '@/src/_components/UserContext';

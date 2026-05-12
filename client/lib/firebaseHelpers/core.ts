@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import * as MediaLibrary from 'expo-media-library';
 import { apiService } from '@/src/_services/apiService';
 import { API_BASE_URL } from '../api';

@@ -1,6 +1,6 @@
 import io, { Socket } from 'socket.io-client';
 import { getAPIBaseURL } from '../../config/environment';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { Platform } from 'react-native';
 
 let socket: Socket | null = null;

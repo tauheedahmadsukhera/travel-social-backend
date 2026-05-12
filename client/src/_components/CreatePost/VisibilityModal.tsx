@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, Pressable, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { hapticLight } from '@/lib/haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { apiService } from '@/src/_services/apiService';
 
 interface VisibilityModalProps {

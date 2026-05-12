@@ -11,7 +11,9 @@ const {
   loginFirebaseSchema, 
   registerFirebaseSchema, 
   loginSchema, 
-  registerSchema 
+  registerSchema,
+  usernameSignupSchema,
+  usernameLoginSchema
 } = require('../validations/authValidation');
 
 // Advanced Rate Limiter for Authentication
@@ -231,7 +233,7 @@ router.post('/register', validate(registerSchema), async (req, res) => {
 router.post('/login', validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user || !user.password) return res.status(401).json({ success: false, error: 'Invalid email or password' });
 
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -294,13 +296,13 @@ router.get('/username/check', async (req, res) => {
  * POST /api/auth/username/signup
  * Create a new account with a username + password (PIN)
  */
-router.post('/username/signup', async (req, res) => {
+router.post('/username/signup', validate(usernameSignupSchema), async (req, res) => {
   try {
     const { username, password, name, avatar } = req.body;
 
     if (!username) return res.status(400).json({ success: false, error: 'Username is required' });
-    if (!password || password.length < 4) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 4 characters' });
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
     }
 
     const cleanUsername = username.toLowerCase().trim();
@@ -348,14 +350,14 @@ router.post('/username/signup', async (req, res) => {
  * POST /api/auth/username/login
  * Login with username + password
  */
-router.post('/username/login', async (req, res) => {
+router.post('/username/login', validate(usernameLoginSchema), async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username) return res.status(400).json({ success: false, error: 'Username is required' });
     if (!password) return res.status(400).json({ success: false, error: 'Password is required' });
 
     const cleanUsername = username.toLowerCase().trim();
-    const user = await User.findOne({ username: cleanUsername });
+    const user = await User.findOne({ username: cleanUsername }).select('+password');
 
     // Always use a constant-time comparison to prevent user enumeration
     if (!user || !user.password) {
@@ -456,7 +458,7 @@ router.post('/reset-password', validate(require('../validations/authValidation')
       email: email.toLowerCase(),
       resetCode: code,
       resetCodeExpires: { $gt: Date.now() }
-    });
+    }).select('+password +resetCode +resetCodeExpires');
 
     if (!user) {
       return res.status(400).json({ success: false, error: 'Invalid or expired verification code' });

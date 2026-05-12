@@ -17,7 +17,7 @@ import {
   View,
   Platform,
 } from "react-native";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { FlashList } from '@shopify/flash-list';
 import PostCard from '@/src/_components/PostCard';
 import LiveStreamsRow from '@/src/_components/LiveStreamsRow';

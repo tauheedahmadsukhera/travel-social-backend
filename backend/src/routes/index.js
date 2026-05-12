@@ -21,13 +21,13 @@ const locationRoutes = require('../../routes/locations');
 const conversationRoutes = require('./conversations');
 
 // Register routes
-router.use('/messages', messageRoutes);
+router.use('/', messageRoutes);
 router.use('/conversations', conversationRoutes);
-router.use('/comments', commentRoutes);
+router.use('/', commentRoutes);
 router.use('/posts', postRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
-router.use('/saved', savedRoutes);
+router.use('/users', savedRoutes);
 router.use('/sections', sectionRoutes);
 router.use('/stories', storyRoutes);
 router.use('/users', userRoutes);
@@ -64,7 +64,7 @@ router.get('/all-regions', async (req, res) => {
     }));
     res.json({ success: true, data: mapped });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch regions' });
   }
 });
 

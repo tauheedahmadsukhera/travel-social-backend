@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import apiService from '@/src/_services/apiService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/storage';
 import { AppState, NativeEventSubscription } from 'react-native';
 
 const LOCATION_TASK_NAME = 'background-location-task';
