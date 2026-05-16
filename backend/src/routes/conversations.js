@@ -672,8 +672,12 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
-    // Merge messages across duplicate conversations
-    const convoIdsArray = convos.map(c => String(c.conversationId || c._id));
+    // Merge messages across all possible IDs for these conversations
+    const convoIdsArray = [];
+    convos.forEach(c => {
+      if (c.conversationId) convoIdsArray.push(String(c.conversationId));
+      if (c._id) convoIdsArray.push(String(c._id));
+    });
     
     // Pagination
     const limit = parseInt(req.query.limit) || 50;
