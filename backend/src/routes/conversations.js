@@ -699,18 +699,8 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
         messageQuery = {
           $or: [
             { conversationId: { $in: convoIdsArray } },
-            { 
-              $and: [
-                { senderId: { $in: p1Ids } },
-                { recipientId: { $in: p2Ids } }
-              ]
-            },
-            { 
-              $and: [
-                { senderId: { $in: p2Ids } },
-                { recipientId: { $in: p1Ids } }
-              ]
-            }
+            { senderId: { $in: p1Ids }, recipientId: { $in: p2Ids } },
+            { senderId: { $in: p2Ids }, recipientId: { $in: p1Ids } }
           ]
         };
       }

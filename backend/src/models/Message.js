@@ -6,7 +6,7 @@ const MessageSchema = new mongoose.Schema({
   senderId: { type: String, required: true, index: true },
   sender: String,
   text: String,
-  recipientId: String,
+  recipientId: { type: String, index: true },
   // ===== MEDIA SUPPORT =====
   mediaType: { type: String, enum: ['text', 'image', 'video', 'audio', 'post', 'story'], default: 'text' },
   mediaUrl: String, // Single media URL
