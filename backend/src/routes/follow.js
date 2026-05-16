@@ -290,14 +290,14 @@ router.get('/users/:userId/followers', optionalAuth, async (req, res) => {
 });
 
 // Follow request model for private accounts
-const followRequestSchema = new mongoose.Schema({
+const followRequestDbSchema = new mongoose.Schema({
   fromUserId: String,
   toUserId: String,
   status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
   createdAt: { type: Date, default: Date.now }
 });
 
-const FollowRequest = mongoose.models.FollowRequest || mongoose.model('FollowRequest', followRequestSchema);
+const FollowRequest = mongoose.models.FollowRequest || mongoose.model('FollowRequest', followRequestDbSchema);
 
 // Get following of a user with full user details — optionalAuth
 router.get('/users/:userId/following', optionalAuth, async (req, res) => {
