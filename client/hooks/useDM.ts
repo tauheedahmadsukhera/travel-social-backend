@@ -87,12 +87,13 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
       if (!conversationId && !otherUserId) return;
       
       try {
-        // Strategy 1: Fetch by conversationId
-        let msgRes = conversationId ? await fetchMessages(conversationId) : null;
+        // Strategy 1: Fetch by conversationId (if valid)
+        const validId = (conversationId && conversationId !== 'null' && conversationId !== 'undefined') ? conversationId : null;
+        let msgRes = validId ? await fetchMessages(validId) : null;
         
-        // Strategy 2: If Strategy 1 failed or returned nothing, try participant-based fetch
+        // Strategy 2: Participant-based fetch (Always try if Strategy 1 yields nothing)
         if ((!msgRes?.success || !msgRes.messages?.length) && otherUserId && currentUserId) {
-           console.log('[DM] ID-based fetch failed/empty, trying participant-based fallback...');
+           console.log('[DM] Trying participant-based fallback for user:', otherUserId);
            const fallbackRes = await apiService.get(`/conversations/resolve/messages?otherUserId=${otherUserId}`);
            if (fallbackRes?.success) msgRes = fallbackRes;
         }

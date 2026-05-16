@@ -380,7 +380,8 @@ export default function DM() {
     }, 100);
 
     try {
-      const res = await sendMessage(String(conversationId), String(currentUserId), msgText, otherUserId || undefined, replyData, tempId);
+      const validCId = (conversationId && conversationId !== 'null' && conversationId !== 'undefined') ? conversationId : null;
+      const res = await sendMessage(validCId as any, String(currentUserId), msgText, otherUserId || undefined, replyData, tempId);
       if (res?.success && res.message) {
         // Force the same timestamp as temp message to avoid jumping around
         const finalized = normalizeMessage({ 
