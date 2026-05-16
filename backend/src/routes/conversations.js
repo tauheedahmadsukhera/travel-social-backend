@@ -693,14 +693,15 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
     if (convos.length > 0 && !convos[0].isGroup) {
       const participants = convos[0].participants || [];
       if (participants.length === 2) {
-        const p1Ids = await resolveUserIdVariants(participants[0]);
-        const p2Ids = await resolveUserIdVariants(participants[1]);
+        // Direct match without extra resolution calls to avoid timeouts
+        const p1 = String(participants[0]);
+        const p2 = String(participants[1]);
         
         messageQuery = {
           $or: [
             { conversationId: { $in: convoIdsArray } },
-            { senderId: { $in: p1Ids }, recipientId: { $in: p2Ids } },
-            { senderId: { $in: p2Ids }, recipientId: { $in: p1Ids } }
+            { senderId: p1, recipientId: p2 },
+            { senderId: p2, recipientId: p1 }
           ]
         };
       }
