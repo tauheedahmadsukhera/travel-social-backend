@@ -4,6 +4,8 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
+const validate = require('../middleware/validateMiddleware');
+const { followUserSchema, followRequestSchema } = require('../validations/followValidation');
 
 
 // Follow model
@@ -14,7 +16,7 @@ const uniqStrings = (arr) => Array.from(new Set((arr || []).filter(Boolean).map(
 const { resolveUserIdentifiers } = require('../utils/userUtils');
 
 // Follow a user (POST /api/follow) — authenticated
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', verifyToken, validate(followUserSchema), async (req, res) => {
   try {
     // SECURITY: Always use authenticated user's ID from JWT, not from request body
     const followerId = String(req.userId);
@@ -373,7 +375,7 @@ router.get('/users/:userId/following', optionalAuth, async (req, res) => {
 });
 
 // Send follow request to private account (POST /api/follow/request) — authenticated
-router.post('/request', verifyToken, async (req, res) => {
+router.post('/request', verifyToken, validate(followRequestSchema), async (req, res) => {
   try {
     const { fromUserId, toUserId } = req.body;
     console.log('[Follow Request] fromUserId:', fromUserId, 'toUserId:', toUserId);

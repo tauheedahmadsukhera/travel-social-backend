@@ -34,11 +34,26 @@ exports.createPost = async (req, res) => {
 // Get all posts
 exports.getAllPosts = async (req, res) => {
   try {
-    const posts = await Post.find({})
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean(); // Faster for read-only
-      
+    const userId = req.userId ? String(req.userId) : null;
+    
+    const pipeline = [
+      { $sort: { createdAt: -1 } },
+      { $limit: 50 },
+      {
+        $addFields: {
+          isLiked: userId ? { $in: [userId, { $ifNull: ["$likes", []] }] } : false,
+          id: "$_id"
+        }
+      },
+      {
+        $project: {
+          likes: 0,
+          comments: 0
+        }
+      }
+    ];
+
+    const posts = await Post.aggregate(pipeline);
     res.json({ success: true, data: posts || [] });
   } catch (err) {
     console.error('[getAllPosts] Error:', err);
@@ -50,17 +65,35 @@ exports.getAllPosts = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.userId ? String(req.userId) : null;
     if (!id) return res.status(400).json({ success: false, error: 'Post ID required' });
 
-    // Try finding by _id first, then by custom 'id' field if available
-    let post = null;
+    let matchCondition = {};
     if (mongoose.Types.ObjectId.isValid(id)) {
-      post = await Post.findById(id).lean();
+      matchCondition = { _id: new mongoose.Types.ObjectId(id) };
+    } else {
+      matchCondition = { id: id };
     }
 
-    if (!post) {
-      post = await Post.findOne({ id: id }).lean();
-    }
+    const pipeline = [
+      { $match: matchCondition },
+      { $limit: 1 },
+      {
+        $addFields: {
+          isLiked: userId ? { $in: [userId, { $ifNull: ["$likes", []] }] } : false,
+          id: "$_id"
+        }
+      },
+      {
+        $project: {
+          likes: 0,
+          comments: 0 // Fetch comments via separate endpoint
+        }
+      }
+    ];
+
+    const results = await Post.aggregate(pipeline);
+    const post = results[0];
 
     if (!post) {
       return res.status(404).json({ success: false, error: 'Post not found' });

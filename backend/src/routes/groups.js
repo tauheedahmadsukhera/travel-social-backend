@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const Group = require('../models/Group');
+const { verifyToken } = require('../middleware/authMiddleware');
+const validate = require('../middleware/validateMiddleware');
+const { createGroupSchema, updateGroupSchema, manageMemberSchema } = require('../validations/groupValidation');
 
 // POST /api/groups - create group
-router.post('/', async (req, res, next) => {
+router.post('/', verifyToken, validate(createGroupSchema), async (req, res, next) => {
   try {
-    const { userId, name, type = 'custom', members = [] } = req.body;
-    if (!userId || !name) return res.status(400).json({ success: false, error: 'userId and name required' });
+    const userId = req.userId;
+    const { name, type = 'custom', members = [] } = req.body;
     const group = await Group.create({ userId, name, type, members });
     res.status(201).json({ success: true, data: group });
   } catch (err) {
@@ -14,11 +17,10 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// GET /api/groups?userId= - list groups for user
-router.get('/', async (req, res, next) => {
+// GET /api/groups - list groups for authenticated user
+router.get('/', verifyToken, async (req, res, next) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
+    const userId = req.userId;
     const groups = await Group.find({ userId }).sort({ createdAt: 1 });
     res.json({ success: true, data: groups });
   } catch (err) {
@@ -27,16 +29,20 @@ router.get('/', async (req, res, next) => {
 });
 
 // PUT /api/groups/:groupId - update name/type/members
-router.put('/:groupId', async (req, res, next) => {
+router.put('/:groupId', verifyToken, validate(updateGroupSchema), async (req, res, next) => {
   try {
     const { groupId } = req.params;
+    const userId = req.userId;
     const { name, type, members } = req.body;
-    const update = {};
-    if (name !== undefined) update.name = name;
-    if (type !== undefined) update.type = type;
-    if (Array.isArray(members)) update.members = [...new Set(members)];
-    const group = await Group.findByIdAndUpdate(groupId, update, { new: true });
-    if (!group) return res.status(404).json({ success: false, error: 'Group not found' });
+
+    const group = await Group.findOne({ _id: groupId, userId });
+    if (!group) return res.status(404).json({ success: false, error: 'Group not found or unauthorized' });
+
+    if (name !== undefined) group.name = name;
+    if (type !== undefined) group.type = type;
+    if (Array.isArray(members)) group.members = [...new Set(members)];
+
+    await group.save();
     res.json({ success: true, data: group });
   } catch (err) {
     next(err);
@@ -44,13 +50,18 @@ router.put('/:groupId', async (req, res, next) => {
 });
 
 // PUT /api/groups/:groupId/members/add
-router.put('/:groupId/members/add', async (req, res, next) => {
+router.put('/:groupId/members/add', verifyToken, validate(manageMemberSchema), async (req, res, next) => {
   try {
     const { groupId } = req.params;
+    const userId = req.userId;
     const { memberId } = req.body;
-    if (!memberId) return res.status(400).json({ success: false, error: 'memberId required' });
-    const group = await Group.findByIdAndUpdate(groupId, { $addToSet: { members: memberId } }, { new: true });
-    if (!group) return res.status(404).json({ success: false, error: 'Group not found' });
+
+    const group = await Group.findOneAndUpdate(
+      { _id: groupId, userId },
+      { $addToSet: { members: memberId } },
+      { new: true }
+    );
+    if (!group) return res.status(404).json({ success: false, error: 'Group not found or unauthorized' });
     res.json({ success: true, data: group });
   } catch (err) {
     next(err);
@@ -58,13 +69,18 @@ router.put('/:groupId/members/add', async (req, res, next) => {
 });
 
 // PUT /api/groups/:groupId/members/remove
-router.put('/:groupId/members/remove', async (req, res, next) => {
+router.put('/:groupId/members/remove', verifyToken, validate(manageMemberSchema), async (req, res, next) => {
   try {
     const { groupId } = req.params;
+    const userId = req.userId;
     const { memberId } = req.body;
-    if (!memberId) return res.status(400).json({ success: false, error: 'memberId required' });
-    const group = await Group.findByIdAndUpdate(groupId, { $pull: { members: memberId } }, { new: true });
-    if (!group) return res.status(404).json({ success: false, error: 'Group not found' });
+
+    const group = await Group.findOneAndUpdate(
+      { _id: groupId, userId },
+      { $pull: { members: memberId } },
+      { new: true }
+    );
+    if (!group) return res.status(404).json({ success: false, error: 'Group not found or unauthorized' });
     res.json({ success: true, data: group });
   } catch (err) {
     next(err);
@@ -72,11 +88,12 @@ router.put('/:groupId/members/remove', async (req, res, next) => {
 });
 
 // DELETE /api/groups/:groupId
-router.delete('/:groupId', async (req, res, next) => {
+router.delete('/:groupId', verifyToken, async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const group = await Group.findByIdAndDelete(groupId);
-    if (!group) return res.status(404).json({ success: false, error: 'Group not found' });
+    const userId = req.userId;
+    const group = await Group.findOneAndDelete({ _id: groupId, userId });
+    if (!group) return res.status(404).json({ success: false, error: 'Group not found or unauthorized' });
     res.json({ success: true, message: 'Group deleted' });
   } catch (err) {
     next(err);

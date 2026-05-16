@@ -1,18 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { verifyToken } = require('../middleware/authMiddleware');
 
-// Send message
-router.post('/', async (req, res) => {
+// Send message (JWT required — fromUserId from token)
+router.post('/', verifyToken, async (req, res) => {
   try {
-    const { fromUserId, toUserId, text } = req.body;
+    const fromUserId = req.userId; // From JWT — never trust body
+    const { toUserId, text } = req.body;
 
-    if (!fromUserId || !toUserId || !text) {
-      return res.status(400).json({ success: false, error: 'fromUserId, toUserId, and text required' });
+    if (!toUserId || !text) {
+      return res.status(400).json({ success: false, error: 'toUserId and text required' });
     }
 
-    const db = mongoose.connection.db;
-    const messagesCollection = db.collection('messages');
+    const Message = mongoose.model('Message');
 
     const message = {
       fromUserId,
@@ -23,26 +24,22 @@ router.post('/', async (req, res) => {
     };
 
     const result = await Message.create(message);
-
-    res.status(201).json({
-      success: true,
-      data: result
-    });
+    res.status(201).json({ success: true, data: result });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
-// Get messages for user (inbox)
-router.get('/user/:userId', async (req, res) => {
+// Get messages for user (inbox) — JWT required, self-only
+router.get('/user/:userId', verifyToken, async (req, res) => {
   try {
-    const { userId } = req.params;
+    if (req.userId !== req.params.userId) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
 
     const Message = mongoose.model('Message');
-
-    // Get messages sent to this user
     const messages = await Message
-      .find({ toUserId: userId })
+      .find({ toUserId: req.params.userId })
       .sort({ createdAt: -1 })
       .limit(50);
 
@@ -52,14 +49,17 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
-// Get conversation between two users
-router.get('/:userId/:otherUserId', async (req, res) => {
+// Get conversation between two users — JWT required, participant-only
+router.get('/:userId/:otherUserId', verifyToken, async (req, res) => {
   try {
     const { userId, otherUserId } = req.params;
 
-    const Message = mongoose.model('Message');
+    // Caller must be one of the two participants
+    if (req.userId !== userId && req.userId !== otherUserId) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
 
-    // Get all messages between these two users
+    const Message = mongoose.model('Message');
     const messages = await Message
       .find({
         $or: [
@@ -75,25 +75,29 @@ router.get('/:userId/:otherUserId', async (req, res) => {
   }
 });
 
-// Mark message as read
-router.put('/:messageId/read', async (req, res) => {
+// Mark message as read — JWT required, recipient-only
+router.put('/:messageId/read', verifyToken, async (req, res) => {
   try {
     const { messageId } = req.params;
+    const objectId = mongoose.Types.ObjectId.isValid(messageId)
+      ? new mongoose.Types.ObjectId(messageId)
+      : messageId;
 
-    const objectId = mongoose.Types.ObjectId.isValid(messageId) ? new mongoose.Types.ObjectId(messageId) : messageId;
+    const Message = mongoose.model('Message');
+    const msg = await Message.findOne({ _id: objectId });
 
-    const db = mongoose.connection.db;
-    const messagesCollection = db.collection('messages');
+    if (!msg) return res.status(404).json({ success: false, error: 'Message not found' });
+
+    // Only the recipient can mark a message as read
+    if (String(msg.toUserId) !== req.userId) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
 
     const result = await Message.findOneAndUpdate(
       { _id: objectId },
       { $set: { read: true } },
       { new: true }
     );
-
-    if (!result) {
-      return res.status(404).json({ success: false, error: 'Message not found' });
-    }
 
     res.json({ success: true, data: result });
   } catch (err) {

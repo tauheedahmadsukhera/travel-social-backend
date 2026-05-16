@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const { resolveUserIdentifiers } = require('../src/utils/userUtils');
 const { notificationQueue } = require('../services/queue');
 const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
+const validate = require('../src/middleware/validateMiddleware');
+const { createCommentSchema } = require('../src/validations/commentValidation');
 
 
 const Comment = require('../src/models/Comment');
@@ -281,10 +283,10 @@ router.delete('/:postId/comments/:commentId/like', verifyToken, async (req, res)
 });
 
 // POST /api/posts/:postId/comments - Add a comment to a post
-router.post('/:postId/comments', verifyToken, async (req, res) => {
+router.post('/:postId/comments', verifyToken, validate(createCommentSchema), async (req, res) => {
   try {
     const { text, userName, userAvatar } = req.body;
-    const userId = req.userId;
+    const userId = req.userId; // Securely take from token
     if (!text) return res.status(400).json({ success: false, error: 'Missing comment text' });
 
     const cleanPostId = String(req.params.postId).split('-loop')[0];

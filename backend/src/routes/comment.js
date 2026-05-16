@@ -1,20 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { verifyToken } = require('../middleware/authMiddleware');
+const validate = require('../middleware/validateMiddleware');
+const { createCommentSchema } = require('../validations/commentValidation');
 
-// Add comment to post
-router.post('/:postId', async (req, res) => {
+// Add comment to post (JWT required)
+router.post('/:postId', verifyToken, validate(createCommentSchema), async (req, res) => {
   try {
     const { postId } = req.params;
-    const { userId, text } = req.body;
+    const { text } = req.body;
+    const userId = req.userId; // Securely take from token
 
-    if (!userId || !text) {
-      return res.status(400).json({ success: false, error: 'userId and text required' });
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    // Convert postId to ObjectId
     const objectId = mongoose.Types.ObjectId.isValid(postId) ? new mongoose.Types.ObjectId(postId) : postId;
-
     const Post = mongoose.model('Post');
 
     const comment = {
@@ -24,7 +26,6 @@ router.post('/:postId', async (req, res) => {
       createdAt: new Date()
     };
 
-    // Add comment to post
     const result = await Post.findOneAndUpdate(
       { _id: objectId },
       {
@@ -44,13 +45,11 @@ router.post('/:postId', async (req, res) => {
   }
 });
 
-// Get comments for post
+// Get comments for post (public read — no auth needed)
 router.get('/:postId', async (req, res) => {
   try {
     const { postId } = req.params;
-
     const objectId = mongoose.Types.ObjectId.isValid(postId) ? new mongoose.Types.ObjectId(postId) : postId;
-
     const Post = mongoose.model('Post');
     const post = await Post.findOne({ _id: objectId });
 
@@ -64,15 +63,31 @@ router.get('/:postId', async (req, res) => {
   }
 });
 
-// Delete comment from post
-router.delete('/:postId/:commentId', async (req, res) => {
+// Delete comment from post (JWT required + ownership enforced)
+router.delete('/:postId/:commentId', verifyToken, async (req, res) => {
   try {
     const { postId, commentId } = req.params;
+    const callerId = req.userId;
 
     const postObjectId = mongoose.Types.ObjectId.isValid(postId) ? new mongoose.Types.ObjectId(postId) : postId;
     const commentObjectId = mongoose.Types.ObjectId.isValid(commentId) ? new mongoose.Types.ObjectId(commentId) : commentId;
 
     const Post = mongoose.model('Post');
+
+    // Verify caller owns the comment OR owns the post
+    const post = await Post.findOne({ _id: postObjectId });
+    if (!post) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    const comment = post.comments?.find(c => String(c._id) === String(commentObjectId));
+    const postOwnerId = String(post.userId || '');
+    const commentOwnerId = comment ? String(comment.userId || '') : '';
+
+    if (commentOwnerId !== callerId && postOwnerId !== callerId) {
+      return res.status(403).json({ success: false, error: 'Forbidden: not your comment' });
+    }
+
     const result = await Post.findOneAndUpdate(
       { _id: postObjectId },
       {
@@ -81,10 +96,6 @@ router.delete('/:postId/:commentId', async (req, res) => {
       },
       { new: true }
     );
-
-    if (!result) {
-      return res.status(404).json({ success: false, error: 'Post not found' });
-    }
 
     res.json({ success: true, data: result });
   } catch (err) {

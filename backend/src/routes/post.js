@@ -5,6 +5,8 @@ const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
 const { get, set } = require('../utils/redis');
 
 const postController = require('../controllers/postController');
+const validate = require('../middleware/validateMiddleware');
+const { createPostSchema, updatePostSchema } = require('../validations/postValidation');
 
 // Helper: escape user input for use in MongoDB $regex to prevent ReDoS
 function escapeRegex(str) {
@@ -12,7 +14,7 @@ function escapeRegex(str) {
 }
 
 // Create post (POST /api/posts) — must be authenticated
-router.post('/', verifyToken, postController.createPost);
+router.post('/', verifyToken, validate(createPostSchema), postController.createPost);
 
 router.get('/feed', optionalAuth, async (req, res) => {
   try {

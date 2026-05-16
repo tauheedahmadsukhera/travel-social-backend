@@ -15,11 +15,13 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 
-// Upload media (POST /api/media/upload)
+const { verifyToken } = require('../middleware/authMiddleware');
+
+// Upload media (POST /api/media/upload) — JWT required to prevent anonymous abuse
 // Supports BOTH:
 //   1) multipart/form-data with file field (from XHR/FormData)
 //   2) JSON body with { file: "base64...", mediaType: "image" }
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
   try {
     const mediaType = req.body.mediaType || 'auto';
     const resourceType = mediaType === 'audio' ? 'video' : (mediaType === 'video' ? 'video' : 'auto');

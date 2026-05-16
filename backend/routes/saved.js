@@ -15,9 +15,11 @@ const savedPostSchema = new mongoose.Schema({
 const SavedPost = mongoose.models.SavedPost || mongoose.model('SavedPost', savedPostSchema);
 
 const { verifyToken } = require('../src/middleware/authMiddleware');
+const validate = require('../src/middleware/validateMiddleware');
+const { savePostSchema } = require('../src/validations/savedValidation');
 
 // Save a post (Requires Auth)
-router.post('/:userId/saved', verifyToken, async (req, res) => {
+router.post('/:userId/saved', verifyToken, validate(savePostSchema), async (req, res) => {
   try {
     const { userId } = req.params;
     const authenticatedUserId = req.userId;

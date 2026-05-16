@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { verifyToken } = require('../middleware/authMiddleware');
 
 let ctrl;
 try {
@@ -14,25 +15,25 @@ try {
   };
 }
 
-// GET /api/sections?userId=...
+// GET /api/sections?userId=... (public — reading sections is unrestricted)
 router.get('/', ctrl.getSectionsByUser);
 
-// GET  /api/users/:uid/sections
+// GET /api/users/:uid/sections (public)
 router.get('/:uid/sections', ctrl.getUserSections);
 
-// POST /api/users/:uid/sections
-router.post('/:uid/sections', ctrl.createSection);
+// POST /api/users/:uid/sections (JWT required)
+router.post('/:uid/sections', verifyToken, ctrl.createSection);
 
-// PUT  /api/users/:uid/sections/:sectionId  (id-based now)
-router.put('/:uid/sections/:sectionId', ctrl.updateSection);
+// PUT /api/users/:uid/sections/:sectionId (JWT required)
+router.put('/:uid/sections/:sectionId', verifyToken, ctrl.updateSection);
 
-// DELETE /api/users/:uid/sections/:sectionId  (supports body.migrateToSectionId)
-router.delete('/:uid/sections/:sectionId', ctrl.deleteSection);
+// DELETE /api/users/:uid/sections/:sectionId (JWT required)
+router.delete('/:uid/sections/:sectionId', verifyToken, ctrl.deleteSection);
 
-// POST   /api/users/:uid/sections/:sectionId/collaborators
-router.post('/:uid/sections/:sectionId/collaborators', ctrl.addCollaborator);
+// POST /api/users/:uid/sections/:sectionId/collaborators (JWT required)
+router.post('/:uid/sections/:sectionId/collaborators', verifyToken, ctrl.addCollaborator);
 
-// DELETE /api/users/:uid/sections/:sectionId/collaborators/:collabId
-router.delete('/:uid/sections/:sectionId/collaborators/:collabId', ctrl.removeCollaborator);
+// DELETE /api/users/:uid/sections/:sectionId/collaborators/:collabId (JWT required)
+router.delete('/:uid/sections/:sectionId/collaborators/:collabId', verifyToken, ctrl.removeCollaborator);
 
 module.exports = router;

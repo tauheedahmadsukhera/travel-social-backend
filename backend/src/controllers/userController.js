@@ -106,7 +106,26 @@ exports.updateUserProfile = async (req, res) => {
 exports.getUserPosts = async (req, res) => {
   try {
     const { uid } = req.params;
-    const posts = await Post.find({ userId: uid }).sort({ createdAt: -1 });
+    const userId = req.userId ? String(req.userId) : null;
+    
+    const pipeline = [
+      { $match: { userId: uid } },
+      { $sort: { createdAt: -1 } },
+      {
+        $addFields: {
+          isLiked: userId ? { $in: [userId, { $ifNull: ["$likes", []] }] } : false,
+          id: "$_id"
+        }
+      },
+      {
+        $project: {
+          likes: 0,
+          comments: 0
+        }
+      }
+    ];
+    
+    const posts = await Post.aggregate(pipeline);
     return res.json({ success: true, data: posts });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

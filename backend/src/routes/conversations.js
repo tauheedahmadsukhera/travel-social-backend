@@ -1193,9 +1193,16 @@ router.post('/get-or-create', verifyToken, async (req, res) => {
   }
 });
 
-// Get conversations for user (route param version) with populated data
-router.get('/users/:userId', async (req, res) => {
+// Get conversations for user (route param version) — JWT required, self-only access
+router.get('/users/:userId', verifyToken, async (req, res) => {
   try {
+    // IDOR guard: users may only fetch their own conversation list
+    const requestedId = req.params.userId;
+    const callerCandidates = await resolveUserIdentifiers(req.userId).then(r => r.candidates);
+    if (!callerCandidates.includes(requestedId)) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
     const userId = req.params.userId;
     const conversations = await Conversation.find({ participants: userId }).sort({ lastMessageAt: -1 });
 
@@ -1701,8 +1708,8 @@ router.post('/stories', verifyToken, async (req, res) => {
   }
 });
 
-// GET /stories/user/:userId - Get user stories
-router.get('/stories/user/:userId', async (req, res) => {
+// GET /stories/user/:userId - Get user stories (JWT required)
+router.get('/stories/user/:userId', verifyToken, async (req, res) => {
   try {
     const Story = mongoose.model('Story');
     const { userId } = req.params;
@@ -1719,8 +1726,8 @@ router.get('/stories/user/:userId', async (req, res) => {
   }
 });
 
-// GET /stories/feed - Get all stories from following
-router.get('/stories/feed', async (req, res) => {
+// GET /stories/feed - Get all active stories feed (JWT required)
+router.get('/stories/feed', verifyToken, async (req, res) => {
   try {
     const Story = mongoose.model('Story');
     const stories = await Story.find({
@@ -1734,16 +1741,13 @@ router.get('/stories/feed', async (req, res) => {
   }
 });
 
-// POST /stories/:storyId/view - Mark story as viewed
-router.post('/stories/:storyId/view', async (req, res) => {
+// POST /stories/:storyId/view - Mark story as viewed (JWT required, userId from token)
+router.post('/stories/:storyId/view', verifyToken, async (req, res) => {
   try {
     const Story = mongoose.model('Story');
     const { storyId } = req.params;
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, error: 'userId required' });
-    }
+    // Use verified identity from JWT — never trust body-supplied userId
+    const userId = req.userId;
 
     const story = await Story.findByIdAndUpdate(
       storyId,
