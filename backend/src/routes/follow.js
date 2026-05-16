@@ -626,4 +626,46 @@ router.get('/users/:userId/friends', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/follow/discover - Get recommended users to follow
+router.get('/discover', verifyToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const User = mongoose.model('User');
+    const Follow = mongoose.model('Follow');
+
+    const me = await resolveUserIdentifiers(userId);
+
+    // Get IDs of users already followed
+    const followingDocs = await Follow.find({ followerId: { $in: me.candidates } });
+    const followedIds = followingDocs.map(f => String(f.followingId));
+    followedIds.push(...me.candidates.map(String)); // Exclude self
+
+    // Find users not in followedIds
+    const suggestedUsers = await User.find({
+      $and: [
+        { _id: { $nin: followedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
+        { firebaseUid: { $nin: followedIds } },
+        { uid: { $nin: followedIds } }
+      ]
+    })
+    .limit(15)
+    .select('firebaseUid displayName name username avatar photoURL profilePicture')
+    .lean();
+
+    const data = suggestedUsers.map(u => ({
+      uid: u._id.toString(),
+      firebaseUid: u.firebaseUid || '',
+      name: u.displayName || u.name || 'User',
+      username: u.username || '',
+      avatar: u.avatar || u.photoURL || u.profilePicture || '',
+      isFollowing: false
+    }));
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[GET /follow/discover] Error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch suggestions' });
+  }
+});
+
 module.exports = router;
