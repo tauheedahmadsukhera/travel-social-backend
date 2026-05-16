@@ -110,9 +110,13 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     const idsToMatch = Array.from(idsToMatchSet);
+    const objectIdsToMatch = idsToMatch.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
 
     const conversations = await Conversation.find({
-      participants: { $in: idsToMatch },
+      $or: [
+        { participants: { $in: idsToMatch } },
+        { participants: { $in: objectIdsToMatch } }
+      ],
       deletedBy: { $nin: idsToMatch }
     }).sort({ lastMessageAt: -1 }).skip(skip).limit(limit).lean();
     
