@@ -683,11 +683,40 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = parseInt(req.query.skip) || 0;
     
-    // Optimization: Fetch only required messages sorted from DB, not all messages in memory!
-    // We fetch extra (skip + limit + 20) to account for deduplication and cleared messages.
+    // Optimization: Fetch only required messages sorted from DB
     const queryLimit = limit === 0 ? 1000 : skip + limit + 20;
 
-    const rawMsgs = await Message.find({ conversationId: { $in: convoIdsArray } })
+    // ULTIMATE HARDENING: For DM threads (2 participants), also search by sender/recipient pairs 
+    // to catch any messages that might have been stored with a different or missing conversationId.
+    let messageQuery = { conversationId: { $in: convoIdsArray } };
+
+    if (convos.length > 0 && !convos[0].isGroup) {
+      const participants = convos[0].participants || [];
+      if (participants.length === 2) {
+        const p1Ids = await resolveUserIdVariants(participants[0]);
+        const p2Ids = await resolveUserIdVariants(participants[1]);
+        
+        messageQuery = {
+          $or: [
+            { conversationId: { $in: convoIdsArray } },
+            { 
+              $and: [
+                { senderId: { $in: p1Ids } },
+                { recipientId: { $in: p2Ids } }
+              ]
+            },
+            { 
+              $and: [
+                { senderId: { $in: p2Ids } },
+                { recipientId: { $in: p1Ids } }
+              ]
+            }
+          ]
+        };
+      }
+    }
+
+    const rawMsgs = await Message.find(messageQuery)
       .sort({ timestamp: -1, createdAt: -1 })
       .limit(queryLimit)
       .lean();
