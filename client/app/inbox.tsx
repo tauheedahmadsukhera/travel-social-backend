@@ -9,7 +9,8 @@ import { Image } from 'react-native';
 // import { useAuthLoading, useUser } from '@/src/_components/UserContext';
 // import {} from '../lib/firebaseHelpers';
 // @ts-ignore
-import { useInboxPolling } from '../hooks/useInboxPolling';
+import { useInboxRealtime } from '../hooks/useInboxRealtime';
+import { useAppStore } from '@/store/useAppStore';
 import { deleteConversation } from '../lib/firebaseHelpers/archive';
 import { apiService } from '@/src/_services/apiService';
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
@@ -17,10 +18,10 @@ import { hapticLight } from '@/lib/haptics';
 import { safeRouterBack } from '@/lib/safeRouterBack';
 import ConversationItem from '../src/_components/inbox/ConversationItem';
 import { subscribeToUserStatus } from '../src/_services/socketService';
-
+import { CreateGroupModal } from '@/src/_components/inbox/CreateGroupModal';
+import { ConversationActionModal } from '@/src/_components/inbox/ConversationActionModal';
 
 const INBOX_BUILD_TAG = 'inbox-group-fix-2026-03-28-2';
-
 
 function Inbox() {
   const router = useRouter();
@@ -76,9 +77,9 @@ function Inbox() {
     router.replace('/(tabs)/home');
   };
 
-  // Get userId from AsyncStorage (token-based auth)
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userLoading, setUserLoading] = useState(true);
+  // Get userId from Zustand Global Store
+  const userId = useAppStore((state) => state.userId);
+  const userLoading = false;
   const [inFocus, setInFocus] = useState(false);
   const lastRefreshAtRef = useRef(0);
   const MIN_FOCUS_REFRESH_MS = 4000;
@@ -90,26 +91,8 @@ function Inbox() {
     }, [])
   );
 
-  useEffect(() => {
-    const getUser = async () => {
-      try {
-        const uid = await AsyncStorage.getItem('userId');
-        setUserId(uid);
-      } catch (error) {
-        console.error('Error getting userId:', error);
-      } finally {
-        setUserLoading(false);
-      }
-    };
-    getUser();
-  }, []);
-
-  // Use optimized polling instead of real-time listeners (saves 70-80% on costs)
-  const { conversations: polledConversations, loading: polledLoading, ready: polledReady } = useInboxPolling(userId || null, {
-    pollingInterval: 6000,
-    // PERF: poll only while Inbox is focused.
-    autoStart: inFocus
-  });
+  // Use Real-time WebSocket connection instead of heavy polling
+  const { conversations: polledConversations, loading: polledLoading, ready: polledReady, refresh: forceRefresh } = useInboxRealtime(userId || null);
 
   // Avoid noisy logs in hot render path (hurts perf on Android).
 
@@ -763,16 +746,8 @@ function Inbox() {
 
   // Show loading only if still loading AND no conversations yet.
   // We use `polledLoading` and `userLoading` as our source of truth.
-  // Additionally, if the data hasn't synced from the hook yet, we wait.
+  // Removed blocking full-screen loader to allow instant UI shell rendering (Instagram style)
   const hasAnyConversations = Array.isArray(conversations) && conversations.length > 0;
-  // Block UI only when we have nothing to show yet.
-  if (!hasAnyConversations && (polledLoading || !polledReady)) {
-    return (
-      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#007aff" />
-      </SafeAreaView>
-    );
-  }
 
   // Empty inbox UI removed by request: keep the normal inbox layout even when no chats exist.
   if (!loading && !polledLoading && polledReady && !userLoading && (conversations === null || conversations.length === 0)) {
@@ -783,7 +758,7 @@ function Inbox() {
   }
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <View style={styles.headerRow}>
+      <View testID="inbox-header" style={styles.headerRow}>
         <TouchableOpacity
           onPress={() => {
             hapticLight();
@@ -883,11 +858,13 @@ function Inbox() {
           />
         )}
         ListEmptyComponent={
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 40 }}>
-            <Feather name="message-circle" size={64} color="#ccc" />
-            <Text style={{ color: '#999', marginTop: 16, fontSize: 16, fontWeight: '600' }}>No messages found</Text>
-            <Text style={{ color: '#ccc', marginTop: 8, textAlign: 'center' }}>Start a conversation by visiting someone's profile</Text>
-          </View>
+          (!polledLoading && polledReady) ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 40 }}>
+              <Feather name="message-circle" size={64} color="#ccc" />
+              <Text style={{ color: '#999', marginTop: 16, fontSize: 16, fontWeight: '600' }}>No messages found</Text>
+              <Text style={{ color: '#ccc', marginTop: 8, textAlign: 'center' }}>Start a conversation by visiting someone's profile</Text>
+            </View>
+          ) : null
         }
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
@@ -900,148 +877,22 @@ function Inbox() {
         estimatedItemSize={80}
       />
 
-      <Modal
-        visible={createGroupVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCreateGroupVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          enabled={Platform.OS === 'ios'}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <View style={styles.groupSheetBackdrop}>
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setCreateGroupVisible(false)} />
-            <Pressable style={[styles.groupSheet, { paddingBottom: Math.max(insets.bottom, 20) }]} onPress={() => {}}>
-              <View style={styles.groupHandle} />
-              <Text style={styles.groupTitle}>New Group</Text>
-              <TextInput
-                style={styles.groupNameInput}
-                placeholder="Group name"
-                placeholderTextColor="#9ca3af"
-                value={groupName}
-                onChangeText={setGroupName}
-                maxLength={60}
-              />
-              <TextInput
-                style={styles.groupSearchInput}
-                placeholder="Search people to add..."
-                placeholderTextColor="#9ca3af"
-                value={groupSearch}
-                onChangeText={setGroupSearch}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-              <View style={styles.memberChipsWrap}>
-                {selectedGroupMembers.map((m: any) => {
-                  const id = String(m?._id || m?.id || m?.firebaseUid || m?.uid || '');
-                  const label = m?.displayName || m?.username || m?.name || 'User';
-                  return (
-                    <TouchableOpacity key={`chip_${id}`} style={styles.memberChip} onPress={() => toggleGroupMember(m)}>
-                      <Text style={styles.memberChipText} numberOfLines={1}>{label}</Text>
-                      <Feather name="x" size={14} color="#1f2937" />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+      <CreateGroupModal 
+        visible={createGroupVisible} 
+        onClose={() => setCreateGroupVisible(false)} 
+        userId={userId} 
+        onGroupCreated={refreshInbox} 
+      />
 
-              <FlashList
-                data={groupSearchResults}
-                keyExtractor={(u: any, index: number) => {
-                  const id = String(u?._id || u?.id || u?.firebaseUid || u?.uid || '');
-                  return id ? `user_${id}` : `user_idx_${index}`;
-                }}
-                style={{ maxHeight: 230, flexGrow: 0 }}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                renderItem={({ item: u }: { item: any }) => {
-                  const id = String(u?._id || u?.id || u?.firebaseUid || u?.uid || '');
-                  const selected = selectedGroupMembers.some((m: any) => String(m?._id || m?.id || m?.firebaseUid || m?.uid || '') === id);
-                  const name = u?.displayName || u?.username || u?.name || 'User';
-                  const avatar = u?.avatar || u?.photoURL || DEFAULT_AVATAR_URL;
-                  return (
-                    <TouchableOpacity style={styles.memberRow} onPress={() => toggleGroupMember(u)} activeOpacity={0.8}>
-                      <Image source={{ uri: avatar }} style={styles.memberAvatar} />
-                      <Text style={styles.memberName} numberOfLines={1}>{name}</Text>
-                      <Feather name={selected ? 'check-circle' : 'circle'} size={18} color={selected ? '#0095f6' : '#9ca3af'} />
-                    </TouchableOpacity>
-                  );
-                }}
-                ListEmptyComponent={
-                  groupSearch.trim().length >= 2
-                    ? <Text style={styles.memberEmpty}>No users found</Text>
-                    : <Text style={styles.memberEmpty}>Type to search users</Text>
-                }
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.createGroupBtn,
-                  (!groupName.trim() || selectedGroupMembers.length < 2 || groupSaving) && { opacity: 0.5 }
-                ]}
-                onPress={handleCreateGroup}
-                disabled={!groupName.trim() || selectedGroupMembers.length < 2 || groupSaving}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.createGroupBtnText}>{groupSaving ? 'Creating...' : 'Create Group'}</Text>
-              </TouchableOpacity>
-            </Pressable>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
-        visible={actionsVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeActions}
-      >
-        <Pressable style={styles.actionSheetBackdrop} onPress={closeActions}>
-          <Pressable style={styles.actionSheetContainer} onPress={() => { }}>
-            <Text style={styles.actionSheetTitle} numberOfLines={1}>{actionTitle || 'Conversation'}</Text>
-
-            <TouchableOpacity
-              style={[styles.actionSheetButton, styles.actionSheetDeleteButton]}
-              activeOpacity={0.8}
-              onPress={() => {
-                setActionsVisible(false);
-                setConfirmDeleteVisible(true);
-              }}
-            >
-              <Feather name="trash-2" size={18} color="#ff3b30" />
-              <Text style={[styles.actionSheetButtonText, styles.actionSheetDeleteText]}>Delete</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionSheetButton, styles.actionSheetCancelButton]} activeOpacity={0.8} onPress={closeActions}>
-              <Text style={styles.actionSheetCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={confirmDeleteVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmDeleteVisible(false)}
-      >
-        <Pressable style={styles.actionSheetBackdrop} onPress={() => setConfirmDeleteVisible(false)}>
-          <Pressable style={styles.confirmContainer} onPress={() => { }}>
-            <Text style={styles.confirmTitle}>Delete conversation?</Text>
-            <Text style={styles.confirmSubtitle}>This will remove the conversation from your inbox.</Text>
-            <View style={styles.confirmRow}>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmCancelBtn]} onPress={() => setConfirmDeleteVisible(false)}>
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmDeleteBtn]} onPress={handleDelete}>
-                <Text style={styles.confirmDeleteText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <ConversationActionModal
+        actionsVisible={actionsVisible}
+        closeActions={closeActions}
+        actionTitle={actionTitle}
+        setActionsVisible={setActionsVisible}
+        confirmDeleteVisible={confirmDeleteVisible}
+        setConfirmDeleteVisible={setConfirmDeleteVisible}
+        handleDelete={handleDelete}
+      />
     </SafeAreaView>
   );
 }
