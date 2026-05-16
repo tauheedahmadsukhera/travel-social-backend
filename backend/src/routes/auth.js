@@ -108,7 +108,7 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
       logger.info(`✅ User updated in MongoDB: ${user.email}`);
     }
 
-    const token = generateToken(user._id, user.email);
+    const token = generateToken(user._id, user.email, user.firebaseUid || user.uid);
     res.json({
       success: true,
       token,
@@ -184,7 +184,7 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
       logger.info(`✅ User updated on login: ${user.email}`);
     }
 
-    const token = generateToken(user._id, user.email);
+    const token = generateToken(user._id, user.email, user.firebaseUid || user.uid);
     res.json({
       success: true,
       token,
@@ -219,7 +219,7 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     });
     await user.save();
 
-    const token = generateToken(user._id, user.email);
+    const token = generateToken(user._id, user.email, user.firebaseUid || user.uid);
     res.status(201).json({ success: true, token, user: { id: user._id, email: user.email, displayName: user.displayName } });
   } catch (error) {
     logger.error('[Auth] Register error: %O', error);
@@ -239,7 +239,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) return res.status(401).json({ success: false, error: 'Invalid email or password' });
 
-    const token = generateToken(user._id, email);
+    const token = generateToken(user._id, email, user.firebaseUid || user.uid);
     res.json({ success: true, token, user: { id: user._id, email: user.email, displayName: user.displayName } });
   } catch (error) {
     logger.error('[Auth] Login error: %O', error);
@@ -328,7 +328,7 @@ router.post('/username/signup', validate(usernameSignupSchema), async (req, res)
     await user.save();
     logger.info(`✅ User registered with username: ${cleanUsername}`);
 
-    const token = generateToken(user._id, internalEmail);
+    const token = generateToken(user._id, internalEmail, user.firebaseUid || user.uid);
 
     res.status(201).json({
       success: true,
@@ -369,7 +369,7 @@ router.post('/username/login', validate(usernameLoginSchema), async (req, res) =
       return res.status(401).json({ success: false, error: 'Invalid username or password' });
     }
 
-    const token = generateToken(user._id, user.email);
+    const token = generateToken(user._id, user.email, user.firebaseUid || user.uid);
 
     res.json({
       success: true,

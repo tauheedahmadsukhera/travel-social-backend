@@ -12,17 +12,18 @@ async function resolveUserIdentifiers(inputId) {
   const uniqStrings = (arr) => Array.from(new Set((arr || []).filter(Boolean).map(v => String(v))));
 
   try {
-    let user = null;
-    // Try as MongoDB ID
-    if (mongoose.Types.ObjectId.isValid(raw)) {
-      user = await User.findById(raw).select('_id firebaseUid uid').lean();
-    }
+    // Aggressive lookup: search all possible ID fields for the input string
+    let user = await User.findOne({
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null },
+        { firebaseUid: raw },
+        { uid: raw }
+      ].filter(q => q._id !== null || q.firebaseUid || q.uid)
+    }).select('_id firebaseUid uid').lean();
     
-    // Try as Firebase UID if not found as MongoDB ID
-    if (!user) {
-      user = await User.findOne({ 
-        $or: [{ firebaseUid: raw }, { uid: raw }] 
-      }).select('_id firebaseUid uid').lean();
+    if (!user && mongoose.Types.ObjectId.isValid(raw)) {
+       // fallback for direct ID if for some reason findOne with $or is finicky on some Mongo versions
+       user = await User.findById(raw).select('_id firebaseUid uid').lean();
     }
 
     const canonicalId = user?._id ? String(user._id) : raw;

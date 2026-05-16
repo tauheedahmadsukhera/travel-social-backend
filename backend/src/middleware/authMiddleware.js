@@ -73,11 +73,12 @@ const optionalAuth = (req, res, next) => {
 
 // ============= TOKEN GENERATION =============
 
-const generateToken = (userId, email) => {
+const generateToken = (userId, email, firebaseUid = null) => {
   return jwt.sign(
     {
       userId: String(userId),
       email,
+      firebaseUid: firebaseUid ? String(firebaseUid) : null,
       iat: Math.floor(Date.now() / 1000),
     },
     getJwtSecret(),
