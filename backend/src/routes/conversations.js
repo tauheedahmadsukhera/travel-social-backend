@@ -690,6 +690,7 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
     let rawMsgs = await Message.find({ conversationId: { $in: convoIdsArray } })
       .sort({ timestamp: -1, createdAt: -1 })
       .limit(queryLimit)
+      .maxTimeMS(5000) // SAFETY: Never hang for more than 5 seconds
       .lean();
 
     // FAIL-SAFE: If no messages found by ID, and this is a DM, try matching by participants directly
@@ -706,6 +707,7 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
         })
         .sort({ timestamp: -1, createdAt: -1 })
         .limit(queryLimit)
+        .maxTimeMS(5000)
         .lean();
       }
     }
