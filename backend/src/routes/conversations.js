@@ -686,33 +686,31 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
     // Optimization: Fetch only required messages sorted from DB
     const queryLimit = limit === 0 ? 1000 : skip + limit + 20;
 
-    // ULTIMATE HARDENING: For DM threads (2 participants), also search by sender/recipient pairs 
-    // to catch any messages that might have been stored with a different or missing conversationId.
-    let messageQuery = { conversationId: { $in: convoIdsArray } };
-
-    if (convos.length > 0 && !convos[0].isGroup) {
-      const participants = convos[0].participants || [];
-      if (participants.length === 2) {
-        // Direct match without extra resolution calls to avoid timeouts
-        const p1 = String(participants[0]);
-        const p2 = String(participants[1]);
-        
-        messageQuery = {
-          $or: [
-            { conversationId: { $in: convoIdsArray } },
-            { senderId: p1, recipientId: p2 },
-            { senderId: p2, recipientId: p1 }
-          ]
-        };
-      }
-    }
-
-    const rawMsgs = await Message.find(messageQuery)
+    // Optimized message query: try direct conversationId matches first (fast path)
+    let rawMsgs = await Message.find({ conversationId: { $in: convoIdsArray } })
       .sort({ timestamp: -1, createdAt: -1 })
       .limit(queryLimit)
       .lean();
 
-    logger.info('[GET] /:id/messages - Found %d raw messages for convoIds: %j', rawMsgs.length, convoIdsArray);
+    // FAIL-SAFE: If no messages found by ID, and this is a DM, try matching by participants directly
+    if (rawMsgs.length === 0 && convos.length > 0 && !convos[0].isGroup) {
+      const participants = convos[0].participants || [];
+      if (participants.length === 2) {
+        const p1 = String(participants[0]);
+        const p2 = String(participants[1]);
+        rawMsgs = await Message.find({
+          $or: [
+            { senderId: p1, recipientId: p2 },
+            { senderId: p2, recipientId: p1 }
+          ]
+        })
+        .sort({ timestamp: -1, createdAt: -1 })
+        .limit(queryLimit)
+        .lean();
+      }
+    }
+
+    logger.info('[GET] /:id/messages - Final count: %d for convoIds: %j', rawMsgs.length, convoIdsArray);
 
     const merged = [];
     const seen = new Set();
