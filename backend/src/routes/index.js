@@ -4,6 +4,7 @@ const router = express.Router();
 // Import all routes
 const messageRoutes = require('../../routes/messages');
 const postRoutes = require('../../routes/posts'); // Restored full featured posts
+const commentRoutes = require('../../routes/comments'); // Restored full featured comments
 const livestreamRoutes = require('../../routes/livestream');
 const notificationRoutes = require('../../routes/notification');
 const savedRoutes = require('../../routes/saved');
@@ -25,6 +26,7 @@ const conversationRoutes = require('./conversations');
 router.use('/conversations', messageRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/posts', postRoutes);
+router.use('/posts', commentRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/stories', storyRoutes);
