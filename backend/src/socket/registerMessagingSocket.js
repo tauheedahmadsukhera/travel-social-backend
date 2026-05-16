@@ -144,8 +144,13 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
         }
         connectedUsers.set(authId, socket.id);
         socket.userId = authId;
-        socket.join(`user_${authId}`);
-        logger.info(`👤 User ${authId} joined with socket ${socket.id}`);
+        
+        const variants = await resolveUserIdVariants(authId);
+        for (const v of variants) {
+          socket.join(`user_${v}`);
+        }
+        
+        logger.info(`👤 User ${authId} joined (variants: ${variants.join(', ')}) with socket ${socket.id}`);
         socket.emit('connected', { userId: authId, socketId: socket.id });
         
         io.emit('userStatusUpdate', { userId: authId, status: 'online' });
@@ -158,7 +163,11 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
       if (claimedUserId) {
         connectedUsers.set(String(claimedUserId), socket.id);
         socket.userId = String(claimedUserId);
-        socket.join(`user_${claimedUserId}`);
+        
+        const variants = await resolveUserIdVariants(claimedUserId);
+        for (const v of variants) {
+          socket.join(`user_${v}`);
+        }
         socket.emit('connected', { userId: claimedUserId, socketId: socket.id });
         io.emit('userStatusUpdate', { userId: String(claimedUserId), status: 'online' });
 
@@ -264,8 +273,11 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
 
       io.to(actualConversationId).emit('newMessage', { ...message, conversationId: actualConversationId });
 
-      if (recipientId && String(recipientId) !== String(senderId)) {
-        socket.to(`user_${recipientId}`).emit('newMessage', { ...message, conversationId: actualConversationId });
+      const recipVariants = await resolveUserIdVariants(recipientId);
+      for (const rv of recipVariants) {
+        if (String(rv) !== String(senderId)) {
+          io.to(`user_${rv}`).emit('newMessage', { ...message, conversationId: actualConversationId });
+        }
       }
       
       socket.emit('messageSent', { ...message, conversationId: actualConversationId });
@@ -456,8 +468,11 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
       const emitPayload = { ...message, conversationId: actualConversationId };
       io.to(actualConversationId).emit('newMessage', emitPayload);
       
-      if (recipientId && String(recipientId) !== String(senderId)) {
-        socket.to(`user_${recipientId}`).emit('newMessage', emitPayload);
+      const recipVariantsMedia = await resolveUserIdVariants(recipientId);
+      for (const rv of recipVariantsMedia) {
+        if (String(rv) !== String(senderId)) {
+          io.to(`user_${rv}`).emit('newMessage', emitPayload);
+        }
       }
 
       socket.emit('newMediaMessage', emitPayload); 
