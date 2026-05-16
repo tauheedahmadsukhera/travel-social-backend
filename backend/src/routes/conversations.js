@@ -692,6 +692,8 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
       .limit(queryLimit)
       .lean();
 
+    logger.info('[GET] /:id/messages - Found %d raw messages for convoIds: %j', rawMsgs.length, convoIdsArray);
+
     const merged = [];
     const seen = new Set();
     
