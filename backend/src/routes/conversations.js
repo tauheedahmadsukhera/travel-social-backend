@@ -272,6 +272,42 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
+// Resolve messages by participants (fallback strategy)
+router.get('/resolve/messages', verifyToken, async (req, res) => {
+  try {
+    const actorId = req.userId;
+    const { otherUserId } = req.query;
+    
+    if (!otherUserId) {
+      return res.status(400).json({ success: false, error: 'Missing otherUserId' });
+    }
+
+    const actorVariants = await resolveUserIdVariants(actorId);
+    
+    // Find conversation between these two
+    const convo = await Conversation.findOne({
+      isGroup: { $ne: true },
+      participants: { $all: [...actorVariants, String(otherUserId)], $size: 2 }
+    }).populate('messages');
+
+    if (!convo) {
+      return res.json({ success: true, messages: [] });
+    }
+
+    // Sort messages newest first
+    const sorted = (convo.messages || []).sort((a, b) => {
+      const ta = a.timestamp || a.createdAt || 0;
+      const tb = b.timestamp || b.createdAt || 0;
+      return new Date(tb).getTime() - new Date(ta).getTime();
+    });
+
+    res.json({ success: true, messages: sorted, conversationId: convo.conversationId || String(convo._id) });
+  } catch (error) {
+    logger.error('Error in /resolve/messages:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Resolve or create a canonical direct conversation for authenticated user and target user.
 router.post('/resolve', verifyToken, async (req, res) => {
   try {

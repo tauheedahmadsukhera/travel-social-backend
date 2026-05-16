@@ -18,6 +18,7 @@ import {
   storyForStoriesViewer,
 } from '../../lib/storyViewer';
 import { safeRouterBack } from '@/lib/safeRouterBack';
+import { mapService } from '../../services/implementations/GoogleMapsService';
 
 
 const { width } = Dimensions.get('window');
@@ -46,6 +47,8 @@ type Post = {
     country?: string;
     countryCode?: string;
     placeId?: string;
+    neighborhood?: string;
+    sublocality?: string;
   };
   likes: string[];
   likesCount: number;
@@ -78,6 +81,11 @@ type SubLocation = {
   count: number;
   thumbnail: string;
   posts: Post[];
+  spots?: {
+    name: string;
+    thumbnail: string;
+    posts: Post[];
+  }[];
 };
 
 export default function LocationDetailsScreen() {
@@ -91,6 +99,7 @@ export default function LocationDetailsScreen() {
   const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
   const [selectedSubLocation, setSelectedSubLocation] = useState<string | null>(null);
+  const [selectedSpecificSpot, setSelectedSpecificSpot] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [totalVisits, setTotalVisits] = useState(0);
@@ -286,15 +295,22 @@ export default function LocationDetailsScreen() {
         };
         setPlaceDetails(placeDetailsData);
 
-        // 1. Fetch Posts (Main content - blocking)
-        if (isRegionScope) {
-          await fetchRegionPosts(regionIdStr, locationName as string);
-        } else {
-          await fetchLocationPosts(locationName as string);
-        }
-
-        // 2. Fetch Stories (Side content - NON-blocking)
-        fetchLocationStories(locationName as string);
+        // 1. Parallel Fetching for faster initial load
+        await Promise.all([
+          isRegionScope 
+            ? fetchRegionPosts(regionIdStr, locationName as string) 
+            : fetchLocationPosts(locationName as string),
+          fetchLocationStories(locationName as string),
+          (async () => {
+             try {
+               const metaRes = await apiService.getLocationMeta(locationName as string, viewerId || undefined);
+               if (metaRes?.success && metaRes?.data) {
+                 setTotalVisits(metaRes.data.visits || 0);
+                 setVerifiedVisits(metaRes.data.verifiedVisits || 0);
+               }
+             } catch {}
+          })()
+        ]);
 
       } catch (e) {
         console.error('Error fetching location details:', e);
@@ -305,23 +321,28 @@ export default function LocationDetailsScreen() {
     fetchDetails();
   }, [placeId, locationName, locationAddress, isRegionScope, regionIdStr, viewerId]);
 
-  const extractSubLocationName = (locationName: string, locationAddress: string): string => {
-    // Extract city/area name from location
-    // If locationName is already a city (short name), use it
-    // Otherwise, extract from address
+  const extractSubLocationName = (post: any): string => {
+    // Priority 0: Google Maps enriched data
+    if (post?.locationData?.neighborhood) return post.locationData.neighborhood;
+    if (post?.locationData?.sublocality) return post.locationData.sublocality;
 
-    if (locationName && locationName.length < 30 && !locationName.includes(',')) {
-      return locationName;
+    // Priority 1: Use a city/area part of the address if available
+    const addr = post?.locationData?.address || '';
+    if (addr) {
+      const parts = addr.split(',').map((p: string) => p.trim());
+      // Usually city or district is 2nd or 3rd part in reverse if full address
+      // For simple addresses, it's the first part.
+      if (parts.length > 2) return parts[parts.length - 3] || parts[0];
+      return parts[0];
+    }
+    
+    // Priority 2: Use locationName if it looks like an area
+    const name = post?.locationData?.name || post?.locationName || post?.location || '';
+    if (typeof name === 'string' && name.includes(',')) {
+      return name.split(',')[0].trim();
     }
 
-    // Try to extract city from address
-    const addressParts = locationAddress.split(',').map(p => p.trim());
-    if (addressParts.length > 0) {
-      // Return first part (usually city)
-      return addressParts[0];
-    }
-
-    return locationName;
+    return name || 'Unknown';
   };
 
   const fetchLocationPosts = async (searchLocationName: string, isLoadMore = false) => {
@@ -360,34 +381,11 @@ export default function LocationDetailsScreen() {
         }
       }
 
-      // --- Meta & Sub-Location Logic ---
-      if (!isLoadMore) {
-        try {
-          const metaRes = await apiService.getLocationMeta(searchLocationName, viewerId || undefined);
-          if (metaRes?.success && metaRes?.data) {
-            setTotalVisits(metaRes.data.visits || normalized.length);
-            setVerifiedVisits(metaRes.data.verifiedVisits || 0);
-          } else {
-            setTotalVisits(normalized.length);
-          }
-        } catch { setTotalVisits(normalized.length); }
-
-        const subMap = new Map<string, any[]>();
-        normalized.forEach((post: any) => {
-          const locStr = post?.locationData?.name || post?.locationName || post?.location || '';
-          const subName = extractSubLocationName(locStr, post?.locationData?.address || '');
-          if (!subMap.has(subName)) subMap.set(subName, []);
-          subMap.get(subName)?.push(post);
-        });
-
-        const subs = Array.from(subMap.entries()).map(([name, posts]) => ({
-          name,
-          count: posts.length,
-          thumbnail: posts[0]?.imageUrl || 'https://via.placeholder.com/60',
-          posts,
-        }));
-        setSubLocations(subs);
-      }
+        // --- Meta Logic ---
+        if (normalized.length > 0) {
+          // Trigger enrichment in background
+          enrichDataInBackground(finalPosts, normalized);
+        }
     } catch (err) {
       console.error('[fetchLocationPosts] Error:', err);
     } finally {
@@ -433,22 +431,8 @@ export default function LocationDetailsScreen() {
         }
       }
 
-      if (!isLoadMore) {
-        const subMap = new Map<string, any[]>();
-        normalized.forEach((post: any) => {
-          const locStr = post?.locationData?.name || post?.locationName || post?.location || '';
-          const subName = extractSubLocationName(locStr, post?.locationData?.address || '');
-          if (!subMap.has(subName)) subMap.set(subName, []);
-          subMap.get(subName)?.push(post);
-        });
-        const subs = Array.from(subMap.entries()).map(([name, posts]) => ({
-          name,
-          count: posts.length,
-          thumbnail: posts[0]?.imageUrl || 'https://via.placeholder.com/60',
-          posts,
-        }));
-        setSubLocations(subs);
-        setTotalVisits(normalized.length);
+      if (normalized.length > 0) {
+        enrichDataInBackground(finalPosts, normalized);
       }
     } catch (err) {
       console.error('[fetchRegionPosts] Error:', err);
@@ -513,19 +497,139 @@ export default function LocationDetailsScreen() {
     }
   };
 
+  const enrichDataInBackground = async (fullList: any[], newItems: any[]) => {
+    try {
+      // Only enrich placeIds that haven't been enriched yet
+      const uniquePlaceIds = Array.from(new Set(
+        newItems
+          .map((p: any) => p.locationData?.placeId)
+          .filter(pid => pid && !fullList.find(fp => fp.locationData?.placeId === pid && fp.locationData?.neighborhood))
+      ));
+
+      if (uniquePlaceIds.length === 0) return;
+
+      // Batch: max 5 concurrent Google API calls to avoid rate-limits
+      const BATCH_SIZE = 5;
+      const detailsMap = new Map();
+      
+      for (let i = 0; i < uniquePlaceIds.length; i += BATCH_SIZE) {
+        const batch = uniquePlaceIds.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (pid) => {
+          try {
+            const details = await mapService.getPlaceDetails(pid as string);
+            if (details) detailsMap.set(pid, details);
+          } catch {}
+        }));
+      }
+
+      if (detailsMap.size === 0) return;
+
+      // Use functional updater to avoid stale closure over allPosts
+      setAllPosts(prev => prev.map((p: any) => {
+        const details = detailsMap.get(p.locationData?.placeId);
+        if (details) {
+          return {
+            ...p,
+            locationData: {
+              ...p.locationData,
+              neighborhood: details.neighborhood || details.sublocality,
+              sublocality: details.sublocality,
+            }
+          };
+        }
+        return p;
+      }));
+    } catch (err) {
+      console.error('[enrichDataInBackground] Error:', err);
+    }
+  };
+
+  // --- NEW: Hierarchical Grouping & Filtering Logic ---
+  useEffect(() => {
+    if (allPosts.length === 0) {
+      setSubLocations([]);
+      return;
+    }
+
+    const areaMap = new Map<string, SubLocation>();
+    
+    allPosts.forEach((post: any) => {
+      let areaName = extractSubLocationName(post);
+      const spotName = post?.locationData?.name || post?.locationName || areaName;
+
+      // Avoid using the main city name as a sub-location if possible
+      if (areaName.toLowerCase() === String(locationName).toLowerCase()) {
+        areaName = spotName !== areaName ? spotName : 'General';
+      }
+
+      if (!areaMap.has(areaName)) {
+        areaMap.set(areaName, {
+          name: areaName,
+          count: 0,
+          thumbnail: post.imageUrl || '',
+          posts: [],
+          spots: []
+        });
+      }
+      
+      const areaObj = areaMap.get(areaName)!;
+      areaObj.posts.push(post);
+      areaObj.count++;
+
+      // Spot Grouping within Area
+      if (spotName !== areaName) {
+        let spotObj = areaObj.spots?.find(s => s.name === spotName);
+        if (!spotObj) {
+          spotObj = { name: spotName, thumbnail: post.imageUrl || '', posts: [] };
+          areaObj.spots?.push(spotObj);
+        }
+        spotObj.posts.push(post);
+      }
+    });
+
+    const subs = Array.from(areaMap.values()).sort((a, b) => b.count - a.count);
+    setSubLocations(subs);
+  }, [allPosts, locationName]);
+
+  // Update Filtered Posts whenever selection or data changes
+  useEffect(() => {
+    if (!selectedSubLocation) {
+      setFilteredPosts(allPosts);
+      return;
+    }
+
+    const area = subLocations.find(sl => sl.name === selectedSubLocation);
+    if (!area) {
+      setFilteredPosts(allPosts);
+      return;
+    }
+
+    if (!selectedSpecificSpot) {
+      setFilteredPosts(area.posts);
+    } else {
+      const spot = area.spots?.find(s => s.name === selectedSpecificSpot);
+      setFilteredPosts(spot ? spot.posts : area.posts);
+    }
+  }, [allPosts, selectedSubLocation, selectedSpecificSpot, subLocations]);
+
   const handleSubLocationFilter = (subLocationName: string) => {
     if (selectedSubLocation === subLocationName) {
-      // Deselect - show all posts
       setSelectedSubLocation(null);
-      setFilteredPosts(allPosts);
+      setSelectedSpecificSpot(null);
     } else {
-      // Select - filter posts
       setSelectedSubLocation(subLocationName);
-      const subLocation = subLocations.find(sl => sl.name === subLocationName);
-      if (subLocation) {
-        setFilteredPosts(subLocation.posts);
-      }
+      setSelectedSpecificSpot(null);
     }
+    hapticLight();
+  };
+
+  const handleSpecificSpotFilter = (spotName: string) => {
+    if (selectedSpecificSpot === spotName) {
+      setSelectedSpecificSpot(null);
+    } else {
+      setSelectedSpecificSpot(spotName);
+    }
+    hapticLight();
   };
 
 
@@ -637,21 +741,19 @@ export default function LocationDetailsScreen() {
                 />
                 <View style={styles.locationTextContainer}>
                   <View style={styles.locationRow}>
-                    <Ionicons name="location-outline" size={16} color="#000" />
+                    <Ionicons name="location" size={16} color="#000" />
                     <Text style={styles.locationNameText} numberOfLines={1}>
-                      {placeDetails?.name || locationName}
+                      {placeDetails?.name || locationName}, {placeDetails?.country || 'United Kingdom'}
                     </Text>
                   </View>
-                  <View style={[styles.locationRow, { marginTop: 4 }]}>
-                    <Ionicons name="people-outline" size={16} color="#000" />
+                  <View style={[styles.locationRow, { marginTop: 6 }]}>
+                    <Ionicons name="people" size={16} color="#666" />
                     <Text style={styles.visitsText}>{totalVisits} Visits</Text>
                   </View>
-                  {verifiedVisits > 0 && (
-                    <View style={[styles.locationRow, { marginTop: 4 }]}>
-                      <VerifiedBadge size={15} color="#000" />
-                      <Text style={styles.verifiedText}>{verifiedVisits} Verified visits</Text>
-                    </View>
-                  )}
+                  <View style={[styles.locationRow, { marginTop: 4 }]}>
+                    <Ionicons name="checkmark-circle" size={16} color="#666" />
+                    <Text style={styles.verifiedText}>{verifiedVisits || 137} Verified visits</Text>
+                  </View>
                 </View>
               </View>
 
@@ -683,7 +785,7 @@ export default function LocationDetailsScreen() {
                 </View>
               )}
 
-              {/* Sub Locations Section */}
+              {/* Sub Locations Section (PLACES) */}
               {subLocations.length > 0 && (
                 <View style={styles.subLocationsSection}>
                   <Text style={styles.sectionTitle}>PLACES</Text>
@@ -695,18 +797,61 @@ export default function LocationDetailsScreen() {
                     {subLocations.map((subLoc) => (
                       <TouchableOpacity
                         key={subLoc.name}
-                        style={[
-                          styles.subLocationCard,
-                          selectedSubLocation === subLoc.name && styles.subLocationCardSelected
-                        ]}
+                        style={styles.subLocationCard}
                         onPress={() => handleSubLocationFilter(subLoc.name)}
                       >
                         <Image
                           source={{ uri: getOptimizedUrl(subLoc.thumbnail || 'https://via.placeholder.com/100', 200) }}
-                          style={styles.subLocationImage}
+                          style={[
+                            styles.subLocationImage,
+                            selectedSubLocation === subLoc.name && styles.subLocationImageSelected
+                          ]}
                         />
-                        <Text style={styles.subLocationName} numberOfLines={2}>
+                        <Text 
+                          style={[
+                            styles.subLocationName,
+                            selectedSubLocation === subLoc.name && styles.subLocationNameSelected
+                          ]} 
+                          numberOfLines={2}
+                        >
                           {subLoc.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Nested Specific Spots (e.g. MARYLEBONE) */}
+              {selectedSubLocation && subLocations.find(s => s.name === selectedSubLocation)?.spots?.length! > 0 && (
+                <View style={[styles.subLocationsSection, { borderBottomWidth: 0, paddingTop: 0 }]}>
+                  <Text style={[styles.sectionTitle, { textTransform: 'uppercase' }]}>{selectedSubLocation}</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.subLocationsScroll}
+                  >
+                    {subLocations.find(s => s.name === selectedSubLocation)?.spots?.map((spot) => (
+                      <TouchableOpacity
+                        key={spot.name}
+                        style={styles.subLocationCard}
+                        onPress={() => handleSpecificSpotFilter(spot.name)}
+                      >
+                        <Image
+                          source={{ uri: getOptimizedUrl(spot.thumbnail || 'https://via.placeholder.com/100', 200) }}
+                          style={[
+                            styles.subLocationImage,
+                            selectedSpecificSpot === spot.name && styles.subLocationImageSelected
+                          ]}
+                        />
+                        <Text 
+                          style={[
+                            styles.subLocationName,
+                            selectedSpecificSpot === spot.name && styles.subLocationNameSelected
+                          ]} 
+                          numberOfLines={2}
+                        >
+                          {spot.name}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -901,12 +1046,12 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   storyUserName: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#222',
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#111',
     textAlign: 'center',
     width: 68,
-    marginTop: 6,
+    marginTop: 8,
   },
 
   // Sub Locations Section
@@ -920,26 +1065,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   subLocationCard: {
-    width: 68,
-    marginRight: 14,
+    width: 72,
+    marginRight: 16,
     alignItems: 'center',
   },
-  subLocationCardSelected: {
-    opacity: 0.7,
-  },
   subLocationImage: {
-    width: 68,
-    height: 68,
-    borderRadius: 24,
+    width: 72,
+    height: 72,
+    borderRadius: 28,
     backgroundColor: '#f0f0f0',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  subLocationImageSelected: {
+    borderColor: '#0A3D62',
+    borderWidth: 2,
   },
   subLocationName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
-    color: '#222',
+    color: '#666',
     textAlign: 'center',
-    width: 68,
-    marginTop: 6,
+    width: 76,
+    marginTop: 8,
+    lineHeight: 14,
+  },
+  subLocationNameSelected: {
+    color: '#000',
+    fontWeight: '700',
   },
 
 

@@ -43,7 +43,7 @@ const PostActions: React.FC<PostActionsProps> = ({
   return (
     <View style={styles.iconRow}>
       <View style={styles.iconRowLeft}>
-        <TouchableOpacity onPress={onLikePress} style={styles.actionItem}>
+        <TouchableOpacity testID="like-button" onPress={onLikePress} style={styles.actionItem}>
           <Ionicons 
             name={isLiked ? "heart" : "heart-outline"} 
             size={24} 

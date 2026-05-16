@@ -25,6 +25,7 @@ interface MediaItem {
   type?: 'image' | 'video' | string;
   field?: string;
   aspectRatio?: number;
+  thumbnailUrl?: string;
 }
 
 const getMediaUrl = (url: string) => {
@@ -56,6 +57,7 @@ interface VideoItemProps {
   onPress: () => void;
   resizeMode?: ResizeMode;
   onRatioDetected?: (ratio: number) => void;
+  thumbnailUrl?: string;
 }
 
 const VideoItem: React.FC<VideoItemProps> = ({
@@ -69,10 +71,12 @@ const VideoItem: React.FC<VideoItemProps> = ({
   videoRef,
   onPress,
   resizeMode = ResizeMode.COVER,
-  onRatioDetected
+  onRatioDetected,
+  thumbnailUrl
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const mediaUri = getMediaUrl(url);
+  const thumbUri = thumbnailUrl ? getMediaUrl(thumbnailUrl) : undefined;
 
   return (
     <TouchableOpacity
@@ -83,10 +87,15 @@ const VideoItem: React.FC<VideoItemProps> = ({
       }}
       style={{ width: SCREEN_WIDTH, height: containerHeight, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}
     >
-      {!isLoaded && (
-        <View style={{ position: 'absolute', zIndex: 5 }}>
-          <ActivityIndicator color="#fff" size="large" />
-        </View>
+      {/* Instant placeholder from cache instead of loader */}
+      {!isLoaded && thumbUri && (
+        <ExpoImage
+          source={{ uri: thumbUri }}
+          style={{ position: 'absolute', width: SCREEN_WIDTH, height: containerHeight, zIndex: 1 }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={0}
+        />
       )}
       <Video
         ref={videoRef}
@@ -158,10 +167,12 @@ interface ImageItemProps {
   containerHeight: number;
   onPress: () => void;
   priority?: "high" | "normal";
+  thumbnailUrl?: string;
 }
 
-const ImageItem: React.FC<ImageItemProps> = ({ url, containerHeight, onPress, priority = "normal" }) => {
+const ImageItem: React.FC<ImageItemProps> = ({ url, containerHeight, onPress, priority = "normal", thumbnailUrl }) => {
   const mediaUri = getMediaUrl(url);
+  const thumbUri = thumbnailUrl ? getMediaUrl(thumbnailUrl) : undefined;
   return (
     <TouchableOpacity
       activeOpacity={0.95}
@@ -170,12 +181,13 @@ const ImageItem: React.FC<ImageItemProps> = ({ url, containerHeight, onPress, pr
     >
       <ExpoImage
         source={{ uri: mediaUri }}
+        placeholder={thumbUri ? { uri: thumbUri } : undefined}
         style={{ width: SCREEN_WIDTH, height: containerHeight }}
         contentFit="cover"
         cachePolicy="memory-disk"
         priority={priority}
         recyclingKey={url}
-        transition={0}
+        transition={150}
       />
     </TouchableOpacity>
   );
@@ -256,6 +268,7 @@ const PostMedia: React.FC<PostMediaProps> = ({
           toggleMute={toggleMute}
           videoRef={normalizedIndex === localActiveIndex ? videoRef : undefined}
           onPress={() => handlePress(index, true)}
+          thumbnailUrl={item.thumbnailUrl}
         />
       );
     }
@@ -266,6 +279,7 @@ const PostMedia: React.FC<PostMediaProps> = ({
         containerHeight={containerHeight}
         onPress={() => handlePress(index)}
         priority={index === 0 ? "high" : "normal"}
+        thumbnailUrl={item.thumbnailUrl}
       />
     );
   }, [media, mediaHeight, isFocused, localActiveIndex, isPlaying, isMuted, toggleMute, videoRef, handlePress]);
@@ -325,6 +339,7 @@ const PostMedia: React.FC<PostMediaProps> = ({
           onPress={() => {}}
           resizeMode={ResizeMode.CONTAIN}
           onRatioDetected={setDetectedRatio}
+          thumbnailUrl={item.thumbnailUrl}
         />
       );
     }
@@ -335,6 +350,7 @@ const PostMedia: React.FC<PostMediaProps> = ({
         containerHeight={displayHeight}
         onPress={() => handlePress(0)}
         priority="high"
+        thumbnailUrl={item.thumbnailUrl}
       />
     );
   }

@@ -4,9 +4,7 @@ import {
 } from '../config/environment';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
-import { GoogleAuthProvider, OAuthProvider, signInWithCredential, signInWithPopup } from 'firebase/auth';
 import { Alert, Platform } from 'react-native';
-import { auth } from '../config/firebase';
 import { GOOGLE_SIGN_IN_CONFIG } from '../config/environment';
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
 
@@ -18,7 +16,8 @@ const getEnv = (key: string, envValue?: string) => {
   return undefined;
 };
 
-const requireAuth = () => {
+const requireAuth = async () => {
+  const { auth } = await import('../config/firebase');
   if (!auth) {
     throw new Error('Authentication service is not available');
   }
@@ -44,11 +43,13 @@ export async function signInWithGoogle() {
   try {
     // For web
     if (Platform.OS === 'web') {
+      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
       const provider = new GoogleAuthProvider();
       provider.addScope('profile');
       provider.addScope('email');
 
-      const result = await signInWithPopup(requireAuth(), provider);
+      const authInstance = await requireAuth();
+      const result = await signInWithPopup(authInstance, provider);
       return {
         success: true,
         user: result.user,
@@ -126,10 +127,12 @@ export async function signInWithGoogle() {
         }
 
         // Create Firebase credential
+        const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
         const googleCredential = GoogleAuthProvider.credential(idToken);
 
         // Sign in with Firebase
-        const result = await signInWithCredential(requireAuth(), googleCredential);
+        const authInstance = await requireAuth();
+        const result = await signInWithCredential(authInstance, googleCredential);
 
         return {
           success: true,
@@ -227,6 +230,7 @@ export async function signInWithApple() {
       });
 
       // Create Firebase credential
+      const { OAuthProvider, signInWithCredential } = await import('firebase/auth');
       const { identityToken } = credential;
       if (!identityToken) {
         throw new Error('No identity token returned');
@@ -238,7 +242,8 @@ export async function signInWithApple() {
       });
 
       // Sign in with Firebase
-      const result = await signInWithCredential(requireAuth(), firebaseCredential);
+      const authInstance = await requireAuth();
+      const result = await signInWithCredential(authInstance, firebaseCredential);
 
       return {
         success: true,
@@ -248,11 +253,13 @@ export async function signInWithApple() {
 
     // For web
     if (Platform.OS === 'web') {
+      const { OAuthProvider, signInWithPopup } = await import('firebase/auth');
       const provider = new OAuthProvider('apple.com');
       provider.addScope('email');
       provider.addScope('name');
 
-      const result = await signInWithPopup(requireAuth(), provider);
+      const authInstance = await requireAuth();
+      const result = await signInWithPopup(authInstance, provider);
       return {
         success: true,
         user: result.user,
@@ -425,7 +432,8 @@ export async function signInWithTikTok() {
       try {
         // Try to sign in first
         console.log('📱 Trying to sign in existing TikTok user:', tiktokEmail);
-        const signInResult = await signInWithEmailAndPassword(requireAuth(), tiktokEmail, tiktokPassword);
+        const authInstance = await requireAuth();
+        const signInResult = await signInWithEmailAndPassword(authInstance, tiktokEmail, tiktokPassword);
         firebaseUser = signInResult.user;
         console.log('✅ Signed in existing TikTok user');
       } catch (signInError: any) {
@@ -433,7 +441,8 @@ export async function signInWithTikTok() {
         if (signInError.code === 'auth/user-not-found') {
           // Create new account
           console.log('🆕 Creating new TikTok user...');
-          const createResult = await createUserWithEmailAndPassword(requireAuth(), tiktokEmail, tiktokPassword);
+          const authInstance = await requireAuth();
+          const createResult = await createUserWithEmailAndPassword(authInstance, tiktokEmail, tiktokPassword);
           firebaseUser = createResult.user;
           console.log('✅ New TikTok user created');
 

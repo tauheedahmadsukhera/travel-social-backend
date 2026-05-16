@@ -76,6 +76,7 @@ export default function InboxRow({ item, router, unread, formatTime, DEFAULT_AVA
 
   return (
     <TouchableOpacity
+      testID="conversation-item"
       style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 }}
       onPress={() => {
         if (!otherUserId) {

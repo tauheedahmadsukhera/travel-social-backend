@@ -96,7 +96,6 @@ const DMInput: React.FC<DMInputProps> = ({
           <TouchableOpacity 
             style={styles.sendBtn} 
             onPress={recording ? onMicPressOut : onSend}
-            disabled={sending}
           >
             <Text style={styles.sendBtnText}>
               {recording ? 'Release to send' : (sending ? '...' : 'Send')}

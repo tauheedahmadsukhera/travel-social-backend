@@ -34,65 +34,18 @@ const STAMP_SIZE = Math.min(220, width - 72);
 
 import { PassportStamp } from '@/src/_components/PassportStamp';
 import { toDate, formatDisplayDate, getRelativeTime } from '../lib/utils/date';
+import { StampDeleteModal } from '@/src/_components/passport/StampDeleteModal';
+import { StampSearchModal } from '@/src/_components/passport/StampSearchModal';
+import { LocationPickerModal } from '@/src/_components/passport/LocationPickerModal';
 
-const normalizeCountryName = (value?: string | null): string => {
-  if (!value) return '';
-  return String(value)
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-};
-
-const getCountryFromAddress = (address?: string | null): string | null => {
-  if (!address) return null;
-  const parts = address
-    .split(',')
-    .map(p => p.trim())
-    .filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : null;
-};
-
-const PLUS_CODE_PATTERN = /^[A-Z0-9]{4,}\+[A-Z0-9]{2,}$/i;
-const COORDINATE_PATTERN = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/;
-
-const isReadableLocationLabel = (value?: string | null): boolean => {
-  if (!value) return false;
-  const label = String(value).trim();
-  if (!label) return false;
-  if (PLUS_CODE_PATTERN.test(label)) return false;
-  if (COORDINATE_PATTERN.test(label)) return false;
-  const lower = label.toLowerCase();
-  if (lower === 'unknown' || lower === 'unknown place' || lower === 'n/a') return false;
-  return true;
-};
-
-const getSuggestionLocationLabel = (suggestion: any): string => {
-  if (!suggestion) return 'this location';
-
-  const main = suggestion?.mainSuggestion || {};
-  const candidates: Array<string | undefined> = [
-    main?.name,
-    main?.place,
-    main?.placeName,
-    main?.parentCity,
-    main?.parentCountry,
-  ];
-
-  if (Array.isArray(suggestion?.suggestions)) {
-    for (const s of suggestion.suggestions) {
-      candidates.push(s?.name, s?.place, s?.placeName, s?.parentCity, s?.parentCountry);
-    }
-  }
-
-  for (const candidate of candidates) {
-    if (isReadableLocationLabel(candidate)) {
-      return String(candidate).trim();
-    }
-  }
-
-  return 'this location';
-};
+import {
+  normalizeCountryName,
+  getCountryFromAddress,
+  PLUS_CODE_PATTERN,
+  COORDINATE_PATTERN,
+  isReadableLocationLabel,
+  getSuggestionLocationLabel,
+} from '@/src/utils/passportUtils';
 
 const STAMP_W = width - 48;
 const STAMP_H = STAMP_W * 0.76;
@@ -792,153 +745,23 @@ export default function PassportScreen() {
       </ScrollView>
 
       {/* Stamps search modal */}
-      <Modal
+      <StampSearchModal
         visible={stampSearchVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeStampSearch}
-      >
-        <View style={styles.searchModalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ width: '100%', height: '100%', justifyContent: 'flex-end' }}
-          >
-            <View style={styles.searchModalContent}>
-              {/* Modal Drag Indicator */}
-              <View style={styles.modalHandle} />
-
-              <View style={styles.searchModalHeader}>
-                <View>
-                  <Text style={styles.searchModalTitle}>Search Passport</Text>
-                  <Text style={styles.searchModalSub}>Find your travel milestones</Text>
-                </View>
-                <TouchableOpacity onPress={closeStampSearch} style={styles.searchModalCloseBtn}>
-                  <Feather name="x" size={20} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.searchBarWrapper}>
-                <View style={styles.searchBarInner}>
-                  <Feather name="search" size={18} color="#0A3D62" />
-                  <TextInput
-                    style={styles.searchBarInput}
-                    placeholder="Search countries, cities, or places..."
-                    placeholderTextColor="#999"
-                    value={stampSearchQuery}
-                    onChangeText={setStampSearchQuery}
-                    autoFocus
-                    returnKeyType="search"
-                    clearButtonMode="while-editing"
-                  />
-                  {!!stampSearchQuery && Platform.OS === 'android' && (
-                    <TouchableOpacity onPress={() => setStampSearchQuery('')}>
-                      <Feather name="x-circle" size={16} color="#ccc" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-
-              <ScrollView
-                style={styles.searchResultsList}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 40 }}
-              >
-                {stampSearchQuery.trim() ? (
-                  stampSearchResults.length > 0 ? (
-                    stampSearchResults.map((s) => (
-                      <TouchableOpacity
-                        key={`ss_${String(s._id)}`}
-                        style={styles.searchResultItem}
-                        onPress={() => handlePickStampFromSearch(s)}
-                      >
-                        <View style={styles.searchResultIcon}>
-                          <Feather 
-                            name={s.type === 'country' ? 'globe' : s.type === 'city' ? 'map' : 'map-pin'} 
-                            size={16} 
-                            color="#0A3D62" 
-                          />
-                        </View>
-                        <View style={styles.searchResultText}>
-                          <Text style={styles.searchResultName}>{s.name}</Text>
-                          <Text style={styles.searchResultInfo}>
-                            {s.type.charAt(0).toUpperCase() + s.type.slice(1)}
-                            {s.parentCity ? ` • ${s.parentCity}` : ''}
-                            {s.parentCountry ? ` • ${s.parentCountry}` : ''}
-                          </Text>
-                        </View>
-                        <Feather name="chevron-right" size={16} color="#CCC" />
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <View style={styles.searchEmptyState}>
-                      <Feather name="search" size={48} color="#EEE" />
-                      <Text style={styles.searchEmptyText}>No stamps match your search</Text>
-                      <Text style={styles.searchEmptySub}>Try searching for a different location</Text>
-                    </View>
-                  )
-                ) : (
-                  <View style={styles.searchPlaceholderState}>
-                    <View style={styles.searchHistoryIcon}>
-                      <Feather name="compass" size={24} color="#CCC" />
-                    </View>
-                    <Text style={styles.searchPlaceholderText}>Start typing to search your passport</Text>
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+        onClose={closeStampSearch}
+        searchQuery={stampSearchQuery}
+        setSearchQuery={setStampSearchQuery}
+        searchResults={stampSearchResults as any}
+        onPickStamp={handlePickStampFromSearch as any}
+      />
 
       {/* Delete stamp sheet (owner only) */}
-      <Modal
+      <StampDeleteModal
         visible={deleteVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeDeleteSheet}
-      >
-        <TouchableOpacity
-          style={styles.deleteOverlay}
-          activeOpacity={1}
-          onPress={closeDeleteSheet}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
-            style={styles.deleteSheet}
-          >
-            <View style={styles.deleteHeader}>
-              <View style={styles.deleteIcon}>
-                <Feather name="trash-2" size={18} color="#fff" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.deleteTitle}>Delete stamp?</Text>
-                <Text style={styles.deleteSub} numberOfLines={2}>
-                  {deleteStamp ? `This will remove “${deleteStamp.name}” from your passport.` : 'This will remove this stamp from your passport.'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={{ marginTop: 14 }}>
-              <TouchableOpacity
-                style={[styles.deleteBtn, deleting && { opacity: 0.7 }]}
-                onPress={handleConfirmDeleteStamp}
-                disabled={deleting}
-              >
-                <Text style={styles.deleteBtnText}>{deleting ? 'Deleting…' : 'Delete'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.deleteCancelBtn}
-                onPress={closeDeleteSheet}
-                disabled={deleting}
-              >
-                <Text style={styles.deleteCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={closeDeleteSheet}
+        onDelete={handleConfirmDeleteStamp}
+        deleting={deleting}
+        stampName={deleteStamp?.name}
+      />
 
       {/* Manual Add FAB - Redesigned to Pill Center */}
       {isOwner && (
@@ -954,155 +777,23 @@ export default function PassportScreen() {
       )}
 
       {/* Location Selection Modal - Bottom Sheet */}
-      <Modal
+      <LocationPickerModal
         visible={showLocationModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowLocationModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ justifyContent: 'flex-end', flex: 1 }}
-            keyboardVerticalOffset={0}
-          >
-          <View style={styles.modalBottomSheet}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <View style={{ width: 72, alignItems: 'flex-start' }}>
-                <TouchableOpacity
-                  style={styles.modalCloseBtn}
-                  onPress={() => setShowLocationModal(false)}
-                >
-                  <Text style={styles.modalCloseText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.modalTitle} numberOfLines={1}>Select location</Text>
-              <View style={{ width: 72, alignItems: 'flex-end' }}>
-                {canSubmitManualStamps && (
-                  <TouchableOpacity
-                    style={styles.modalAddBtn}
-                    onPress={handleAddStamp}
-                    disabled={isAdding}
-                  >
-                    <Text style={styles.modalAddText}>{isAdding ? 'Adding...' : 'Add'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Search Bar */}
-            <View style={styles.modalSearchContainer}>
-              <Feather name="search" size={18} color="#0A3D62" style={{ marginRight: 12 }} />
-              <TextInput
-                style={styles.modalSearchInput}
-                placeholder="Search places"
-                placeholderTextColor="#999"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                editable={!locationLoading}
-                onSubmitEditing={() => Keyboard.dismiss()}
-                returnKeyType="search"
-              />
-            </View>
-
-            {/* Locations list + city stamp (city row always when geocoded, even if no venues) */}
-            {locationLoading && nearbyPlaces.length === 0 && !areaGeo ? (
-              <View style={styles.modalLoadingContainer}>
-                <ActivityIndicator size="large" color="#0A3D62" />
-                <Text style={styles.modalLoadingText}>Fetching nearby locations...</Text>
-              </View>
-            ) : (
-              <ScrollView
-                style={styles.modalLocationsList}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 20 }}
-              >
-                {areaGeo && isReadableLocationLabel(areaGeo.city) && (
-                  <TouchableOpacity
-                    style={[
-                      styles.cityStampRow,
-                      includeCityStamp && styles.cityStampRowSelected,
-                    ]}
-                    onPress={() => setIncludeCityStamp((v) => !v)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.cityStampRowLeft}>
-                      <View style={[styles.selectionRadio, includeCityStamp && styles.selectionRadioSelected]}>
-                        {includeCityStamp ? <Feather name="check" size={16} color="#fff" /> : null}
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.cityStampRowTitle}>City stamp</Text>
-                        <Text style={styles.cityStampRowName}>{areaGeo.city}</Text>
-                        <Text style={styles.cityStampRowHint}>Current area — add without picking a venue</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                )}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, marginBottom: 12 }}>
-                  <Text style={styles.modallocationLabel}>Nearby places (~200 m)</Text>
-                  {locationLoading && (
-                    <ActivityIndicator size="small" color="#0A3D62" style={{ marginLeft: 8 }} />
-                  )}
-                </View>
-                {filteredPlaces.length === 0 ? (
-                  <View style={styles.modalEmptyInline}>
-                    <Feather name="map-pin" size={36} color="#ddd" />
-                    <Text style={styles.modalEmptyText}>
-                      {locationLoading
-                        ? 'Loading nearby venues…'
-                        : nearbyPlaces.length === 0
-                          ? 'No venues in ~200 m — you can still add a city stamp above.'
-                          : 'No results matching your search'}
-                    </Text>
-                  </View>
-                ) : (
-                  filteredPlaces.map((place, index) => (
-                    <TouchableOpacity
-                      key={place.placeId || index}
-                      style={[
-                        styles.locationItem,
-                        selectedLocation?.placeId === place.placeId && styles.locationItemSelected,
-                      ]}
-                      onPress={() =>
-                        setSelectedLocation((prev: any) =>
-                          prev?.placeId === place.placeId ? null : place
-                        )
-                      }
-                    >
-                      <View style={styles.locationItemLeft}>
-                        <View style={styles.locationIcon}>
-                          <Feather name="map-pin" size={18} color="#0A3D62" />
-                        </View>
-                        <View style={styles.locationItemText}>
-                          <Text style={styles.locationName}>{place.placeName}</Text>
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <Text style={styles.locationAddress}>
-                              {place.address || ''}
-                            </Text>
-                          </ScrollView>
-                        </View>
-                      </View>
-                      <View
-                        style={[
-                          styles.selectionRadio,
-                          selectedLocation?.placeId === place.placeId && styles.selectionRadioSelected,
-                        ]}
-                      >
-                        {selectedLocation?.placeId === place.placeId && (
-                          <Feather name="check" size={16} color="#fff" />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </ScrollView>
-            )}
-          </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+        onClose={() => setShowLocationModal(false)}
+        canSubmitManualStamps={canSubmitManualStamps}
+        onAddStamp={handleAddStamp}
+        isAdding={isAdding}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        locationLoading={locationLoading}
+        nearbyPlaces={nearbyPlaces}
+        areaGeo={areaGeo}
+        includeCityStamp={includeCityStamp}
+        setIncludeCityStamp={setIncludeCityStamp}
+        filteredPlaces={filteredPlaces}
+        selectedLocation={selectedLocation}
+        setSelectedLocation={setSelectedLocation}
+      />
     </SafeAreaView>
   );
 }

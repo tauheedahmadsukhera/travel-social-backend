@@ -1,39 +1,12 @@
-import {
-    ConfirmationResult,
-    createUserWithEmailAndPassword,
-    GoogleAuthProvider,
-    OAuthProvider,
-    RecaptchaVerifier,
-    sendPasswordResetEmail,
-    signInWithEmailAndPassword,
-    signInWithPhoneNumber,
-    signInWithPopup,
-    signOut,
-    User
-} from 'firebase/auth';
-import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    getFirestore,
-    query,
-    setDoc,
-    where
-} from 'firebase/firestore';
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
-
-// IMPORTANT: Import auth from config/firebase.ts to use the same instance with AsyncStorage persistence
+import type { ConfirmationResult, User } from 'firebase/auth'; // Type import only
 import { auth } from '../config/firebase';
 
-const db = getFirestore();
-const storage = getStorage();
-
-function requireAuth() {
-  if (!auth) {
+async function requireAuth() {
+  const { auth: loadedAuth } = await import('../config/firebase');
+  if (!loadedAuth) {
     throw new Error('Authentication service is not available');
   }
-  return auth;
+  return loadedAuth;
 }
 
 // Types
@@ -54,7 +27,9 @@ export interface UserProfile {
  */
 export async function signUpWithEmail(email: string, password: string) {
   try {
-    const userCredential = await createUserWithEmailAndPassword(requireAuth(), email, password);
+    const { createUserWithEmailAndPassword } = await import('firebase/auth');
+    const authInstance = await requireAuth();
+    const userCredential = await createUserWithEmailAndPassword(authInstance, email, password);
     return { success: true, user: userCredential.user };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -66,7 +41,9 @@ export async function signUpWithEmail(email: string, password: string) {
  */
 export async function signInWithEmail(email: string, password: string) {
   try {
-    const userCredential = await signInWithEmailAndPassword(requireAuth(), email, password);
+    const { signInWithEmailAndPassword } = await import('firebase/auth');
+    const authInstance = await requireAuth();
+    const userCredential = await signInWithEmailAndPassword(authInstance, email, password);
     return { success: true, user: userCredential.user };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -78,7 +55,9 @@ export async function signInWithEmail(email: string, password: string) {
  */
 export async function resetPassword(email: string) {
   try {
-    await sendPasswordResetEmail(requireAuth(), email);
+    const { sendPasswordResetEmail } = await import('firebase/auth');
+    const authInstance = await requireAuth();
+    await sendPasswordResetEmail(authInstance, email);
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -94,14 +73,14 @@ let confirmationResult: ConfirmationResult | null = null;
  * Note: For React Native, you'll need @react-native-firebase/auth
  * This is a web implementation - adapt for mobile
  */
-export async function sendPhoneOTP(phoneNumber: string, recaptchaVerifier?: RecaptchaVerifier) {
+export async function sendPhoneOTP(phoneNumber: string, recaptchaVerifier?: any) {
   try {
     if (!recaptchaVerifier) {
-      // For React Native, use different approach
       throw new Error('RecaptchaVerifier required for web');
     }
-    
-    const result = await signInWithPhoneNumber(requireAuth(), phoneNumber, recaptchaVerifier);
+    const { signInWithPhoneNumber } = await import('firebase/auth');
+    const authInstance = await requireAuth();
+    const result = await signInWithPhoneNumber(authInstance, phoneNumber, recaptchaVerifier);
     confirmationResult = result;
     return { success: true, confirmationResult: result };
   } catch (error: any) {
@@ -132,8 +111,10 @@ export async function verifyPhoneOTP(code: string) {
  */
 export async function signInWithGoogle() {
   try {
+    const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+    const authInstance = await requireAuth();
     const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(requireAuth(), provider);
+    const result = await signInWithPopup(authInstance, provider);
     return { success: true, user: result.user };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -145,8 +126,10 @@ export async function signInWithGoogle() {
  */
 export async function signInWithApple() {
   try {
+    const { OAuthProvider, signInWithPopup } = await import('firebase/auth');
+    const authInstance = await requireAuth();
     const provider = new OAuthProvider('apple.com');
-    const result = await signInWithPopup(requireAuth(), provider);
+    const result = await signInWithPopup(authInstance, provider);
     return { success: true, user: result.user };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -160,6 +143,8 @@ export async function signInWithApple() {
  */
 export async function checkUsernameAvailability(username: string): Promise<boolean> {
   try {
+    const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+    const db = getFirestore();
     const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()));
     const snapshot = await getDocs(q);
     return snapshot.empty;
@@ -178,6 +163,8 @@ export async function createUserProfile(
   data: Partial<UserProfile> = {}
 ) {
   try {
+    const { getFirestore, setDoc, doc } = await import('firebase/firestore');
+    const db = getFirestore();
     const userProfile: UserProfile = {
       uid,
       username: username.toLowerCase(),
@@ -200,6 +187,8 @@ export async function createUserProfile(
  */
 export async function getUserProfile(uid: string) {
   try {
+    const { getFirestore, getDoc, doc } = await import('firebase/firestore');
+    const db = getFirestore();
     const docRef = doc(db, 'users', uid);
     const docSnap = await getDoc(docRef);
     
@@ -218,6 +207,8 @@ export async function getUserProfile(uid: string) {
  */
 export async function uploadProfileImage(uid: string, imageUri: string) {
   try {
+    const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+    const storage = getStorage();
     const response = await fetch(imageUri);
     const blob = await response.blob();
     
@@ -236,7 +227,9 @@ export async function uploadProfileImage(uid: string, imageUri: string) {
  */
 export async function signOutUser() {
   try {
-    await signOut(requireAuth());
+    const { signOut } = await import('firebase/auth');
+    const authInstance = await requireAuth();
+    await signOut(authInstance);
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

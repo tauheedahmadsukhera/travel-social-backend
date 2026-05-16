@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: isSmallDevice ? 12 : 14,
+    paddingHorizontal: 10,
   },
   floatingStoriesContainer: {
     position: 'absolute',

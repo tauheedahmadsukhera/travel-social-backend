@@ -255,6 +255,8 @@ export interface LocationData {
   countryCode?: string;
   placeId?: string;
   placeName?: string;
+  neighborhood?: string;
+  sublocality?: string;
 }
 
 export interface Region {

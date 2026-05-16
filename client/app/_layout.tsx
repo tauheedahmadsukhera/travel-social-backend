@@ -14,6 +14,8 @@ import { UserProvider } from "@/src/_components/UserContext";
 import { Audio } from 'expo-av';
 import { disconnectSocket, getSocket, initializeSocket } from '@/src/_services/socketService';
 import { AppDialogProvider } from '@/src/_components/AppDialogProvider';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useAppStore } from '@/store/useAppStore';
 // Load location service (foreground passport checks + optional TaskManager shim)
 import '../services/locationService';
 
@@ -70,6 +72,16 @@ if (!__DEV__) {
 }
 
 initSentry();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 15, // 15 minutes
+    },
+  },
+});
 
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -189,8 +201,9 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ErrorBoundary>
-      <UserProvider>
+    <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
+        <UserProvider>
         <AppDialogProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
@@ -227,5 +240,6 @@ export default function RootLayout() {
         </AppDialogProvider>
       </UserProvider>
     </ErrorBoundary>
+    </QueryClientProvider>
   );
 }

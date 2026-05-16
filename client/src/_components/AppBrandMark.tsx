@@ -20,13 +20,13 @@ const SIZES: Record<Size, { text: number; icon: number }> = {
 const TAB_BAR = {
   icon: 36,
   text: 20,
-  // Reduce icon ↔ text gap (iOS looks wider by default)
-  textMarginLeft: -6,
+  // Spacing between icon and wordmark
+  textMarginLeft: 0,
   letter: -0.45,
   weight: '800' as const,
 };
 
-const DEFAULT_TEXT_TIGHTEN = -10; // Added space between logo and text
+const DEFAULT_TEXT_TIGHTEN = 0; // 0px space between logo and text
 
 type Props = {
   /** Optional remote logo from `/branding`; otherwise bundled Trips mark is used. */
@@ -85,7 +85,7 @@ export function AppBrandMark({
       {showIcon ? (
         <ExpoImage
           source={iconSource}
-          style={{ width: iconPx, height: iconPx, marginLeft: -15 }}
+          style={{ width: iconPx, height: iconPx, marginLeft: 0 }}
           contentFit="contain"
           cachePolicy="memory-disk"
         />

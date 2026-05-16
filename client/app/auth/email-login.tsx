@@ -107,7 +107,7 @@ export default function EmailLoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView testID="login-screen" style={styles.container} edges={['top']}>
       <AuthKeyboardScroll contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
             {/* Header */}
@@ -129,6 +129,7 @@ export default function EmailLoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Enter your email</Text>
               <TextInput
+                testID="email-input"
                 style={styles.input}
                 placeholder="Enter"
                 placeholderTextColor="#999"
@@ -145,6 +146,7 @@ export default function EmailLoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <TextInput
+                testID="password-input"
                 style={styles.input}
                 placeholder="Enter"
                 placeholderTextColor="#999"
@@ -168,6 +170,7 @@ export default function EmailLoginScreen() {
 
             {/* Login Button */}
             <CustomButton
+              testID="login-button"
               title={loading ? "Logging in..." : "Login"}
               onPress={handleLogin}
               variant="primary"

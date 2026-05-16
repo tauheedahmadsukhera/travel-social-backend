@@ -179,7 +179,10 @@ export function subscribeToMessages(
   subscribeToConversation(conversationId);
 
   const handler = (message: any) => {
-    if (message.conversationId === conversationId) {
+    const mConvoId = String(message.conversationId || '');
+    const targetId = String(conversationId || '');
+    
+    if (mConvoId === targetId || targetId.includes(mConvoId) || mConvoId.includes(targetId)) {
       console.log('[Socket] 📥 New message received:', message.text?.substring(0, 30));
       onMessage(message);
     }

@@ -66,13 +66,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F0F0F0',
   },
-  searchText: { color: '#666', fontSize: 15, fontWeight: '400' },
+  searchText: { color: '#222', fontSize: 15, fontWeight: '400' },
   headerSection: { paddingBottom: 12, paddingTop: 2, backgroundColor: '#fff', marginBottom: 0 },
   chip: { alignItems: 'center', marginRight: 10 },
   chipIconWrap: { width: 64, height: 64, borderRadius: 14, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   chipIconWrapActive: { borderColor: '#0A3D62', borderWidth: 2.5 },
-  chipText: { color: '#666', marginTop: 5, fontSize: 11, textAlign: 'center' },
-  chipTextActive: { color: '#111', fontWeight: '700' },
+  chipText: { color: '#000000', marginTop: 5, fontSize: 11, textAlign: 'center' },
+  chipTextActive: { color: '#000000', fontWeight: '800' },
   categoryImage: { width: 64, height: 64, borderRadius: 14 },
 });
 
@@ -325,6 +325,7 @@ export default function Home() {
     <View style={styles.container}>
       {showBanner && <OfflineBanner text="You’re offline — showing saved feed" style={{ position: 'absolute', top: 8, left: 16, right: 16, zIndex: 500 }} />}
       <FlashList
+        testID="home-feed-list"
         ref={listRef}
         data={showInitialSkeleton ? skeletonItems : filteredRaw}
         renderItem={showInitialSkeleton ? (renderSkeletonItem as any) : renderPostItem}

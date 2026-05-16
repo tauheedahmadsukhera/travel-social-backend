@@ -30,6 +30,7 @@ import {
   getMessageId,
 } from '../src/_services/dmHelpers';
 import { apiService } from '../src/_services/apiService';
+import { useAppStore } from '@/store/useAppStore';
 import DMHeader from '../src/_components/dm/DMHeader';
 import DMInput from '../src/_components/dm/DMInput';
 
@@ -146,7 +147,19 @@ export default function DM() {
     return s.trim();
   }, [(params as any)?.user]);
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { userId: storeUserId } = useAppStore();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(storeUserId);
+
+  useEffect(() => {
+    if (!currentUserId && storeUserId) {
+      setCurrentUserId(storeUserId);
+    } else if (!currentUserId) {
+      // Emergency recovery from storage
+      AsyncStorage.getItem('userId').then(id => {
+        if (id) setCurrentUserId(id);
+      });
+    }
+  }, [storeUserId, currentUserId]);
   const flatListRef = useRef<FlatList>(null);
 
   const {
@@ -159,8 +172,14 @@ export default function DM() {
     conversationMeta,
     loadMore,
     setMessages,
+    setLoading,
     isNearBottomRef
-  } = useDM(paramConversationId || null, otherUserId, currentUserId);
+  } = useDM(paramConversationId || null, otherUserId, currentUserId, (msg) => {
+    // Only scroll if it's from the other person or if we are near bottom
+    if (msg.senderId !== currentUserId) {
+       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
+  });
 
   const {
     recording,
@@ -250,9 +269,7 @@ export default function DM() {
 
   const avatarUri = isGroupConversation ? (conversationMeta?.groupAvatar || DEFAULT_AVATAR_URL) : (otherUserProfile?.avatar || otherUserProfile?.photoURL || DEFAULT_AVATAR_URL);
 
-  useEffect(() => {
-    AsyncStorage.getItem('userId').then(id => { if (id) setCurrentUserId(id); });
-  }, []);
+
 
   useEffect(() => {
     if (!conversationId || !currentUserId || isGroupConversation) return;
@@ -319,7 +336,14 @@ export default function DM() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !conversationId || !currentUserId || sending) return;
+    if (!input.trim()) return;
+    if (!currentUserId) {
+      Alert.alert('Error', 'User ID not found. Please log in again.');
+      return;
+    }
+    if (sending) return;
+    
+    // We can proceed even if conversationId is null
     const msgText = input.trim();
     if (conversationId && currentUserId && otherUserId) {
       stopTypingIndicator({ conversationId, userId: currentUserId, recipientId: otherUserId });
@@ -328,7 +352,7 @@ export default function DM() {
       const targetId = getMessageId(editingMessage);
       setSending(true);
       try {
-        const res = await editMessage(conversationId, targetId, currentUserId, msgText);
+        const res = await editMessage(String(conversationId), targetId, String(currentUserId), msgText);
         if (res?.success) {
           setMessages(prev => prev.map(m => getMessageId(m) === targetId ? { ...m, text: msgText, editedAt: new Date().toISOString() } : m));
           setEditingMessage(null);
@@ -347,16 +371,33 @@ export default function DM() {
     setSending(true);
     const tempId = createTempId('temp_text');
     const sentAtMs = Date.now();
-    const tempMsg = { id: tempId, senderId: currentUserId, text: msgText, createdAt: new Date(sentAtMs).toISOString(), __ts: sentAtMs, sent: false, tempOrigin: true, replyTo: replyData };
-    setMessages(prev => [...prev, tempMsg]);
+    const tempMsg = normalizeMessage({ id: tempId, senderId: currentUserId, text: msgText, createdAt: new Date(sentAtMs).toISOString(), __ts: sentAtMs, sent: false, tempOrigin: true, replyTo: replyData });
+    setMessages(prev => [tempMsg, ...prev]);
+    
+    // Scroll to bottom (offset 0 in inverted list)
+    setTimeout(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, 100);
+
     try {
-      const res = await sendMessage(conversationId, currentUserId, msgText, otherUserId || undefined, replyData, tempId);
+      const res = await sendMessage(String(conversationId), String(currentUserId), msgText, otherUserId || undefined, replyData, tempId);
       if (res?.success && res.message) {
-        const finalized = normalizeMessage({ ...res.message, sent: true });
-        setMessages(prev => dedupeById(prev.map(m => m.id === tempId ? finalized : m)));
+        // Force the same timestamp as temp message to avoid jumping around
+        const finalized = normalizeMessage({ 
+          ...res.message, 
+          timestamp: res.message.timestamp || new Date(sentAtMs).toISOString(),
+          sent: true 
+        });
+        
+        setMessages(prev => {
+          // Remove temp, add final, then dedupe and sort
+          const filtered = prev.filter(m => m.id !== tempId && m.id !== finalized.id);
+          return mergeMessages(filtered, [finalized]);
+        });
       } else {
-        setMessages(prev => prev.filter(m => m.id !== tempId));
-        Alert.alert('Error', (res as any)?.error || 'Failed to send message');
+        // Mark as failed instead of removing, so it doesn't "disappear"
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, failed: true, sent: false } : m));
+        Alert.alert('Send Failed', res?.error || 'Server did not accept the message');
       }
     } catch (e) {
       setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -402,7 +443,7 @@ export default function DM() {
       return updated;
     });
 
-    await reactToMessage(conversationId, getMessageId(targetMsg), currentUserId, emoji);
+    await reactToMessage(conversationId as string, getMessageId(targetMsg), currentUserId as string, emoji);
     setShowMessageMenu(false);
     setSelectedMessage(null);
   };
@@ -459,14 +500,39 @@ export default function DM() {
           setShowShareModal(true);
         }
       }}
-      onPlayStart={(id: string) => setActiveSoundId(id)}
-    />
+      onPlayStart={(id: string) => setActiveSoundId(id)}    />
   ), [currentUserId, displayName, avatarUri, activeSoundId, formatTimeForBubble]);
 
-  if (loading && !messages.length) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#3797f0" /></View>;
-  }
+  const renderContent = () => {
+    if (loading && !messages.length) {
+      return <View style={styles.centered}><ActivityIndicator size="large" color="#3797f0" /></View>;
+    }
+    
+    if (!conversationId && !loading) {
+       return (
+         <View style={styles.centered}>
+           <Text style={{ color: '#94a3b8', marginBottom: 12 }}>Could not start chat</Text>
+           <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: '#3797f0', padding: 10, borderRadius: 8 }}>
+             <Text style={{ color: '#fff' }}>Go Back</Text>
+           </TouchableOpacity>
+         </View>
+       );
+    }
 
+    return (
+      <FlatList
+        ref={flatListRef}
+        style={{ flex: 1 }}
+        data={messagesWithSeparators}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderChatItem}
+        inverted
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        extraData={messages}
+      />
+    );
+  };
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -478,16 +544,9 @@ export default function DM() {
           onBack={() => safeRouterBack()}
           onInfo={() => setShowOptionsModal(true)}
         />
-        <FlatList
-          ref={flatListRef}
-          style={{ flex: 1 }}
-          data={messagesWithSeparators}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderChatItem}
-          inverted
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-        />
+        <View style={{ flex: 1 }}>
+          {renderContent()}
+        </View>
         <DMInput
           input={input}
           setInput={handleInputChange}

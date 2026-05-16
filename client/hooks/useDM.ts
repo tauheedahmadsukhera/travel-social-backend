@@ -24,7 +24,7 @@ import {
 } from '../src/_services/dmHelpers';
 import { apiService } from '../src/_services/apiService';
 
-export function useDM(conversationIdParam: string | null, otherUserId: string | null, currentUserId: string | null) {
+export function useDM(conversationIdParam: string | null, otherUserId: string | null, currentUserId: string | null, onMessageReceived?: (msg: any) => void) {
   const [conversationId, setConversationId] = useState<string | null>(conversationIdParam);
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,13 +43,35 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
   useEffect(() => {
     if (!currentUserId || !otherUserId || conversationId) return;
     
+    const resolveTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
     getOrCreateConversation(currentUserId, otherUserId)
       .then((res) => {
-        if (res?.success && res?.conversationId) {
+        clearTimeout(resolveTimeout);
+        if (res?.success && res.conversationId) {
           setConversationId(res.conversationId);
+        } else {
+          setLoading(false);
         }
+      })
+      .catch(() => {
+        clearTimeout(resolveTimeout);
+        setLoading(false);
       });
+
+    return () => clearTimeout(resolveTimeout);
   }, [currentUserId, otherUserId, conversationId]);
+
+  // Global Safety Timeout for Loading
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   // Load Messages & Setup Socket
   useEffect(() => {
@@ -62,27 +84,33 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
     setLoading(!hasPreloadedMessagesRef.current);
     
     const fetchAll = async () => {
+      if (!conversationId && !otherUserId) return;
+      
       try {
-        const msgRes = await fetchMessages(conversationId);
-        if (cancelled || cid !== conversationId) return;
+        // Strategy 1: Fetch by conversationId
+        let msgRes = conversationId ? await fetchMessages(conversationId) : null;
+        
+        // Strategy 2: If Strategy 1 failed or returned nothing, try participant-based fetch
+        if ((!msgRes?.success || !msgRes.messages?.length) && otherUserId && currentUserId) {
+           console.log('[DM] ID-based fetch failed/empty, trying participant-based fallback...');
+           const fallbackRes = await apiService.get(`/conversations/resolve/messages?otherUserId=${otherUserId}`);
+           if (fallbackRes?.success) msgRes = fallbackRes;
+        }
 
-        const incoming = Array.isArray(msgRes?.messages) ? msgRes.messages : [];
-        setMessages((prev) => {
-          const merged = mergeMessages(prev, incoming);
-          AsyncStorage.setItem(cacheKey, JSON.stringify(merged.slice(0, 50))).catch(() => {});
-          return merged;
-        });
-        setHasMore(msgRes.pagination?.hasMore ?? incoming.length === LIMIT);
-        setLoading(false);
-
-        // Fetch meta for groups
-        apiService.get(`/conversations/${conversationId}`).then((metaRes) => {
-          if (!cancelled && metaRes?.success) setConversationMeta(metaRes.data);
+        if (!cancelled && msgRes?.success) {
+          const incoming: any[] = Array.isArray(msgRes.messages) ? msgRes.messages : [];
+          setMessages(incoming.map((m: any) => normalizeMessage(m)));
+        }
+      } catch (error) {
+        console.error('[DM] Fetch error:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+      
+      if (conversationId) {
+        apiService.get(`/conversations/${conversationId}`).then(res => {
+          if (!cancelled && res?.success) setConversationMeta(res.data);
         }).catch(() => {});
-
-      } catch (err) {
-        console.error('[useDM] Fetch error:', err);
-        setLoading(false);
       }
     };
 
@@ -95,6 +123,7 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
         AsyncStorage.setItem(cacheKey, JSON.stringify(merged.slice(0, 50))).catch(() => {});
         return merged;
       });
+      if (onMessageReceived) onMessageReceived(incoming);
     });
 
     const unsubTyping = subscribeToTyping(conversationId, 
@@ -138,6 +167,8 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
     isOtherTyping,
     conversationMeta,
     loadMore,
+    clearMessages: () => setMessages([]),
+    setLoading,
     setMessages,
     isNearBottomRef
   };

@@ -232,8 +232,13 @@ const PostCard: React.FC<PostCardProps> = ({
   }, [activeIndex]);
 
   const mediaData = useMemo(() => {
-    return Array.isArray(post?.media) ? post.media : [];
-  }, [post?.media]);
+    const rawMedia = Array.isArray(post?.media) ? post.media : [];
+    return rawMedia.map((m: any, idx: number) => ({
+      ...m,
+      // Pass the grid thumbnail to the first item so it loads instantly from cache
+      thumbnailUrl: m.thumbnailUrl || (idx === 0 ? (post?.thumbnailUrl || post?.imageUrl) : undefined)
+    }));
+  }, [post]);
 
   const isOwner = useMemo(() => {
     // Build all possible author IDs

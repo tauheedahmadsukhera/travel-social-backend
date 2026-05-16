@@ -1,7 +1,7 @@
 import { DEFAULT_AVATAR_URL } from '@/lib/api';
 
 export const toTimestampMs = (raw: any): number => {
-  if (!raw) return Date.now();
+  if (!raw || raw === 'null' || raw === 'undefined') return Date.now();
   if (raw instanceof Date) return raw.getTime();
 
   if (typeof raw === 'object') {

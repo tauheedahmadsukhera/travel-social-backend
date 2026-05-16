@@ -600,9 +600,11 @@ export default function Profile({ userIdProp }: any) {
             canViewPrivateProfile ? apiService.get(`/users/${viewedUserId}/sections`, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
             canViewPrivateProfile ? getUserHighlights(viewedUserId, currentUserId || undefined).catch(() => null) : Promise.resolve(null),
             canViewPrivateProfile ? getUserStories(viewedUserId).catch(() => null) : Promise.resolve(null),
+            // Load saved posts in background for own profile to power collections in grid tab
+            isOwnProfile ? apiService.get(`/users/${viewedUserId}/saved`, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
           ];
 
-          const [postsRes, sectionsRes, highlightsRes, storiesRes] = await Promise.all(secondaryPromises);
+          const [postsRes, sectionsRes, highlightsRes, storiesRes, savedRes] = await Promise.all(secondaryPromises);
 
           // Hydrate state
           let postsData: any[] = [];
@@ -627,6 +629,11 @@ export default function Profile({ userIdProp }: any) {
             sectionsData = Array.isArray((sectionsRes as any).data) ? (sectionsRes as any).data : ((sectionsRes as any).sections || []);
           }
           setSections(sectionsData);
+
+          if (isOwnProfile && savedRes) {
+            const sData = (savedRes as any)?.data || savedRes;
+            if (Array.isArray(sData)) setSavedSectionPosts(filterOutBlocked(sData, blockedSet));
+          }
 
           let highlightsData: any[] = [];
           if ((highlightsRes as any)?.success) {
@@ -998,9 +1005,14 @@ export default function Profile({ userIdProp }: any) {
     );
   }, [profile, userStories, isOwnProfile, isPrivate, approvedFollower, passportLocationsCount, posts.length, highlights, highlightViewerVisible, selectedHighlightId, segmentTab, sections, selectedSection, isFollowing, followRequestPending, followLoading, viewedUserId]);
 
-  const currentPostsArray = segmentTab === 'grid' 
-    ? (selectedSection ? visiblePosts : posts) 
-    : (segmentTab === 'saved' ? savedSectionPosts : taggedPosts);
+  const currentPostsArray = useMemo(() => {
+    if (segmentTab === 'grid') {
+      return selectedSection ? visiblePosts : posts;
+    }
+    if (segmentTab === 'saved') return savedSectionPosts;
+    if (segmentTab === 'tagged') return taggedPosts;
+    return posts;
+  }, [segmentTab, selectedSection, visiblePosts, posts, savedSectionPosts, taggedPosts]);
 
   const renderGridItem = useCallback(({ item, index }: { item: any, index: number }) => {
     return (

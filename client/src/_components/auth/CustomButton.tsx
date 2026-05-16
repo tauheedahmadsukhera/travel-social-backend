@@ -9,6 +9,7 @@ interface CustomButtonProps {
 	disabled?: boolean;
 	style?: ViewStyle;
 	textStyle?: TextStyle;
+	testID?: string;
 }
 
 export default function CustomButton({
@@ -19,6 +20,7 @@ export default function CustomButton({
 	disabled = false,
 	style,
 	textStyle,
+	testID,
 }: CustomButtonProps) {
 	const getButtonStyle = () => {
 		switch (variant) {
@@ -48,6 +50,7 @@ export default function CustomButton({
 
 	return (
 		<TouchableOpacity
+			testID={testID}
 			style={[
 				styles.button,
 				getButtonStyle(),

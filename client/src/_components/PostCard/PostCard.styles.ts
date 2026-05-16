@@ -5,43 +5,44 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: '#fff',
-    marginBottom: 4,
+    marginBottom: 20,
   },
 
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     backgroundColor: '#fff',
-    gap: 10,
   },
   cardHeaderAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#eee',
+    backgroundColor: 'transparent',
     overflow: 'hidden',
+    borderWidth: 0,
   },
   cardHeaderInfo: {
     flex: 1,
     justifyContent: 'center',
+    marginLeft: 10, // Explicit spacing instead of gap
   },
   cardHeaderName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
     color: '#111',
-    lineHeight: 17,
+    lineHeight: 19,
     marginBottom: 0,
   },
   cardHeaderSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 0,
+    marginTop: 1,
   },
   cardHeaderLocation: {
-    fontSize: 11,
-    color: '#222',
+    fontSize: 12,
+    color: '#444',
     fontWeight: '400',
   },
   cardHeaderDot: {
@@ -52,7 +53,7 @@ export const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   cardHeaderDate: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#222',
     fontWeight: '400',
   },
@@ -73,8 +74,8 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingTop: 6,
+    paddingHorizontal: 10,
+    paddingTop: 10,
     paddingBottom: 0,
   },
   iconRowLeft: {
@@ -125,7 +126,7 @@ export const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginHorizontal: 12,
-    marginTop: 8,
+    marginTop: 10,
     marginBottom: 0,
   },
   caption: {

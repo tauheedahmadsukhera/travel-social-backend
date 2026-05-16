@@ -32,7 +32,7 @@ export class GoogleMapsService implements IMapService {
   private detailsCache: Map<string, { data: LocationData | null, timestamp: number }> = new Map();
   private searchCache: Map<string, { data: LocationData[], timestamp: number }> = new Map();
 
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours (location data is static)
 
   private isCacheValid(timestamp: number): boolean {
     return Date.now() - timestamp < this.CACHE_TTL;
@@ -371,6 +371,8 @@ export class GoogleMapsService implements IMapService {
       countryCode,
       placeId: result.place_id,
       placeName: result.name,
+      neighborhood: this.findAddressComponent(addressComponents, 'neighborhood'),
+      sublocality: this.findAddressComponent(addressComponents, 'sublocality_level_1'),
     };
   }
 
@@ -383,6 +385,8 @@ export class GoogleMapsService implements IMapService {
       address: result.formatted_address || result.vicinity,
       placeName: result.name,
       placeId: result.place_id,
+      neighborhood: result.vicinity || this.findAddressComponent(result.address_components || [], 'neighborhood'),
+      sublocality: this.findAddressComponent(result.address_components || [], 'sublocality_level_1'),
     };
   }
 

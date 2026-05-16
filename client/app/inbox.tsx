@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import AsyncStorage from '@/lib/storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import ConversationItem from '../src/_components/inbox/ConversationItem';
 import { subscribeToUserStatus } from '../src/_services/socketService';
 import { CreateGroupModal } from '@/src/_components/inbox/CreateGroupModal';
 import { ConversationActionModal } from '@/src/_components/inbox/ConversationActionModal';
+import { resolveCanonicalUserId } from '@/lib/currentUser';
 
 const INBOX_BUILD_TAG = 'inbox-group-fix-2026-03-28-2';
 
@@ -79,6 +80,7 @@ function Inbox() {
 
   // Get userId from Zustand Global Store
   const userId = useAppStore((state) => state.userId);
+  const [userVariants, setUserVariants] = useState<string[]>([]);
   const userLoading = false;
   const [inFocus, setInFocus] = useState(false);
   const lastRefreshAtRef = useRef(0);
@@ -97,6 +99,23 @@ function Inbox() {
   // Avoid noisy logs in hot render path (hurts perf on Android).
 
   const [conversations, setConversations] = useState<any[] | null>(null);
+  useEffect(() => {
+    const loadVariants = async () => {
+      try {
+        const storedId = await resolveCanonicalUserId();
+        const [fUid, uid] = await Promise.all([
+          AsyncStorage.getItem('firebaseUid'),
+          AsyncStorage.getItem('uid'),
+        ]);
+        const variants = Array.from(new Set([storedId, userId, fUid, uid].filter((v): v is string => !!v)));
+        setUserVariants(variants);
+      } catch (e) {
+        console.error('[Inbox] Failed to load user variants:', e);
+      }
+    };
+    loadVariants();
+  }, [userId]);
+
   const conversationsRef = useRef<any[] | null>(null);
   useEffect(() => {
     conversationsRef.current = conversations;
@@ -181,7 +200,9 @@ function Inbox() {
       const participantsRaw = convo?.participants ?? convo?.participantIds ?? convo?.members;
       const participants = Array.isArray(participantsRaw) ? participantsRaw.map(String) : [];
       const isGroup = !!convo?.isGroup;
-      const otherId = isGroup ? null : participants.find((p: string) => p !== String(userId));
+      
+      const myIds = new Set(userVariants);
+      const otherId = isGroup ? null : participants.find((p: string) => !myIds.has(p));
 
       const baseId = convo?.conversationId || convo?.id || convo?._id;
       const stableId = typeof baseId === 'string' && baseId.trim()
@@ -248,7 +269,7 @@ function Inbox() {
       const timeA = Number(a?.lastMessageAt || 0);
       return timeB - timeA;
     });
-  }, [coerceToEpochMs, optimisticReadByOtherId, userId]);
+  }, [coerceToEpochMs, optimisticReadByOtherId, userVariants]);
 
   // Global warm cache so Inbox can render instantly even before userId is loaded.
   useEffect(() => {
@@ -281,6 +302,9 @@ function Inbox() {
   const [actionOtherUserId, setActionOtherUserId] = useState<string | null>(null);
   const [actionTitle, setActionTitle] = useState('');
   
+  const [followingUsers, setFollowingUsers] = useState<any[]>([]);
+  const [followingLoading, setFollowingLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'primary' | 'unread' | 'groups'>('primary');
   const [inboxSearch, setInboxSearch] = useState('');
 
@@ -294,13 +318,48 @@ function Inbox() {
   const refreshInbox = useCallback(async () => {
     if (!userId) return;
     try {
+      // 1. Refresh Conversations
       const response = await apiService.get(`/conversations?userId=${userId}`);
       let convos = response?.data;
       if (!response?.success) convos = [];
       if (!Array.isArray(convos)) convos = [];
       setConversations(normalizeConversations(convos));
+
+      // 2. Fetch Following & Suggested for the horizontal list
+      setFollowingLoading(true);
+      const [followRes, discoverRes] = await Promise.all([
+        apiService.get(`/follow/users/${userId}/following`),
+        apiService.get(`/follow/discover`)
+      ]);
+
+      let mergedUsers: any[] = [];
+      if (followRes?.success && Array.isArray(followRes.data)) {
+        mergedUsers = [...followRes.data];
+      }
+      if (discoverRes?.success && Array.isArray(discoverRes.data)) {
+        // Append suggested users who aren't already in the list
+        const existingIds = new Set(mergedUsers.map(u => String(u.uid || u.id || u.firebaseUid)));
+        for (const u of discoverRes.data) {
+          const id = String(u.uid || u.id || u.firebaseUid);
+          if (!existingIds.has(id)) {
+            mergedUsers.push({ ...u, isSuggested: true });
+          }
+        }
+      }
+      setFollowingUsers(mergedUsers);
     } catch (err: any) {
       console.error('❌ Inbox refresh failed:', err?.message || err);
+      if (err?.response?.status === 401 || err?.status === 401) {
+        Alert.alert('Session Expired', 'Please log out and back in to continue.');
+        console.warn('[Inbox] Auth session expired. Please log out and back in.');
+      } else {
+        Alert.alert('Error', 'Failed to load inbox.', [
+          { text: 'Retry', onPress: refreshInbox },
+          { text: 'Dismiss' }
+        ]);
+      }
+    } finally {
+      setFollowingLoading(false);
     }
   }, [normalizeConversations, userId]);
 
@@ -461,7 +520,10 @@ function Inbox() {
     const safeConversations = Array.isArray(conversations) ? conversations : [];
 
     const filteredConvosRawStable = safeConversations.filter((c: any) => {
-      const archived = typeof c?.isArchived === 'boolean' ? c.isArchived : c?.[`archived_${userId}`];
+      // Check if archived by ANY of the user's ID variants
+      const archived = typeof c?.isArchived === 'boolean' 
+        ? c.isArchived 
+        : userVariants.some(vid => c?.[`archived_${vid}`] === true);
       return !archived;
     });
 
@@ -495,7 +557,7 @@ function Inbox() {
 
     out.sort((a: any, b: any) => getSortTime(b) - getSortTime(a));
     return out;
-  }, [activeTab, conversations, coerceToEpochMs, inboxSearch, profilesById, userId]);
+  }, [activeTab, conversations, coerceToEpochMs, inboxSearch, profilesById, userVariants]);
 
 
 
@@ -800,6 +862,51 @@ function Inbox() {
         </View>
       </View>
 
+      {/* Horizontal Following/Friends List */}
+      {followingUsers.length > 0 && (
+        <View style={{ height: 110, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }}>
+        <FlashList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={followingUsers}
+          keyExtractor={(item) => String(item.uid || item.id || item.firebaseUid)}
+          estimatedItemSize={70}
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={{ alignItems: 'center', marginRight: 18, width: 66 }}
+              onPress={() => {
+                hapticLight();
+                router.push({
+                  pathname: '/dm',
+                  params: {
+                    otherUserId: item.uid || item.id || item.firebaseUid,
+                    user: item.name || item.username || 'User',
+                    avatar: item.avatar || '',
+                    isGroup: '0'
+                  }
+                });
+              }}
+            >
+              <View style={[styles.igAvatarRing, { width: 62, height: 62, borderRadius: 31, padding: 2, borderWidth: 1, borderColor: '#dbdbdb' }]}>
+                <Image 
+                  source={{ uri: item.avatar || DEFAULT_AVATAR_URL }} 
+                  style={{ width: 56, height: 56, borderRadius: 28 }}
+                />
+              </View>
+              <Text 
+                style={{ fontSize: 11, color: '#262626', marginTop: 4, textAlign: 'center' }} 
+                numberOfLines={1}
+              >
+                {item.username || item.name}
+              </Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={null}
+        />
+      </View>
+      )}
+
       <View style={styles.tabsWrap}>
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'primary' && styles.tabBtnActive]}
@@ -862,7 +969,21 @@ function Inbox() {
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 40 }}>
               <Feather name="message-circle" size={64} color="#ccc" />
               <Text style={{ color: '#999', marginTop: 16, fontSize: 16, fontWeight: '600' }}>No messages found</Text>
-              <Text style={{ color: '#ccc', marginTop: 8, textAlign: 'center' }}>Start a conversation by visiting someone's profile</Text>
+              <Text style={{ color: '#ccc', marginTop: 8, textAlign: 'center', marginBottom: 20 }}>
+                {`Status: Connected as ${userId?.substring(0, 8)}... (Found: ${conversations?.length || 0})`}
+              </Text>
+              <TouchableOpacity 
+                style={{ backgroundColor: '#3797f0', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, marginBottom: 12 }}
+                onPress={() => { hapticLight(); setCreateGroupVisible(true); }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>Start Chatting</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ paddingHorizontal: 20, paddingVertical: 10 }}
+                onPress={() => { hapticLight(); refreshInbox(); }}
+              >
+                <Text style={{ color: '#3797f0', fontWeight: '600' }}>Refresh Chats</Text>
+              </TouchableOpacity>
             </View>
           ) : null
         }

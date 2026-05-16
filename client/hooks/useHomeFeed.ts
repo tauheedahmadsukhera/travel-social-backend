@@ -151,9 +151,17 @@ export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
         avatarHydrateTaskRef.current = InteractionManager.runAfterInteractions(() => {
           (async () => {
             if (reqId !== avatarHydrateReqIdRef.current) return;
-            const authorIds = Array.from(new Set(normalizedPosts.map(p => getPostAuthorId(p)).filter(Boolean)));
+            
+            // Only fetch profiles for posts that are missing a valid avatar
+            const needsHydration = normalizedPosts.filter(p => {
+              const direct = normalizeAvatar(p.userAvatar || p.avatar || p.photoURL || p.profilePicture || p?.userId?.avatar || p?.userId?.photoURL);
+              return !direct;
+            });
+            if (needsHydration.length === 0) return; // Skip hydration entirely if all posts have avatars
+
+            const authorIds = Array.from(new Set(needsHydration.map(p => getPostAuthorId(p)).filter(Boolean)));
             const avatarMap: Record<string, string> = {};
-            const idsToFetch = authorIds.slice(0, 10);
+            const idsToFetch = authorIds.slice(0, 8); // Max 8 (down from 10)
             await Promise.all(idsToFetch.map(async (authorId) => {
               try {
                 const profileRes: any = await getUserProfile(authorId);
@@ -164,13 +172,16 @@ export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
               } catch {}
             }));
             if (reqId !== avatarHydrateReqIdRef.current) return;
+            if (Object.keys(avatarMap).length === 0) return; // Nothing to apply
+            
             const apply = (p: any) => {
               const authorId = getPostAuthorId(p);
               const directAvatar = normalizeAvatar(p.userAvatar || p.avatar || p.photoURL || p.profilePicture || p?.userId?.avatar || p?.userId?.photoURL || p?.userId?.profilePicture);
-              const hydratedAvatar = directAvatar || avatarMap[authorId] || '';
+              if (directAvatar) return p; // Already has avatar, skip update
+              const hydratedAvatar = avatarMap[authorId] || '';
               if (!hydratedAvatar) return p;
               const hydratedUserObj = (p.userId && typeof p.userId === 'object') ? { ...p.userId, avatar: p.userId.avatar || hydratedAvatar, photoURL: p.userId.photoURL || hydratedAvatar, profilePicture: p.userId.profilePicture || hydratedAvatar } : p.userId;
-              return { ...p, userAvatar: p.userAvatar || hydratedAvatar, avatar: p.avatar || hydratedAvatar, photoURL: p.photoURL || hydratedAvatar, profilePicture: p.profilePicture || hydratedAvatar, userId: hydratedUserObj };
+              return { ...p, userAvatar: hydratedAvatar, avatar: hydratedAvatar, photoURL: hydratedAvatar, profilePicture: hydratedAvatar, userId: hydratedUserObj };
             };
             setAllLoadedPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
             setPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));

@@ -18,11 +18,7 @@ export async function getOrCreateConversation(userId1: string, userId2: string) 
       return { success: true, conversationId: resolvedId };
     }
 
-    // Fallback legacy deterministic key if resolve endpoint fails.
-    const ids = [id1, id2].sort();
-    const conversationId = `${ids[0]}_${ids[1]}`;
-    console.log('[Conversation] Using fallback conversationId:', conversationId);
-    return { success: true, conversationId };
+    return { success: false, conversationId: null, error: 'Failed to resolve conversation from server' };
   } catch (error: any) {
     console.error('Error in getOrCreateConversation:', error);
     return { success: false, conversationId: null, error: error.message };
@@ -159,7 +155,22 @@ export async function sendMessage(
       };
     }
     
-    const res = await apiService.post(`/conversations/${conversationId}/messages`, messageData);
+    let targetId = String(conversationId || '');
+    if (!targetId || targetId === 'null' || targetId === 'undefined') {
+      if (senderId && recipientId) {
+        console.log('[SendMessage] Missing conversationId, resolving on-the-fly...');
+        const resolveRes = await getOrCreateConversation(senderId, recipientId);
+        if (resolveRes.success && resolveRes.conversationId) {
+          targetId = resolveRes.conversationId;
+        } else {
+          return { success: false, error: 'Could not resolve conversation' };
+        }
+      } else {
+        return { success: false, error: 'Missing conversationId and recipientId' };
+      }
+    }
+
+    const res = await apiService.post(`/conversations/${targetId}/messages`, messageData);
     console.log('[SendMessage] Response:', res);
     return res;
   } catch (error: any) {
