@@ -161,16 +161,23 @@ export function useHomeFeed(currentUserId: string | null, isOnline: boolean) {
 
             const authorIds = Array.from(new Set(needsHydration.map(p => getPostAuthorId(p)).filter(Boolean)));
             const avatarMap: Record<string, string> = {};
-            const idsToFetch = authorIds.slice(0, 8); // Max 8 (down from 10)
-            await Promise.all(idsToFetch.map(async (authorId) => {
+            const idsToFetch = authorIds.slice(0, 15); // Increased to 15 because it's now a single batch call
+
+            if (idsToFetch.length > 0) {
               try {
-                const profileRes: any = await getUserProfile(authorId);
-                if (profileRes?.success && profileRes?.data) {
-                  const resolved = normalizeAvatar(profileRes.data.avatar || profileRes.data.photoURL || profileRes.data.profilePicture);
-                  if (resolved) avatarMap[authorId] = resolved;
+                const bulkRes = await apiService.getBulkProfiles(idsToFetch);
+                if (bulkRes?.success && Array.isArray(bulkRes.data)) {
+                  bulkRes.data.forEach((user: any) => {
+                    const resolved = normalizeAvatar(user.avatar || user.photoURL || user.profilePicture);
+                    const authorId = String(user.uid || user.firebaseUid || user._id || '');
+                    if (resolved && authorId) avatarMap[authorId] = resolved;
+                  });
                 }
-              } catch {}
-            }));
+              } catch (err) {
+                if (__DEV__) console.warn('[HomeFeed] Bulk profile fetch failed:', err);
+              }
+            }
+
             if (reqId !== avatarHydrateReqIdRef.current) return;
             if (Object.keys(avatarMap).length === 0) return; // Nothing to apply
             

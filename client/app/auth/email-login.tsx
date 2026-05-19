@@ -93,8 +93,7 @@ export default function EmailLoginScreen() {
 
       if (result && result.success) {
         // Handle social auth result (create user profile if needed)
-        await handleSocialAuthResult((result as any).user, provider);
-        router.replace('/(tabs)/home');
+        await handleSocialAuthResult(result, router);
       } else {
         setError(getUserErrorMessage(result?.error || 'Login failed'));
       }

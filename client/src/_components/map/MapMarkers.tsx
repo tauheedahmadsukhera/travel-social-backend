@@ -120,7 +120,7 @@ export const LiveStreamMarker = React.memo(({ stream }: { stream: LiveStream }) 
       anchor={{ x: 0.5, y: 0.5 }}
       onPress={() => {
         router.push({
-          pathname: '/watch-live',
+          pathname: '/watch-live' as any,
           params: {
             streamId: (stream as any)?.id || (stream as any)?._id,
             roomId: (stream as any)?.roomId || stream.channelName || (stream as any)?.id,

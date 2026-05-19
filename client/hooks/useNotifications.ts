@@ -62,6 +62,14 @@ export const useNotifications = (userId: string, pollInterval = 60000) => {
     }
   };
 
+  const deleteAllNotifications = async () => {
+    const success = await notificationService.deleteAllNotifications();
+    if (success) {
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  };
+
   // Poll for notifications on interval (foreground only)
   useEffect(() => {
     if (!userId) return;
@@ -100,6 +108,7 @@ export const useNotifications = (userId: string, pollInterval = 60000) => {
     loading,
     fetchNotifications,
     markAsRead,
-    markAllAsRead
+    markAllAsRead,
+    deleteAllNotifications
   };
 };

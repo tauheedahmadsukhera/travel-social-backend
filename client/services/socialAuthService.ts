@@ -590,12 +590,16 @@ export async function handleSocialAuthResult(result: any, router: any) {
     try {
       // Import dependencies dynamically
       const { apiService } = await import('@/src/_services/apiService');
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const storage = (await import('@/lib/storage')).default;
 
       // Sync with backend using the same endpoint as email/password login
       console.log('🔄 Syncing social user with backend...');
 
+      // Get ID token for backend verification
+      const idToken = await user.getIdToken?.() || '';
+
       const response = await apiService.post('/auth/login-firebase', {
+        idToken,
         firebaseUid: user.uid,
         email: user.email || `${user.uid}@social.trips.app`,
         displayName: userName,
@@ -606,18 +610,18 @@ export async function handleSocialAuthResult(result: any, router: any) {
       if (response.success) {
         console.log('✅ Backend sync successful, storing tokens...');
 
-        // Store tokens directly in AsyncStorage
-        await AsyncStorage.setItem('token', response.token);
+        // Store tokens directly in storage
+        await storage.setItem('token', response.token);
         // Use backend ID preferably, fallback to firebase/sync ID
         const userIdToStore = response.user?.id || response.user?._id || user.uid;
         const firebaseUidToStore = response.user?.firebaseUid || user.uid;
         // iOS Fix: Store all avatar variants for fallback access
         const avatarToStore = response.user?.avatar || response.user?.photoURL || response.user?.profilePicture || userAvatar || '';
-        await AsyncStorage.setItem('userId', String(userIdToStore));
-        await AsyncStorage.setItem('uid', String(firebaseUidToStore));
-        await AsyncStorage.setItem('firebaseUid', String(firebaseUidToStore));
-        await AsyncStorage.setItem('userAvatar', avatarToStore);  // iOS Fix: Cache avatar in storage
-        await AsyncStorage.setItem('userEmail', user.email || '');
+        await storage.setItem('userId', String(userIdToStore));
+        await storage.setItem('uid', String(firebaseUidToStore));
+        await storage.setItem('firebaseUid', String(firebaseUidToStore));
+        await storage.setItem('userAvatar', avatarToStore);  // iOS Fix: Cache avatar in storage
+        await storage.setItem('userEmail', user.email || '');
 
         // Force a small delay to ensure storage persistence
         await new Promise(resolve => setTimeout(resolve, 100));

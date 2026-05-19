@@ -400,3 +400,27 @@ exports.updatePushToken = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// Get multiple user profiles at once (Bulk Fetch)
+exports.getBulkProfiles = async (req, res) => {
+  try {
+    const { uids } = req.body;
+    if (!Array.isArray(uids) || uids.length === 0) {
+      return res.status(400).json({ success: false, error: 'uids array is required' });
+    }
+
+    // Limit bulk size to prevent abuse
+    const limitedUids = uids.slice(0, 50);
+
+    const users = await User.find({
+      $or: [
+        { firebaseUid: { $in: limitedUids } },
+        { uid: { $in: limitedUids } }
+      ]
+    }).select('displayName name avatar photoURL username uid firebaseUid role');
+
+    res.json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch bulk profiles' });
+  }
+};

@@ -11,9 +11,6 @@ import {
   Dimensions,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -37,21 +34,17 @@ import { buildProfileDeepLink, buildProfileWebLink, sharePost, shareProfile } fr
 
 import { userService } from '../../lib/userService';
 import { fetchBlockedUserIds, filterOutBlocked } from '../../services/moderation';
-import CommentSection from '@/src/_components/CommentSection';
-import CreateHighlightModal from '@/src/_components/CreateHighlightModal';
-import EditSectionsModal from '@/src/_components/EditSectionsModal';
 import HighlightCarousel from '@/src/_components/HighlightCarousel';
-import HighlightViewer from '@/src/_components/HighlightViewer';
-import PostViewerModal from '@/src/_components/PostViewerModal';
 import StoriesViewer from '@/src/_components/StoriesViewer';
 import * as Clipboard from 'expo-clipboard';
 import { useHeaderVisibility, useHeaderHeight } from './_layout';
 
 import { getTaggedPosts, getUserHighlights as getUserHighlightsAPI, getUserPosts as getUserPostsAPI, getUserProfile as getUserProfileAPI, getUserSections as getUserSectionsAPI } from '@/src/_services/firebaseService';
 import { apiService } from '@/src/_services/apiService';
-import { getKeyboardOffset, getModalHeight } from '../../utils/responsive';
+import { getKeyboardOffset, getModalHeight } from '@/utils/responsive';
 import { getPassportData } from '../../lib/firebaseHelpers/passport';
 import { feedEventEmitter } from '@/lib/feedEventEmitter';
+import { useAssetPreloader } from '@/hooks/useAssetPreloader';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { ResizeMode, Video } from 'expo-av';
@@ -62,7 +55,7 @@ import { getCachedData, setCachedData, useNetworkStatus, useOfflineBanner } from
 // Shared Utilities & Components
 import { normalizeMediaUrl, normalizeAvatarUrl, isVideoUrl } from '../../lib/utils/media';
 import { toDate, getRelativeTime } from '../../lib/utils/date';
-import { ProfileGridItem } from '@/src/_components/profile/ProfileGridItem';
+import ProfileGridItem from '@/src/_components/profile/ProfileGridItem';
 import { ProfilePostMarker } from '@/src/_components/profile/ProfilePostMarker';
 
 import ProfileHeader from '@/src/_components/profile/ProfileHeader';
@@ -70,9 +63,10 @@ import ProfileStats from '@/src/_components/profile/ProfileStats';
 import ProfileActions from '@/src/_components/profile/ProfileActions';
 import ProfileTabs from '@/src/_components/profile/ProfileTabs';
 import ProfileSections from '@/src/_components/profile/ProfileSections';
-import { UploadStoryModal } from '@/src/_components/profile/UploadStoryModal';
-import { CollectionsModal, UserMenuModal } from '@/src/_components/profile/ProfileModals';
+import ProfileModals from '@/src/features/profile/components/ProfileModals';
+import ProfileGrid from '@/src/features/profile/components/ProfileGrid';
 import { useProfileActions } from '@/hooks/useProfileActions';
+import { useProfileData } from '@/src/features/profile/hooks/useProfileData';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallDevice = SCREEN_HEIGHT < 700;
@@ -226,7 +220,6 @@ export default function Profile({ userIdProp }: any) {
 
   // State and context
   const [storiesViewerVisible, setStoriesViewerVisible] = useState(false);
-  const [userStories, setUserStories] = useState<any[]>([]);
   /** Instagram-style: tap profile photo to view full-screen (when not opening stories). */
   const [avatarPreviewUri, setAvatarPreviewUri] = useState<string | null>(null);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
@@ -247,15 +240,7 @@ export default function Profile({ userIdProp }: any) {
       try {
         const userId = await resolveCanonicalUserId();
         setCurrentUserId(userId);
-        const [uidAlias, firebaseAlias] = await Promise.all([
-          AsyncStorage.getItem('uid'),
-          AsyncStorage.getItem('firebaseUid'),
-        ]);
-        setCurrentUserUidAlias(uidAlias);
-        setCurrentUserFirebaseAlias(firebaseAlias);
-      } catch (error) {
-        console.error('[Profile] Failed to get userId from storage:', error);
-      }
+      } catch (error) {}
     };
     getUserId();
   }, []);
@@ -287,22 +272,37 @@ export default function Profile({ userIdProp }: any) {
 
   // Avoid noisy logs on a hot screen
 
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [approvedFollower, setApprovedFollower] = useState(false);
-  const [followRequestPending, setFollowRequestPending] = useState(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [posts, setPosts] = useState<any[]>([]);
-  const [savedSectionPosts, setSavedSectionPosts] = useState<any[]>([]);
+  // ── Centralized Data Hook ──
+  const {
+    profile,
+    posts,
+    sections,
+    userStories,
+    savedSectionPosts,
+    taggedPosts,
+    highlights,
+    isLoading: profileLoading,
+    refetchAll
+  } = useProfileData({
+    viewedUserId: viewedUserId as string,
+    currentUserId,
+    enabled: !!viewedUserId,
+  });
+
+  useAssetPreloader(posts, (item: any) => [
+    item.imageUrl, 
+    item.thumbnailUrl, 
+    item.media?.[0]?.url,
+    item.userAvatar
+  ].filter(Boolean));
+
+  const loading = profileLoading;
   const [passportLocationsCount, setPassportLocationsCount] = useState<number>(0);
-  const [sections, setSections] = useState<{ name: string; postIds: string[]; coverImage?: string; visibility?: 'public' | 'private' | 'specific'; collaborators?: any[] }[]>([]);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [postViewerVisible, setPostViewerVisible] = useState<boolean>(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
   const [segmentTab, setSegmentTab] = useState<'grid' | 'map' | 'tagged' | 'saved'>('grid');
   const { location: currentLocation } = useCurrentLocation();
-  const [taggedPosts, setTaggedPosts] = useState<any[]>([]);
   const [editSectionsModal, setEditSectionsModal] = useState<boolean>(false);
   const [viewCollectionsModal, setViewCollectionsModal] = useState<boolean>(false);
   const [followLoading, setFollowLoading] = useState(false);
@@ -311,14 +311,15 @@ export default function Profile({ userIdProp }: any) {
   const [commentModalVisible, setCommentModalVisible] = useState(false);
   const [commentModalPostId, setCommentModalPostId] = useState<string>('');
   const [commentModalAvatar, setCommentModalAvatar] = useState<string>('');
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
-  const [isFollowing, setIsFollowing] = useState(false);
   const { isOnline } = useNetworkStatus();
   const { showBanner } = useOfflineBanner();
   const PROFILE_CACHE_KEY = useMemo(
     () => `profile_v3_${String(viewedUserId || 'unknown')}_${String(currentUserId || 'anon')}`,
     [viewedUserId, currentUserId]
   );
+
+  const { hideHeader, showHeader } = useHeaderVisibility();
+  const [refreshing, setRefreshing] = useState(false);
 
   // Story Upload State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -328,21 +329,11 @@ export default function Profile({ userIdProp }: any) {
   const [locationQuery, setLocationQuery] = useState('');
   const [locationSuggestions, setLocationSuggestions] = useState<any[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const hasLoadedOnceRef = useRef(false);
-  const isProfileLoadingRef = useRef(false);
-  const lastProfileLoadAtRef = useRef(0);
-  const lastRefreshEventAtRef = useRef(0);
-  const MIN_PROFILE_RELOAD_MS = 2500;
-  const MIN_REFRESH_EVENT_GAP_MS = 1200;
-  const { hideHeader, showHeader } = useHeaderVisibility();
-  const [refreshing, setRefreshing] = useState(false);
-  
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setRefreshTrigger(prev => prev + 1);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    await refetchAll();
+    setRefreshing(false);
+  }, [refetchAll]);
 
   // Header padding is handled by Tabs sceneStyle (see (tabs)/_layout.tsx)
   const headerHeight = 0;
@@ -378,7 +369,7 @@ export default function Profile({ userIdProp }: any) {
     setLoadingLocations(true);
     const timer = setTimeout(async () => {
       try {
-        const { mapService } = await import('../../services');
+        const { mapService } = require('../../services');
         const suggestions = await mapService.getAutocompleteSuggestions(locationQuery);
         const predictions = suggestions.map((s: any) => ({
           placeId: s.placeId,
@@ -438,12 +429,12 @@ export default function Profile({ userIdProp }: any) {
     currentUserId,
     viewedUserId: viewedUserId ?? null,
     isOwnProfile,
-    isPrivate,
-    isFollowing,
-    setIsFollowing,
-    setProfile,
-    setApprovedFollower,
-    setFollowRequestPending,
+    isPrivate: !!profile?.isPrivate,
+    isFollowing: !!profile?.isFollowing,
+    setIsFollowing: () => refetchAll(), // Refresh after follow
+    setProfile: () => {}, // Handled by refetch
+    setApprovedFollower: () => {}, 
+    setFollowRequestPending: () => {},
     likedPosts,
     setLikedPosts,
     savedPosts,
@@ -457,7 +448,7 @@ export default function Profile({ userIdProp }: any) {
   }, [actionFollowLoading]);
 
   const handleMessage = () => {
-    hookHandleMessage(profile, approvedFollower);
+    hookHandleMessage(profile, !!profile?.isApprovedFollower);
   };
 
   const handleSavePost = async (post: any) => {
@@ -517,212 +508,12 @@ export default function Profile({ userIdProp }: any) {
     setHighlightViewerVisible(true);
   };
 
-  // Effects
-  useFocusEffect(
-    React.useCallback(() => {
-      const forceReload = refreshTrigger > 0;
-      const fetchData = async () => {
-        // Don't fetch data if viewedUserId is not set yet
-        if (!viewedUserId) {
-          setLoading(false);
-          return;
-        }
-
-        if (isProfileLoadingRef.current) return;
-
-        const shouldThrottle =
-          !forceReload &&
-          hasLoadedOnceRef.current &&
-          Date.now() - lastProfileLoadAtRef.current < MIN_PROFILE_RELOAD_MS;
-
-        if (shouldThrottle) {
-          return;
-        }
-
-        isProfileLoadingRef.current = true;
-
-        let cacheHydratedNow = false;
-        if (!forceReload && !hasLoadedOnceRef.current) {
-          try {
-            const snap = await getCachedData<any>(PROFILE_CACHE_KEY);
-            if (snap?.profile) {
-              cacheHydratedNow = true;
-              setProfile(snap.profile);
-              setIsPrivate(!!snap.isPrivate);
-              setApprovedFollower(!!snap.approvedFollower);
-              setFollowRequestPending(!!(snap.profile as any)?.followRequestPending);
-              if (Array.isArray(snap.posts)) setPosts(snap.posts);
-              if (Array.isArray(snap.sections)) setSections(snap.sections);
-              if (Array.isArray(snap.highlights)) setHighlights(snap.highlights);
-              if (Array.isArray(snap.userStories)) setUserStories(snap.userStories);
-              if (Array.isArray(snap.taggedPosts)) setTaggedPosts(snap.taggedPosts);
-              if (Array.isArray(snap.savedSectionPosts)) setSavedSectionPosts(snap.savedSectionPosts);
-              setLoading(false);
-            }
-          } catch {
-            // ignore cache hydrate errors
-          }
-        }
-
-        if (!hasLoadedOnceRef.current && !cacheHydratedNow) {
-          setLoading(true);
-        }
-
-        try {
-          const timestamp = Date.now();
-          const [blockedSet, profileRes] = await Promise.all([
-            currentUserId ? fetchBlockedUserIds(currentUserId) : Promise.resolve(new Set<string>()),
-            apiService.get(`/users/${viewedUserId}/aggregated`, { requesterUserId: currentUserId, _t: timestamp }),
-          ]);
-
-          if (!profileRes.success || !profileRes.data) {
-            console.warn('[Profile] Aggregated fetch failed:', profileRes.error);
-            setProfile(null);
-            return;
-          }
-
-          const profileData = profileRes.data;
-          setProfile(profileData);
-          
-          // Hydrate stats and permissions from aggregated data
-          setIsPrivate(!!profileData.isPrivate);
-          setApprovedFollower(!!profileData.isApprovedFollower);
-          setFollowRequestPending(!!profileData.followRequestPending);
-          setIsFollowing(!!profileData.isFollowing);
-          setPassportLocationsCount(profileData.passportCount || 0);
-
-          const canViewPrivateProfile = !!profileData.hasAccess;
-          setLoading(false);
-
-          // Fetch only secondary media/lists in parallel
-          const secondaryPromises = [
-            canViewPrivateProfile ? apiService.getUserPosts(viewedUserId, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
-            canViewPrivateProfile ? apiService.get(`/users/${viewedUserId}/sections`, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
-            canViewPrivateProfile ? getUserHighlights(viewedUserId, currentUserId || undefined).catch(() => null) : Promise.resolve(null),
-            canViewPrivateProfile ? getUserStories(viewedUserId).catch(() => null) : Promise.resolve(null),
-            // Load saved posts in background for own profile to power collections in grid tab
-            isOwnProfile ? apiService.get(`/users/${viewedUserId}/saved`, { viewerId: currentUserId, _t: timestamp }).catch(() => null) : Promise.resolve(null),
-          ];
-
-          const [postsRes, sectionsRes, highlightsRes, storiesRes, savedRes] = await Promise.all(secondaryPromises);
-
-          // Hydrate state
-          let postsData: any[] = [];
-          if ((postsRes as any)?.success) {
-            postsData = Array.isArray((postsRes as any).data) ? (postsRes as any).data : ((postsRes as any).posts || []);
-          }
-          
-          if (__DEV__ && postsData.length > 0) {
-            console.log('[Profile] Sample Post Enrichment:', {
-              id: postsData[0]._id || postsData[0].id,
-              isLiked: postsData[0].isLiked,
-              isSaved: postsData[0].isSaved,
-              saved: postsData[0].saved
-            });
-          }
-
-          const filteredPosts = filterOutBlocked(postsData, blockedSet);
-          setPosts(filteredPosts.slice(0, 36));
-
-          let sectionsData: any[] = [];
-          if ((sectionsRes as any)?.success) {
-            sectionsData = Array.isArray((sectionsRes as any).data) ? (sectionsRes as any).data : ((sectionsRes as any).sections || []);
-          }
-          setSections(sectionsData);
-
-          if (isOwnProfile && savedRes) {
-            const sData = (savedRes as any)?.data || savedRes;
-            if (Array.isArray(sData)) setSavedSectionPosts(filterOutBlocked(sData, blockedSet));
-          }
-
-          let highlightsData: any[] = [];
-          if ((highlightsRes as any)?.success) {
-            highlightsData = Array.isArray((highlightsRes as any).data) ? (highlightsRes as any).data : ((highlightsRes as any).highlights || []);
-          }
-          const normalizedHighlights = highlightsData.map((h: any) => ({
-            ...h,
-            id: String(h?.id || h?._id || ''),
-            title: h?.title || h?.name || 'Highlight',
-            coverImage: h?.coverImage || h?.image || h?.cover || '',
-          })).filter((h: any) => !!h.id);
-          setHighlights(normalizedHighlights);
-
-          let userStoriesForCache: any[] = [];
-          if ((storiesRes as any)?.success && Array.isArray((storiesRes as any)?.stories)) {
-            const nowTime = Date.now();
-            userStoriesForCache = (storiesRes as any).stories
-              .filter((s: any) => !s.expiresAt || new Date(s.expiresAt).getTime() > nowTime)
-              .map((story: any) => ({
-                ...story,
-                id: story._id || story.id,
-                userId: viewedUserId,
-                userName: profileData?.username || profileData?.name || 'User',
-                userAvatar: normalizeAvatarUrl(profileData?.avatar) || '',
-                imageUrl: story.image || story.imageUrl || story.mediaUrl,
-                videoUrl: story.video || story.videoUrl,
-                mediaType: story.video ? 'video' : 'image',
-                createdAt: story.createdAt || Date.now()
-              }));
-            userStoriesForCache.sort((a, b) => (Date.parse(String(a.createdAt)) || 0) - (Date.parse(String(b.createdAt)) || 0));
-            setUserStories(userStoriesForCache);
-          }
-
-          // Lazy load tagged and saved will be handled by useEffect below
-
-
-          // Cache snapshot
-          try {
-            await setCachedData(PROFILE_CACHE_KEY, {
-              profile: profileData,
-              isPrivate: !!profileData.isPrivate,
-              approvedFollower: !!profileData.isApprovedFollower,
-              posts: filteredPosts.slice(0, 36),
-              sections: sectionsData,
-              highlights: normalizedHighlights,
-              userStories: userStoriesForCache,
-              taggedPosts: [],
-              savedSectionPosts: [],
-            }, { ttl: 24 * 60 * 60 * 1000 });
-          } catch {}
-
-          if (__DEV__) console.log('[Profile] All data fetched successfully');
-        } catch (err) {
-          console.error('[Profile] Error fetching data:', err);
-        } finally {
-          isProfileLoadingRef.current = false;
-          lastProfileLoadAtRef.current = Date.now();
-          setLoading(false);
-          hasLoadedOnceRef.current = true;
-        }
-      };
-
-      fetchData();
-    }, [viewedUserId, currentUserId, currentUserUidAlias, currentUserFirebaseAlias, isOwnProfile, refreshTrigger])
-  );
-
-  useEffect(() => {
-    setProfileAvatarFailed(false);
-  }, [profile?.avatar, (profile as any)?.photoURL, (profile as any)?.profilePicture]);
-
-  // Lazy Load Tab Content
-  useEffect(() => {
-    if (segmentTab === 'tagged' && taggedPosts.length === 0 && !loading && !isPrivate && viewedUserId) {
-      getTaggedPosts(viewedUserId, currentUserId || undefined).then(res => {
-        if (res?.success) setTaggedPosts(filterOutBlocked(Array.isArray(res.data) ? res.data : (res.posts || []), new Set()));
-      });
-    }
-    if (segmentTab === 'saved' && isOwnProfile && savedSectionPosts.length === 0 && !loading && viewedUserId) {
-      apiService.get(`/users/${viewedUserId}/saved`, { viewerId: currentUserId }).then(res => {
-        const data = res?.data || res;
-        if (Array.isArray(data)) setSavedSectionPosts(filterOutBlocked(data, new Set()));
-      });
-    }
-  }, [segmentTab, viewedUserId, currentUserId, isOwnProfile, isPrivate, loading]);
+  // Effects handled by useProfileData hook
 
   const handleAvatarPick = async () => {
     try {
       // Pick image
-      const picker = await import('expo-image-picker');
+      const picker = require('expo-image-picker');
       const result = await picker.launchImageLibraryAsync({
         mediaTypes: picker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -733,8 +524,7 @@ export default function Profile({ userIdProp }: any) {
 
       if (!result.canceled && result.assets && result.assets[0]?.uri && currentUserId) {
         try {
-          // Upload image
-          const { uploadImage: uploadImageFn, updateUserProfile } = await import('../../lib/firebaseHelpers');
+          const { uploadImage: uploadImageFn, updateUserProfile } = require('../../lib/firebaseHelpers');
           const imageUri = result.assets[0].uri;
 
           if (!imageUri) {
@@ -748,7 +538,8 @@ export default function Profile({ userIdProp }: any) {
             // Update backend profile
             const updateRes = await updateUserProfile(currentUserId, { avatar: uploadRes.url });
             if (updateRes.success) {
-              setProfile(prev => prev ? { ...prev, avatar: uploadRes.url ?? '' } : prev);
+              // 4. Manual Refetch (Pull to Refresh)
+              await refetchAll(); // Refresh data to show new avatar
               await AsyncStorage.setItem('userAvatar', String(uploadRes.url));
               showSuccess('Profile picture updated!');
             } else {
@@ -768,127 +559,19 @@ export default function Profile({ userIdProp }: any) {
     }
   };
 
-  // Listen for feed updates (like post deletion)
+  // Listen for feed updates (refetch if something changed)
   useEffect(() => {
-    const unsub = feedEventEmitter.onFeedUpdate((event) => {
-      if (event.type === 'POST_DELETED' && event.postId) {
-        if (__DEV__) console.log('[Profile] Post deleted event received:', event.postId);
-        // 1. Update local states
-        const targetId = String(event.postId).split('-loop')[0];
-        const filterFn = (prev: any[]) => (Array.isArray(prev) ? prev.filter(p => {
-          const pid = String(p?.id || p?._id || '').split('-loop')[0];
-          return pid !== targetId;
-        }) : []);
-
-        setPosts(prev => filterFn(prev));
-        setTaggedPosts(prev => filterFn(prev));
-        setSavedSectionPosts(prev => filterFn(prev));
-        
-        // 2. Aggressively update all related profile caches to prevent "ghost" post on restart
-        (async () => {
-          try {
-            const allKeys = await AsyncStorage.getAllKeys();
-            const profileKeys = allKeys.filter(k => k.includes('profile_v2_') || k.includes('profile_cache_'));
-            
-            for (const fullKey of profileKeys) {
-              try {
-                const cached = await AsyncStorage.getItem(fullKey);
-                if (cached) {
-                  let entry = JSON.parse(cached);
-                  let snap = entry.data || entry; // handle both raw and CacheEntry formats
-                  let changed = false;
-
-                  if (snap && Array.isArray(snap.posts)) {
-                    const originalLen = snap.posts.length;
-                    snap.posts = snap.posts.filter((p: any) => {
-                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
-                      return pid !== targetId;
-                    });
-                    if (snap.posts.length !== originalLen) changed = true;
-                  }
-
-                  if (snap && Array.isArray(snap.taggedPosts)) {
-                    const originalLen = snap.taggedPosts.length;
-                    snap.taggedPosts = snap.taggedPosts.filter((p: any) => {
-                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
-                      return pid !== targetId;
-                    });
-                    if (snap.taggedPosts.length !== originalLen) changed = true;
-                  }
-
-                  if (snap && Array.isArray(snap.savedSectionPosts)) {
-                    const originalLen = snap.savedSectionPosts.length;
-                    snap.savedSectionPosts = snap.savedSectionPosts.filter((p: any) => {
-                      const pid = String(p?.id || p?._id || '').split('-loop')[0];
-                      return pid !== targetId;
-                    });
-                    if (snap.savedSectionPosts.length !== originalLen) changed = true;
-                  }
-
-                  if (changed) {
-                    if (entry.data) entry.data = snap; else entry = snap;
-                    await AsyncStorage.setItem(fullKey, JSON.stringify(entry));
-                  }
-                }
-              } catch (e) {
-                await AsyncStorage.removeItem(fullKey);
-              }
-            }
-          } catch (e) {
-            if (__DEV__) console.warn('[Profile] Failed to aggressively clear caches:', e);
-          }
-        })();
-        
-        // 3. Refresh profile stats (to update post count 7 -> 6)
-        if (viewedUserId) {
-          apiService.get(`/users/${viewedUserId}/aggregated`, { requesterUserId: currentUserId })
-            .then(res => {
-              if (res.success && res.data) {
-                setProfile(res.data);
-                setIsPrivate(!!res.data.isPrivate);
-                setApprovedFollower(!!res.data.isApprovedFollower);
-              }
-            }).catch(() => {});
-        }
-      }
-      if (event.type === 'POST_UPDATED' && event.postId) {
-        const patch = event.data && typeof event.data === 'object' ? event.data : {};
-        const apply = (p: any) => {
-          if (!p) return p;
-          const ids = [String(p.id || ''), String(p._id || ''), String((p as any).postId || '')].filter(Boolean);
-          if (!ids.includes(String(event.postId))) return p;
-          return {
-            ...p,
-            ...patch,
-            updatedAt: new Date().toISOString(),
-          };
-        };
-        setPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
-        setTaggedPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
-        setSavedSectionPosts(prev => (Array.isArray(prev) ? prev.map(apply) : prev));
-      }
-      if (event.type === 'HIGHLIGHT_DELETED' && (event as any).highlightId) {
-        const hid = String((event as any).highlightId);
-        setHighlights((prev) => (Array.isArray(prev) ? prev.filter((h: any) => String(h?.id || h?._id || '') !== hid) : prev));
-      }
+    const unsub = feedEventEmitter.onFeedUpdate(() => {
+      refetchAll();
     });
-
-    // Listen for general feed updates to refresh all data (including stories)
-    const subscription = feedEventEmitter.addListener('feedUpdated', () => {
-      const now = Date.now();
-      if (now - lastRefreshEventAtRef.current < MIN_REFRESH_EVENT_GAP_MS) {
-        return;
-      }
-      lastRefreshEventAtRef.current = now;
-      if (__DEV__) console.log('[Profile] Feed updated signal received, refreshing data...');
-      setRefreshTrigger(prev => prev + 1);
+    const sub = feedEventEmitter.addListener('feedUpdated', () => {
+      refetchAll();
     });
-
     return () => {
       unsub();
-      subscription.remove();
+      sub.remove();
     };
-  }, []);
+  }, [refetchAll]);
 
 
   const renderProfileHeader = useMemo(() => {
@@ -898,8 +581,8 @@ export default function Profile({ userIdProp }: any) {
           profile={profile}
           userStories={userStories}
           isOwnProfile={isOwnProfile}
-          isPrivate={isPrivate}
-          approvedFollower={approvedFollower}
+          isPrivate={!!profile?.isPrivate}
+          approvedFollower={!!profile?.isApprovedFollower}
           onPressAvatar={() => {
             hapticLight();
             if (userStories.length > 0) {
@@ -933,18 +616,18 @@ export default function Profile({ userIdProp }: any) {
           onPressFollowing={() => {
             router.push(`/friends?userId=${viewedUserId}&tab=following` as any);
           }}
-          isPrivate={isPrivate}
+          isPrivate={!!profile?.isPrivate}
           isOwnProfile={isOwnProfile}
-          approvedFollower={approvedFollower}
+          approvedFollower={!!profile?.isApprovedFollower}
         />
 
         <ProfileActions 
           isOwnProfile={isOwnProfile}
-          isFollowing={isFollowing}
-          followRequestPending={followRequestPending}
+          isFollowing={!!profile?.isFollowing}
+          followRequestPending={!!profile?.followRequestPending}
           followLoading={followLoading}
-          isPrivate={isPrivate}
-          approvedFollower={approvedFollower}
+          isPrivate={!!profile?.isPrivate}
+          approvedFollower={!!profile?.isApprovedFollower}
           onFollowToggle={handleFollowToggle}
           onMessage={handleMessage}
           onEditProfile={() => {
@@ -961,25 +644,17 @@ export default function Profile({ userIdProp }: any) {
           }}
         />
 
-        {(!isPrivate || isOwnProfile || approvedFollower) && (
+        {(!profile?.isPrivate || isOwnProfile || !!profile?.isApprovedFollower) && (
           <View style={{ marginBottom: 12 }}>
             <HighlightCarousel 
               highlights={highlights} 
               onPressHighlight={handlePressHighlight} 
               isOwnProfile={isOwnProfile} 
             />
-            <HighlightViewer
-              visible={highlightViewerVisible}
-              highlightId={selectedHighlightId}
-              onClose={() => setHighlightViewerVisible(false)}
-              userId={isOwnProfile ? (currentUserId || undefined) : undefined}
-              userName={profile?.displayName || profile?.name}
-              userAvatar={profile?.avatar || profile?.photoURL || undefined}
-            />
           </View>
         )}
 
-        {(!isPrivate || isOwnProfile || approvedFollower) && (
+        {(!profile?.isPrivate || isOwnProfile || !!profile?.isApprovedFollower) && (
           <ProfileTabs 
             activeTab={segmentTab}
             onChangeTab={(tab) => {
@@ -990,7 +665,7 @@ export default function Profile({ userIdProp }: any) {
           />
         )}
 
-        {(!isPrivate || isOwnProfile || approvedFollower) && segmentTab === 'grid' && (
+        {(!profile?.isPrivate || isOwnProfile || !!profile?.isApprovedFollower) && segmentTab === 'grid' && (
           <ProfileSections
             sections={sections}
             selectedSection={selectedSection}
@@ -1003,7 +678,7 @@ export default function Profile({ userIdProp }: any) {
         )}
       </View>
     );
-  }, [profile, userStories, isOwnProfile, isPrivate, approvedFollower, passportLocationsCount, posts.length, highlights, highlightViewerVisible, selectedHighlightId, segmentTab, sections, selectedSection, isFollowing, followRequestPending, followLoading, viewedUserId]);
+  }, [profile, userStories, isOwnProfile, profileLoading, passportLocationsCount, posts.length, highlights, highlightViewerVisible, selectedHighlightId, segmentTab, sections, selectedSection, followLoading, viewedUserId]);
 
   const currentPostsArray = useMemo(() => {
     if (segmentTab === 'grid') {
@@ -1014,22 +689,6 @@ export default function Profile({ userIdProp }: any) {
     return posts;
   }, [segmentTab, selectedSection, visiblePosts, posts, savedSectionPosts, taggedPosts]);
 
-  const renderGridItem = useCallback(({ item, index }: { item: any, index: number }) => {
-    return (
-      <ProfileGridItem
-        item={item}
-        index={index}
-        onPress={(item, idx) => {
-          const modalIndex = currentPostsArray.findIndex(p => (p.id || p._id) === (item.id || item._id));
-          setSelectedPostIndex(modalIndex >= 0 ? modalIndex : idx);
-          setPostViewerVisible(true);
-        }}
-        normalizeMediaUrl={normalizeMediaUrl}
-        isVideoUrl={isVideoUrl}
-        DEFAULT_IMAGE_URL={DEFAULT_IMAGE_URL}
-      />
-    );
-  }, [currentPostsArray, normalizeMediaUrl]);
 
   // UI
   // Show loading while auth is initializing
@@ -1114,28 +773,22 @@ export default function Profile({ userIdProp }: any) {
         </View>
       )}
 
-      {(!isPrivate || isOwnProfile || approvedFollower) ? (
-        <FlashList
-          data={currentPostsArray}
-          keyExtractor={(item, index) => item.id || item._id || `post-${index}`}
-          renderItem={renderGridItem}
-          numColumns={3}
-          estimatedItemSize={SCREEN_WIDTH / 3}
-          ListHeaderComponent={renderProfileHeader}
-          ListEmptyComponent={() => (
-            !loading && (
-              <View style={{ padding: 40, alignItems: 'center' }}>
-                <Ionicons name="grid-outline" size={48} color="#ccc" />
-                <Text style={{ marginTop: 10, color: '#999' }}>No posts yet</Text>
-              </View>
-            )
-          )}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-          onRefresh={onRefresh}
+      {(!profile?.isPrivate || isOwnProfile || !!profile?.isApprovedFollower) ? (
+        <ProfileGrid
+          posts={currentPostsArray}
+          loading={loading}
           refreshing={refreshing}
-          scrollEventThrottle={16}
-          removeClippedSubviews={Platform.OS === 'android'}
+          onRefresh={onRefresh}
+          renderHeader={renderProfileHeader}
+          onPressPost={(item, idx) => {
+            const modalIndex = currentPostsArray.findIndex((p: any) => (p.id || p._id) === (item.id || item._id));
+            setSelectedPostIndex(modalIndex >= 0 ? modalIndex : idx);
+            setPostViewerVisible(true);
+          }}
+          normalizeMediaUrl={normalizeMediaUrl}
+          isVideoUrl={isVideoUrl}
+          DEFAULT_IMAGE_URL={DEFAULT_IMAGE_URL}
+          insetsBottom={insets.bottom}
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
@@ -1148,192 +801,19 @@ export default function Profile({ userIdProp }: any) {
         </ScrollView>
       )}
 
-      {/* Collections View Sheet */}
-      <CollectionsModal
-        visible={viewCollectionsModal}
-        onClose={() => setViewCollectionsModal(false)}
-        sections={sections}
-        selectedSection={selectedSection}
-        onSelectSection={setSelectedSection}
-      />
-
-      {/* Instagram-style Post Viewer */}
-      {React.createElement(PostViewerModal as any, {
-        visible: postViewerVisible,
-        onClose: () => setPostViewerVisible(false),
-        posts: segmentTab === 'grid' ? (selectedSection ? visiblePosts : posts) : taggedPosts,
-        selectedPostIndex: selectedPostIndex,
-        profile: profile,
-        authUser: currentUserId ? { _id: currentUserId, id: currentUserId, uid: currentUserId, firebaseUid: currentUserFirebaseAlias } : null,
-        likedPosts: likedPosts,
-        savedPosts: savedPosts,
-        handleLikePost: (post: any) => handleLikePost(post?.id || post?._id || ''),
-        handleSavePost: handleSavePost,
-        title: "Post",
-        handleSharePost: handleSharePost,
-        setCommentModalPostId: (id: any) => setCommentModalPostId(id || ''),
-        setCommentModalAvatar: setCommentModalAvatar,
-        setCommentModalVisible: setCommentModalVisible,
-      })}
-
-      {/* Full-screen profile photo (Instagram-style) */}
-      <Modal
-        visible={!!avatarPreviewUri}
-        transparent
-        animationType="fade"
-        statusBarTranslucent={Platform.OS === 'android'}
-        onRequestClose={() => setAvatarPreviewUri(null)}
-      >
-        <Pressable
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.94)',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-          onPress={() => setAvatarPreviewUri(null)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => setAvatarPreviewUri(null)}
-            style={{ position: 'absolute', top: Math.max(insets.top, 12) + 4, right: 16, zIndex: 20, padding: 8 }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="close" size={34} color="#fff" />
-          </TouchableOpacity>
-          {!!avatarPreviewUri && (
-            <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
-              <ExpoImage
-                source={{ uri: avatarPreviewUri }}
-                style={{
-                  width: Math.min(SCREEN_WIDTH - 32, SCREEN_HEIGHT * 0.72),
-                  height: Math.min(SCREEN_WIDTH - 32, SCREEN_HEIGHT * 0.72),
-                }}
-                contentFit="contain"
-                transition={150}
-                cachePolicy="memory-disk"
-              />
-            </Pressable>
-          )}
-          {isOwnProfile && !!avatarPreviewUri && (
-            <TouchableOpacity
-              style={{
-                position: 'absolute',
-                bottom: Math.max(insets.bottom, 16) + 8,
-                alignSelf: 'center',
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                paddingVertical: 12,
-                paddingHorizontal: 22,
-                borderRadius: 24,
-                borderWidth: StyleSheet.hairlineWidth,
-                borderColor: 'rgba(255,255,255,0.35)',
-              }}
-              onPress={() => {
-                setAvatarPreviewUri(null);
-                handleAvatarPick();
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Change profile photo</Text>
-            </TouchableOpacity>
-          )}
-        </Pressable>
-      </Modal>
-
-      <Modal visible={commentModalVisible} animationType="slide" transparent={true} onRequestClose={() => setCommentModalVisible(false)}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? getKeyboardOffset() : 0}
-        >
-          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              activeOpacity={1}
-              onPress={() => setCommentModalVisible(false)}
-            />
-            <View
-              style={{
-                backgroundColor: '#fff',
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 18,
-                paddingHorizontal: 16,
-                maxHeight: getModalHeight(0.9),
-                shadowColor: '#000',
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-                elevation: 8,
-              }}
-            >
-              <View style={{ alignItems: 'center', marginBottom: 8 }}>
-                <View style={{ width: 40, height: 4, backgroundColor: '#ddd', borderRadius: 2, marginBottom: 8 }} />
-                <Text style={{ fontWeight: '700', fontSize: 17, color: '#222' }}>Comments</Text>
-              </View>
-              {!!commentModalPostId && (
-                <CommentSection
-                  postId={commentModalPostId}
-                  postOwnerId={posts.find(p => p.id === commentModalPostId)?.userId || ''}
-                  currentAvatar={commentModalAvatar}
-                  currentUser={currentUserId ? { uid: currentUserId } : undefined}
-                />
-              )}
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Edit sections modal */}
-      {viewedUserId && (
-        <EditSectionsModal
-          visible={editSectionsModal}
-          onClose={() => setEditSectionsModal(false)}
-          userId={viewedUserId}
-          currentUserId={currentUserId || ''}
-          sections={sections}
-          posts={posts}
-          onSectionsUpdate={setSections}
-        />
-      )}
-
-      {/* Create Highlight Modal removed as per user request */}
-
-      {/* User Menu Modal (for other users' profiles) - Block, Report options */}
-      <UserMenuModal
-        visible={userMenuVisible}
-        onClose={() => setUserMenuVisible(false)}
-        isOwnProfile={isOwnProfile}
-        onBlock={() => handleBlockUser(profile?.name || profile?.displayName || 'this user')}
-        onReport={handleReportUser}
-        onShare={() => {
-          setUserMenuVisible(false);
-          shareProfile({
-            userId: String(viewedUserId || ''),
-            name: typeof profile?.name === 'string' ? profile.name : (typeof profile?.displayName === 'string' ? profile.displayName : ''),
-            username: typeof profile?.username === 'string' ? profile.username : ''
-          });
+      <ProfileModals
+        {...{
+          viewCollectionsModal, setViewCollectionsModal, sections, selectedSection, setSelectedSection,
+          postViewerVisible, setPostViewerVisible, currentPostsArray, selectedPostIndex, profile, currentUserId,
+          likedPosts, savedPosts, handleLikePost, handleSavePost, handleSharePost, setCommentModalPostId, setCommentModalAvatar, setCommentModalVisible,
+          avatarPreviewUri, setAvatarPreviewUri, isOwnProfile, handleAvatarPick,
+          commentModalVisible, commentModalPostId, commentModalAvatar, posts, getKeyboardOffset, getModalHeight,
+          viewedUserId: viewedUserId || null, editSectionsModal, setEditSectionsModal, refetchAll,
+          userMenuVisible, setUserMenuVisible, handleBlockUser, handleReportUser, shareProfile,
+          showUploadModal, setShowUploadModal, selectedMedia, setSelectedMedia, locationQuery, setLocationQuery, locationSuggestions, setLocationSuggestions,
+          uploading, setUploading, uploadProgress, setUploadProgress, showSuccess,
+          highlightViewerVisible, setHighlightViewerVisible, selectedHighlightId
         }}
-      />
-      {/* Story Upload Modal */}
-      <UploadStoryModal
-        visible={showUploadModal}
-        onClose={() => {
-          setShowUploadModal(false);
-          setSelectedMedia(null);
-          setLocationQuery('');
-          setLocationSuggestions([]);
-        }}
-        selectedMedia={selectedMedia}
-        setSelectedMedia={setSelectedMedia}
-        currentUserId={currentUserId}
-        locationQuery={locationQuery}
-        setLocationQuery={setLocationQuery}
-        locationSuggestions={locationSuggestions}
-        setLocationSuggestions={setLocationSuggestions}
-        uploading={uploading}
-        setUploading={setUploading}
-        uploadProgress={uploadProgress}
-        setUploadProgress={setUploadProgress}
-        showSuccess={showSuccess}
       />
     </SafeAreaView>
   );

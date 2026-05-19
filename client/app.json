@@ -8,7 +8,7 @@
     "scheme": "trave-social",
     "userInterfaceStyle": "light",
     "android": {
-      "versionCode": 122,
+      "versionCode": 123,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/icon.png",
@@ -72,11 +72,6 @@
           "iosUrlScheme": "com.googleusercontent.apps.709095117662-k35juagf7ihkae81tfm9si43jkg7g177"
         }
       ],
-      "./plugins/withCleartextTraffic.js",
-      "./plugins/withNetworkSecurityConfig.js",
-      "./plugins/withAppAuthRedirectScheme.js",
-      "./plugins/withAndroidManifestFix.js",
-      "./plugins/withAndroidPip.js",
       [
         "expo-build-properties",
         {

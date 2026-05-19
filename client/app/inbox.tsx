@@ -274,25 +274,33 @@ function Inbox() {
   // Global warm cache so Inbox can render instantly even before userId is loaded.
   useEffect(() => {
     let mounted = true;
-    const raf = requestAnimationFrame(() => {
-      (async () => {
-        try {
-          const raw = await AsyncStorage.getItem('inboxConversationsCache_last_v1');
-          if (!raw) return;
-          const parsed = JSON.parse(raw);
-          const data = parsed?.data;
-          if (!Array.isArray(data) || data.length === 0) return;
-          if (!mounted) return;
+
+    // OPTIMIZATION: Check cache immediately without waiting for RAF or interaction
+    const checkCache = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('inboxConversationsCache_last_v1');
+        if (!raw || !mounted) return;
+        
+        const parsed = JSON.parse(raw);
+        const data = parsed?.data;
+        if (!Array.isArray(data) || data.length === 0) return;
+        
+        // Only set if we haven't already received fresh data from polling
+        if (!conversationsRef.current || conversationsRef.current.length === 0) {
           const normalized = normalizeConversations(data);
           setConversations(normalized);
           setLoading(false);
-        } catch { }
-      })();
-    });
+          if (__DEV__) console.log('⚡ [Inbox] Warm cache loaded instantly');
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('[Inbox] Cache load error:', e);
+      }
+    };
+
+    checkCache();
 
     return () => {
       mounted = false;
-      cancelAnimationFrame(raf);
     };
   }, [normalizeConversations]);
   

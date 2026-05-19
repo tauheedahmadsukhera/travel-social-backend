@@ -11,6 +11,9 @@ const userController = require('../controllers/userController');
 // Search users (GET /api/users/search?q=query) — requires auth to prevent scraping
 router.get('/search', verifyToken, userController.searchUsers);
 
+// Bulk fetch profiles (POST /api/users/bulk-profiles)
+router.post('/bulk-profiles', optionalAuth, userController.getBulkProfiles);
+
 // ─────────────────────────────────────────────
 // PROTECTED WRITE ROUTES (verifyToken + ownership check)
 // ─────────────────────────────────────────────

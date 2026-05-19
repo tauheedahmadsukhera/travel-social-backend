@@ -106,6 +106,55 @@ const FIREBASE_ERROR_MAP: Record<string, AppError> = {
   },
 };
 
+// HTTP Status Code Mapping
+const HTTP_ERROR_MAP: Record<number, AppError> = {
+  400: {
+    code: 'BAD_REQUEST',
+    message: 'Invalid request data',
+    userMessage: 'Something went wrong with your request. Please check and try again.',
+    severity: 'warning',
+    retryable: false,
+  },
+  401: {
+    code: 'UNAUTHORIZED',
+    message: 'Authentication required',
+    userMessage: 'Your session has expired. Please log in again.',
+    severity: 'error',
+    retryable: false,
+    action: 're-login',
+  },
+  403: {
+    code: 'FORBIDDEN',
+    message: 'Access denied',
+    userMessage: 'You do not have permission to view this content.',
+    severity: 'error',
+    retryable: false,
+  },
+  404: {
+    code: 'NOT_FOUND',
+    message: 'Resource not found',
+    userMessage: 'The content you are looking for does not exist.',
+    severity: 'info',
+    retryable: false,
+  },
+  429: {
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Rate limit exceeded',
+    userMessage: 'You are doing that too fast! Please wait a moment.',
+    severity: 'warning',
+    retryable: true,
+    action: 'wait',
+  },
+  500: {
+    code: 'SERVER_ERROR',
+    message: 'Internal server error',
+    userMessage: 'Our server is having trouble. We are looking into it!',
+    severity: 'critical',
+    retryable: true,
+    action: 'retry',
+  },
+};
+
 // Agora Error Code Mapping
 const AGORA_ERROR_MAP: Record<number, AppError> = {
   110: {
@@ -201,6 +250,14 @@ export class ErrorHandler {
 
     if (typeof error === 'number') {
       return this.handleAgoraError(error);
+    }
+
+    // Axios / HTTP Status Mapping
+    const status = error?.response?.status || error?.status;
+    if (status && HTTP_ERROR_MAP[status]) {
+      const mapped = HTTP_ERROR_MAP[status];
+      logger.error(`🌐 API Error [${status}]`, error.message || mapped.message);
+      return mapped;
     }
 
     const message = error?.message || String(error) || 'Unknown error';

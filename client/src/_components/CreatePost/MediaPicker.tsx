@@ -77,6 +77,7 @@ const MediaPicker: React.FC<MediaPickerProps> = ({ assets, selectedImages, onSel
       </View>
       <FlashList
         data={assets}
+        extraData={selectedImages}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         numColumns={3}

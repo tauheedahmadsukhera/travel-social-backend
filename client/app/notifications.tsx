@@ -18,7 +18,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const [userId, setUserId] = React.useState<string>('');
 
-  const { notifications, unreadCount, loading, fetchNotifications, markAllAsRead } = useNotifications(userId || '');
+  const { notifications, unreadCount, loading, fetchNotifications, markAllAsRead, deleteAllNotifications } = useNotifications(userId || '');
 
   React.useEffect(() => {
     let isMounted = true;
@@ -180,7 +180,6 @@ export default function NotificationsScreen() {
           onPress={async () => {
             hapticMedium();
             try {
-              // TODO: Implement backend API call to mark all notifications as read
               await markAllAsRead();
             } catch (err) {
               alert('Error marking all as read');
@@ -194,8 +193,7 @@ export default function NotificationsScreen() {
           onPress={async () => {
             hapticMedium();
             try {
-              // TODO: Implement backend API call to delete all notifications
-              alert('Feature coming soon - backend API needed');
+              await deleteAllNotifications();
             } catch (err) {
               alert('Error deleting all notifications');
             }

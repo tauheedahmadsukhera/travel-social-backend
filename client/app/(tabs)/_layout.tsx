@@ -290,8 +290,10 @@ export default function TabsLayout() {
             <Tabs.Screen
               name="search"
               listeners={{
-                tabPress: () => {
+                tabPress: (e) => {
+                  e.preventDefault();
                   logAnalyticsEvent('tab_search_press', {});
+                  router.push('/search-modal' as any);
                 },
               }}
               options={{
@@ -313,7 +315,7 @@ export default function TabsLayout() {
                 tabPress: (e) => {
                   e.preventDefault();
                   logAnalyticsEvent('tab_post_press', {});
-                  router.push('/create-post');
+                  router.push('/create-post' as any);
                 },
               }}
               options={{
@@ -331,14 +333,9 @@ export default function TabsLayout() {
             />
             <Tabs.Screen
               name="map"
-              listeners={{
-                tabPress: () => {
-                  logAnalyticsEvent('tab_map_press', {});
-                },
-              }}
               options={{
                 title: "Map",
-                tabBarButton: () => null,
+                href: null,
                 tabBarItemStyle: {
                   display: 'none',
                 },
@@ -506,7 +503,7 @@ export default function TabsLayout() {
                   <TouchableOpacity
                     style={styles.igItem}
                     activeOpacity={0.7}
-                    onPress={() => { logAnalyticsEvent('open_privacy'); setMenuVisible(false); router.push('/legal/privacy'); }}
+                    onPress={() => { logAnalyticsEvent('open_privacy'); setMenuVisible(false); router.push('/legal/privacy' as any); }}
                   >
                     <View style={styles.iconContainer}>
                       <Feather name="shield" size={ICON_SIZE} color="#667eea" />
@@ -520,7 +517,7 @@ export default function TabsLayout() {
                   <TouchableOpacity
                     style={styles.igItem}
                     activeOpacity={0.7}
-                    onPress={() => { logAnalyticsEvent('open_terms'); setMenuVisible(false); router.push('/legal/terms'); }}
+                    onPress={() => { logAnalyticsEvent('open_terms'); setMenuVisible(false); router.push('/legal/terms' as any); }}
                   >
                     <View style={styles.iconContainer}>
                       <Feather name="file-text" size={ICON_SIZE} color="#667eea" />
@@ -538,12 +535,11 @@ export default function TabsLayout() {
                     setMenuVisible(false);
                     try {
                       logAnalyticsEvent('logout');
-                      // Import and use actual logout function
-                      const { logoutUser } = await import('@/src/_services/firebaseAuthService');
+                      // Use imported logoutUser
                       const result = await logoutUser();
                       if (result.success) {
                         console.log('Logged out successfully');
-                        router.replace('/auth/welcome');
+                        router.replace('/auth/welcome' as any);
                       } else {
                         Alert.alert('Error', 'Logout failed');
                       }

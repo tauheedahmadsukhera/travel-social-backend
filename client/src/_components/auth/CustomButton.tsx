@@ -1,5 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextStyle, TouchableOpacity, ViewStyle, View } from 'react-native';
 
 interface CustomButtonProps {
 	title: string;
@@ -10,6 +11,8 @@ interface CustomButtonProps {
 	style?: ViewStyle;
 	textStyle?: TextStyle;
 	testID?: string;
+	icon?: keyof typeof Ionicons.glyphMap;
+	iconColor?: string;
 }
 
 export default function CustomButton({
@@ -21,6 +24,8 @@ export default function CustomButton({
 	style,
 	textStyle,
 	testID,
+	icon,
+	iconColor,
 }: CustomButtonProps) {
 	const getButtonStyle = () => {
 		switch (variant) {
@@ -48,6 +53,8 @@ export default function CustomButton({
 		}
 	};
 
+	const defaultIconColor = variant === 'outline' ? '#000' : '#fff';
+
 	return (
 		<TouchableOpacity
 			testID={testID}
@@ -64,7 +71,17 @@ export default function CustomButton({
 			{loading ? (
 				<ActivityIndicator color={variant === 'primary' ? '#fff' : '#000'} />
 			) : (
-				<Text style={[getTextStyle(), textStyle]}>{title}</Text>
+				<View style={styles.buttonContent}>
+					{icon && (
+						<Ionicons 
+							name={icon} 
+							size={20} 
+							color={iconColor || defaultIconColor} 
+							style={styles.icon} 
+						/>
+					)}
+					<Text style={[getTextStyle(), textStyle]}>{title}</Text>
+				</View>
 			)}
 		</TouchableOpacity>
 	);
@@ -77,6 +94,14 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 		paddingHorizontal: 20,
+	},
+	buttonContent: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	icon: {
+		marginRight: 10,
 	},
 	primaryButton: {
 		backgroundColor: '#0A3D62',

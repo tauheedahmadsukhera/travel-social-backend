@@ -1,3 +1,13 @@
+// WeakRef Polyfill for Hermes
+if (typeof global === 'object' && typeof global.WeakRef === 'undefined') {
+  // @ts-ignore
+  global.WeakRef = class WeakRef {
+    target: any;
+    constructor(target: any) { this.target = target; }
+    deref() { return this.target; }
+  };
+}
+
 import { Ionicons } from '@expo/vector-icons';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
@@ -10,7 +20,7 @@ import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ErrorBoundary } from "@/src/_components/ErrorBoundary";
 import { initSentry } from "../lib/sentry";
-import { UserProvider } from "@/src/_components/UserContext";
+import { UserProvider } from "../src/_components/UserContext";
 import { Audio } from 'expo-av';
 import { disconnectSocket, getSocket, initializeSocket } from '@/src/_services/socketService';
 import { AppDialogProvider } from '@/src/_components/AppDialogProvider';
@@ -18,6 +28,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 // Load location service (foreground passport checks + optional TaskManager shim)
 import '../services/locationService';
+
+const queryClient = new QueryClient();
 
 let setupNotificationListeners: any = () => {};
 let initializeBackend: any = () => Promise.resolve();
@@ -204,42 +216,43 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         <UserProvider>
-        <AppDialogProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#fff' } }}>
-              <Stack.Screen name="index" options={{ animation: 'none' }} />
-              <Stack.Screen name="auth/welcome" />
-              <Stack.Screen name="auth/login-options" />
-              <Stack.Screen name="auth/phone-login" />
-              <Stack.Screen name="auth/email-login" />
-              <Stack.Screen name="auth/username-login" />
-              <Stack.Screen name="auth/signup-options" />
-              <Stack.Screen name="auth/phone-signup" />
-              <Stack.Screen name="auth/email-signup" />
-              <Stack.Screen name="auth/username-signup" />
-              <Stack.Screen name="auth/phone-otp" />
-              <Stack.Screen name="auth/forgot-password" />
-              <Stack.Screen name="auth/reset-otp" />
-              <Stack.Screen name="auth/reset-password" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="create-post" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="edit-post" options={{ headerShown: false, animation: 'slide_from_right' }} />
-              <Stack.Screen name="search-modal" options={{ headerShown: false, animation: 'slide_from_right' }} />
-              <Stack.Screen name="inbox" options={{ headerShown: false }} />
-              <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
-              <Stack.Screen name="passport" options={{ headerShown: false }} />
-              <Stack.Screen name="dm" options={{ headerShown: false }} />
-              <Stack.Screen name="notifications" options={{ headerShown: false }} />
-              <Stack.Screen name="go-live" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
-              <Stack.Screen name="watch-live" options={{ headerShown: false }} />
-              <Stack.Screen name="location/[placeId]" options={{ headerShown: false }} />
-              <Stack.Screen name="hashtag-detail" options={{ headerShown: false }} />
-            </Stack>
-          </GestureHandlerRootView>
-        </AppDialogProvider>
-      </UserProvider>
-    </ErrorBoundary>
+          <AppDialogProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#fff' } }}>
+                <Stack.Screen name="index" options={{ animation: 'none' }} />
+                <Stack.Screen name="auth/welcome" />
+                <Stack.Screen name="auth/login-options" />
+                <Stack.Screen name="auth/phone-login" />
+                <Stack.Screen name="auth/email-login" />
+                <Stack.Screen name="auth/username-login" />
+                <Stack.Screen name="auth/signup-options" />
+                <Stack.Screen name="auth/phone-signup" />
+                <Stack.Screen name="auth/email-signup" />
+                <Stack.Screen name="auth/username-signup" />
+                <Stack.Screen name="auth/phone-otp" />
+                <Stack.Screen name="auth/forgot-password" />
+                <Stack.Screen name="auth/reset-otp" />
+                <Stack.Screen name="auth/reset-password" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="create-post" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="edit-post" options={{ headerShown: false, animation: 'slide_from_right' }} />
+                <Stack.Screen name="search-modal" options={{ headerShown: false, animation: 'slide_from_right' }} />
+                <Stack.Screen name="inbox" options={{ headerShown: false }} />
+                <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+                <Stack.Screen name="passport" options={{ headerShown: false }} />
+                <Stack.Screen name="dm" options={{ headerShown: false }} />
+                <Stack.Screen name="notifications" options={{ headerShown: false }} />
+                <Stack.Screen name="post-detail" options={{ headerShown: false, animation: 'slide_from_right' }} />
+                <Stack.Screen name="go-live" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
+                <Stack.Screen name="watch-live" options={{ headerShown: false }} />
+                <Stack.Screen name="location/[placeId]" options={{ headerShown: false }} />
+                <Stack.Screen name="hashtag-detail" options={{ headerShown: false }} />
+              </Stack>
+            </GestureHandlerRootView>
+          </AppDialogProvider>
+        </UserProvider>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }

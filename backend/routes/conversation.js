@@ -2,6 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const Conversation = require('../src/models/Conversation');
+const validate = require('../src/middleware/validateMiddleware');
+const { sendMessageSchema } = require('../src/validations/messageValidation');
 
 // Get messages for a conversation
 router.get('/:id/messages', async (req, res) => {
@@ -15,7 +17,7 @@ router.get('/:id/messages', async (req, res) => {
 });
 
 // Send a message (add to conversation)
-router.post('/:id/messages', async (req, res) => {
+router.post('/:id/messages', validate(sendMessageSchema), async (req, res) => {
   try {
     const { senderId, sender, text, recipientId, replyTo, read } = req.body;
     const mongoose = require('mongoose');

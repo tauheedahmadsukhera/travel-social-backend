@@ -220,7 +220,16 @@ export default function DM() {
   };
 
   const messagesWithSeparators = useMemo(() => {
-    const sorted = [...messages].sort((a, b) => (a.__ts || 0) - (b.__ts || 0));
+    // Deduplicate messages by ID (multiple fetch strategies can return overlapping results)
+    const seen = new Set<string>();
+    const unique = messages.filter(msg => {
+      const key = String(msg.id || msg._id || msg.messageId || '');
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    
+    const sorted = [...unique].sort((a, b) => (a.__ts || 0) - (b.__ts || 0));
     const list: any[] = [];
     let lastDateKey: string | null = null;
     
@@ -322,7 +331,7 @@ export default function DM() {
           { recipientId: otherUserId || undefined, ...extra, tempId }
         );
         if (res?.success) {
-          const finalMsg = normalizeMessage(res.data || res.message);
+          const finalMsg = normalizeMessage((res as any).data || (res as any).message);
           setMessages(prev => prev.map(m => m.id === tempId ? { ...finalMsg, sent: true } : m));
           return;
         }
@@ -381,28 +390,35 @@ export default function DM() {
 
     try {
       const validCId = (conversationId && conversationId !== 'null' && conversationId !== 'undefined') ? conversationId : null;
+
       const res = await sendMessage(validCId as any, String(currentUserId), msgText, otherUserId || undefined, replyData, tempId);
-      if (res?.success && res.message) {
+
+      if (res?.success && ((res as any).message || (res as any).data)) {
+        const backendMsg = (res as any).message || (res as any).data;
         // Force the same timestamp as temp message to avoid jumping around
         const finalized = normalizeMessage({ 
-          ...res.message, 
-          timestamp: res.message.timestamp || new Date(sentAtMs).toISOString(),
+          ...backendMsg, 
+          timestamp: backendMsg.timestamp || new Date(sentAtMs).toISOString(),
           sent: true 
         });
+
         
         setMessages(prev => {
           // Remove temp, add final, then dedupe and sort
-          const filtered = prev.filter(m => m.id !== tempId && m.id !== finalized.id);
+          const filtered = prev.filter(m => String(m.id) !== String(tempId) && String(m.id) !== String(finalized.id));
           return mergeMessages(filtered, [finalized]);
         });
       } else {
+        if (__DEV__) console.warn('[DM] Send failed: no message object in response');
         // Mark as failed instead of removing, so it doesn't "disappear"
-        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, failed: true, sent: false } : m));
+        setMessages(prev => prev.map(m => String(m.id) === String(tempId) ? { ...m, failed: true, sent: false } : m));
         Alert.alert('Send Failed', res?.error || 'Server did not accept the message');
       }
-    } catch (e) {
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      Alert.alert('Error', 'Failed to send message');
+    } catch (e: any) {
+      if (__DEV__) console.error('[DM] Send exception:', e?.message);
+      // NEVER filter it out, just mark as failed so it stays on screen!
+      setMessages(prev => prev.map(m => String(m.id) === String(tempId) ? { ...m, failed: true, sent: false } : m));
+      Alert.alert('Error', 'Failed to send message: ' + (e?.message || 'Unknown error'));
     } finally {
       setSending(false);
     }
@@ -505,8 +521,10 @@ export default function DM() {
   ), [currentUserId, displayName, avatarUri, activeSoundId, formatTimeForBubble]);
 
   const renderContent = () => {
-    if (loading && !messages.length) {
-      return <View style={styles.centered}><ActivityIndicator size="large" color="#3797f0" /></View>;
+    // Only show global loader if we have NO messages and are loading.
+    // This allows cached messages to show instantly like Instagram.
+    if (loading && messages.length === 0) {
+      return <View style={styles.centered}><ActivityIndicator size="large" color="#0A3D62" /></View>;
     }
     
     if (!conversationId && !loading) {

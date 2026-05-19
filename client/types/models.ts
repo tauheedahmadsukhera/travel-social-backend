@@ -161,6 +161,30 @@ export interface MessageReply {
   senderUsername: string;
 }
 
+/** Runtime shape produced by normalizeMessage() in dmHelpers.ts */
+export interface NormalizedMessage {
+  id: string;
+  senderId: string;
+  text: string;
+  mediaUrl?: string;
+  audioUrl?: string;
+  mediaType?: 'text' | 'image' | 'video' | 'audio' | 'post' | 'story';
+  sharedPost?: Record<string, any>;
+  sharedStory?: Record<string, any>;
+  sharedStoryId?: string;
+  replyTo?: { id: string; text: string; senderId: string } | null;
+  reactions?: Record<string, string[]>;
+  editedAt?: string;
+  readAt?: string;
+  sent?: boolean;
+  delivered?: boolean;
+  read?: boolean;
+  failed?: boolean;
+  tempOrigin?: boolean;
+  __ts: number;
+  createdAt: string;
+}
+
 export interface Conversation {
   id: string;
   participants: string[];

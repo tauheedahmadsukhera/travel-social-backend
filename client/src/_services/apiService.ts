@@ -2,8 +2,15 @@ import axios from 'axios';
 import AsyncStorage from '@/lib/storage';
 import { Platform } from 'react-native';
 import { getAPIBaseURL as getBaseUrl } from '../../config/environment';
+import { ApiResponse } from '../../types/api';
 
 type AnyObject = Record<string, any>;
+
+export interface AppError extends Error {
+  code?: string;
+  status?: number;
+  data?: any;
+}
 
 function normalizeApiBase(url: string): string {
   const trimmed = url.replace(/\/+$/, '');
@@ -293,7 +300,7 @@ async function apiRequestWithRetry(method: string, url: string, data?: any, conf
       }
 
       // ✅ Clean error logging
-      if (__DEV__) {
+      if (__DEV__ && error.response?.status !== 404) {
         console.error(`❌ [API] ${method.toUpperCase()} ${url} failed:`, {
           status: error.response?.status,
           message: error.message,
@@ -321,7 +328,7 @@ async function apiRequestWithRetry(method: string, url: string, data?: any, conf
 }
 
 // Use the retry version for all API calls
-async function apiRequest(method: string, url: string, data?: any, config?: any) {
+async function apiRequest(method: string, url: string, data?: any, config?: any): Promise<any> {
   return apiRequestWithRetry(method, url, data, config);
 }
 
@@ -344,6 +351,7 @@ export const apiService = {
 
   // ✅ User Management
   getUser: (userId: string) => apiRequest('get', `/users/${userId}`),
+  getBulkProfiles: (uids: string[]) => apiRequest('post', '/users/bulk-profiles', { uids }),
   updateUser: (userId: string, data: any) => apiRequest('patch', `/users/${userId}`, data),
   getUserPosts: (userId: string, params?: any) => apiRequest('get', `/users/${userId}/posts`, undefined, params),
 

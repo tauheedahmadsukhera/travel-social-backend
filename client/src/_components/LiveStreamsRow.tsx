@@ -71,7 +71,7 @@ function LiveStreamsRowComponent({ mirror = false }: LiveStreamsRowProps) {
   const handleStreamPress = (stream: LiveStream) => {
     const resolvedRoomId = (stream as any)?.roomId || stream.channelName || stream.id;
     router.push({
-      pathname: '/watch-live',
+      pathname: '/watch-live' as any,
       params: {
         streamId: stream.id,
         roomId: resolvedRoomId,

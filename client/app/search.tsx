@@ -21,242 +21,56 @@ import { apiService } from '@/src/_services/apiService';
 import { normalizeMediaUrl, isVideoUrl } from '../lib/utils/media';
 import { getVideoThumbnailUrl } from '../lib/imageHelpers';
 import { resolveCanonicalUserId } from '../lib/currentUser';
+import { useAssetPreloader } from '@/hooks/useAssetPreloader';
 
-
-// Cache for search results
-const searchCache = new Map<string, { users: any[], posts: any[], timestamp: number }>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+import { useSearchData } from '@/src/features/search/hooks/useSearchData';
 
 export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [query, setQuery] = useState(params?.query ? String(params.query) : '');
   const [searchType, setSearchType] = useState(params?.type ? String(params.type) : 'posts');
-  const [loading, setLoading] = useState(false);
-  const [userResults, setUserResults] = useState<any[]>([]);
-  const [postResults, setPostResults] = useState<any[]>([]);
-  const [trendingHashtags, setTrendingHashtags] = useState<any[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'posts' | 'users' | 'hashtags'>(
     searchType === 'hashtag' ? 'hashtags' : 'posts'
   );
-  const [allPosts, setAllPosts] = useState<any[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const currentUserIdRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    currentUserIdRef.current = currentUserId;
-  }, [currentUserId]);
-
-  // Get current user ID on mount
-  useEffect(() => {
-    const getCurrentUserId = async () => {
-      try {
-        const userId = await resolveCanonicalUserId();
-        setCurrentUserId(userId);
-      } catch (error) {
-        console.error('Failed to resolve userId:', error);
-      }
-    };
-    getCurrentUserId();
+    resolveCanonicalUserId().then(setCurrentUserId).catch(() => {});
   }, []);
 
-  // Load trending hashtags on mount
-  React.useEffect(() => {
-    let mounted = true;
-    const loadTrendingHashtags = async () => {
-      try {
-        const trending = await getTrendingHashtags(10);
-        if (mounted) {
-          setTrendingHashtags(trending);
-        }
-      } catch (error) {
-        console.warn('Failed to load trending hashtags:', error);
-      }
-    };
-    loadTrendingHashtags();
-    return () => { mounted = false; };
-  }, []);
+  const {
+    trendingHashtags,
+    results,
+    isLoading: dataLoading,
+    isSearching
+  } = useSearchData({
+    query,
+    activeTab,
+    currentUserId
+  });
 
-  // Load all posts once on mount (with limit)
-  React.useEffect(() => {
-    let mounted = true;
-    const loadPosts = async () => {
-      const cacheKey = 'all_posts';
-      const cached = searchCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        if (mounted) setAllPosts(cached.posts);
-        return;
-      }
-      
-      const result = await getAllPosts();
-      if (result.success && mounted) {
-        const posts = (result.data || []).slice(0, 200);
-        setAllPosts(posts);
-        searchCache.set(cacheKey, { posts, users: [], timestamp: Date.now() });
-      }
-    };
-    loadPosts();
-    return () => { mounted = false; };
-  }, []);
+  useAssetPreloader(results, (item: any) => [
+    item.imageUrl, 
+    item.avatar, 
+    item.photoURL, 
+    item.media?.[0]?.url,
+    item.userAvatar
+  ].filter(Boolean));
 
-  // Debounced search handler with cache
-  const debouncedSearch = useRef(
-    debounce(async (text: string, tab: 'posts' | 'users' | 'hashtags') => {
-      if (!text.trim()) {
-        setUserResults([]);
-        setPostResults([]);
-        setLoading(false);
-        return;
-      }
-
-      const cacheKey = `${tab}_${text.toLowerCase()}`;
-      const cached = searchCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        if (tab === 'users') {
-          // Filter out current user
-          const uid = currentUserIdRef.current;
-          const filteredUsers = cached.users.filter(u => u.id !== uid && u._id !== uid);
-          setUserResults(filteredUsers);
-        }
-        else if (tab === 'hashtags') setPostResults(cached.posts);
-        else setPostResults(cached.posts);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      try {
-        if (tab === 'users') {
-          const result = await searchUsers(text, 15);
-          const users = result.success ? result.data : [];
-          // Filter out current user from results
-          const uid = currentUserIdRef.current;
-          const filteredUsers = users.filter((u: any) => u.id !== uid && u._id !== uid);
-          console.log('[Search] Found', users.length, 'users, showing', filteredUsers.length, 'after filtering current user');
-          setUserResults(filteredUsers);
-          searchCache.set(cacheKey, { users: filteredUsers, posts: [], timestamp: Date.now() });
-        } else if (tab === 'hashtags') {
-          // Search for posts with this hashtag
-          const cleanHashtag = text.replace(/^#+/, ''); // Remove leading # if present
-          const posts = await getPostsByHashtag(cleanHashtag);
-          setPostResults(posts);
-          searchCache.set(cacheKey, { posts, users: [], timestamp: Date.now() });
-        } else {
-          const q = text.toLowerCase().trim();
-          const locationHaystack = (post: any) =>
-            [
-              typeof post.location === 'string' ? post.location : post.location?.name,
-              post.locationName,
-              post.locationData?.name,
-              post.locationData?.address,
-              post.locationData?.city,
-              post.locationData?.country,
-              ...(Array.isArray(post.locationKeys) ? post.locationKeys : []),
-            ]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase();
-
-          const localMatches = allPosts.filter((post: any) => {
-            const cap = (post.caption || '').toLowerCase();
-            const un = (post.userName || '').toLowerCase();
-            return cap.includes(q) || un.includes(q) || locationHaystack(post).includes(q);
-          });
-
-          let merged: any[] = localMatches.slice(0, 250);
-          try {
-            if (q.length >= 2) {
-              const remoteByLoc: any[] = [];
-              const locPageSize = 50;
-              const maxLocPages = 300;
-              for (let p = 0; p < maxLocPages; p++) {
-                const remote: any = await apiService.getPostsByLocation(
-                  text.trim(),
-                  p * locPageSize,
-                  locPageSize,
-                  currentUserIdRef.current || undefined
-                );
-                const chunk =
-                  remote?.success && Array.isArray(remote?.data) ? remote.data : [];
-                remoteByLoc.push(...chunk);
-                if (chunk.length < locPageSize) break;
-              }
-              const byId = new Map<string, any>();
-              for (const p of remoteByLoc) {
-                const id = String(p?.id || p?._id || '');
-                if (!id) continue;
-                byId.set(id, { ...p, id: p.id || p._id });
-              }
-              for (const p of localMatches) {
-                const id = String(p?.id || p?._id || '');
-                if (!id) continue;
-                if (!byId.has(id)) byId.set(id, { ...p, id: p.id || p._id });
-              }
-              merged = Array.from(byId.values())
-                .filter((post: any) => {
-                  const hay =
-                    locationHaystack(post) +
-                    ' ' +
-                    (post.caption || '').toLowerCase() +
-                    ' ' +
-                    (post.userName || '').toLowerCase();
-                  return hay.includes(q);
-                })
-                .sort(
-                  (a: any, b: any) =>
-                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-                )
-                .slice(0, 250);
-            }
-          } catch {
-            merged = localMatches.slice(0, 250);
-          }
-
-          setPostResults(merged);
-          searchCache.set(cacheKey, { posts: merged, users: [], timestamp: Date.now() });
-        }
-      } catch (error) {
-        console.error('Search error:', error);
-      } finally {
-        setLoading(false);
-      }
-    }, 500)
-  ).current;
+  const loading = isSearching;
 
   const handleSearch = (text: string) => {
     setQuery(text);
-    if (text.trim()) {
-      setLoading(true);
-      debouncedSearch(text, activeTab as any);
-    } else {
-      setUserResults([]);
-      setPostResults([]);
-      setLoading(false);
-    }
   };
-  
-  // Handle initial search if coming from hashtag tap
-  React.useEffect(() => {
-    if (query.trim() && searchType === 'hashtag') {
-      handleSearch(query);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (query.trim()) {
-      setLoading(true);
-      debouncedSearch(query, activeTab);
-    } else {
-      setUserResults([]);
-      setPostResults([]);
-      setLoading(false);
-    }
-  }, [activeTab]);
 
   const handleTabSwitch = (tab: 'posts' | 'users' | 'hashtags') => {
     setActiveTab(tab);
   };
+
+  const userResults = activeTab === 'users' ? results : [];
+  const postResults = activeTab !== 'users' ? results : [];
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: Math.max(insets.top, 12) }}>
@@ -288,7 +102,7 @@ export default function SearchScreen() {
         <FlashList
           data={userResults}
           keyExtractor={item => item.uid || item.id}
-          renderItem={({ item }) => (
+          renderItem={({ item }: { item: any }) => (
             <TouchableOpacity 
               style={styles.row} 
               onPress={() => {
@@ -326,8 +140,8 @@ export default function SearchScreen() {
           <FlashList
             data={postResults}
             keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/highlight/[id]', params: { id: item.id } })}>
+            renderItem={({ item }: { item: any }) => (
+              <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/post-detail', params: { id: item.id } })}>
                 <ExpoImage 
                   source={{ 
                     uri: normalizeMediaUrl(
@@ -354,17 +168,17 @@ export default function SearchScreen() {
         ) : (
           <FlashList
             data={trendingHashtags}
-            keyExtractor={(item, idx) => `${item.hashtag}-${idx}`}
-            renderItem={({ item }) => (
+            keyExtractor={(item: any, idx) => `${item.tag || idx}-${idx}`}
+            renderItem={({ item }: { item: any }) => (
               <TouchableOpacity 
                 style={styles.hashtagRow}
                 onPress={() => {
-                  setQuery(item.hashtag);
-                  handleSearch(item.hashtag);
+                  setQuery(item.tag);
+                  handleSearch(item.tag);
                 }}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.hashtagName}>#{item.hashtag}</Text>
+                  <Text style={styles.hashtagName}>#{item.tag}</Text>
                   <Text style={styles.hashtagCount}>{item.postCount || 0} posts</Text>
                 </View>
                 <Feather name="chevron-right" size={20} color="#ccc" />
@@ -378,8 +192,8 @@ export default function SearchScreen() {
         <FlashList
           data={postResults}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/highlight/[id]', params: { id: item.id } })}>
+          renderItem={({ item }: { item: any }) => (
+            <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/post-detail', params: { id: item.id } })}>
               <ExpoImage 
                 source={{ 
                   uri: normalizeMediaUrl(

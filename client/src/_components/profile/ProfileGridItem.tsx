@@ -16,7 +16,7 @@ interface ProfileGridItemProps {
   DEFAULT_IMAGE_URL: string;
 }
 
-export const ProfileGridItem = React.memo(({
+const ProfileGridItem = React.memo(({
   item,
   index,
   onPress,
@@ -64,6 +64,8 @@ export const ProfileGridItem = React.memo(({
     </TouchableOpacity>
   );
 });
+
+export default ProfileGridItem;
 
 const styles = StyleSheet.create({
   gridItem: {

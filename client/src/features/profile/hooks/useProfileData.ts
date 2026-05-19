@@ -60,8 +60,13 @@ export function useProfileData({ viewedUserId, currentUserId, enabled }: UseProf
     queryKey: ['profileStories', viewedUserId],
     queryFn: async () => {
       if (!viewedUserId) return [];
-      const res = await apiService.get(`/stories/user/${viewedUserId}`);
-      return res?.success && Array.isArray(res.data) ? res.data : [];
+      try {
+        const res = await apiService.get(`/stories/user/${viewedUserId}`);
+        return res?.success && Array.isArray(res.data) ? res.data : [];
+      } catch (error: any) {
+        if (error.response?.status === 404) return [];
+        throw error;
+      }
     },
     enabled: enabled && !!viewedUserId && canViewPrivateProfile,
     staleTime: 1000 * 60 * 1, // Stories change frequently
@@ -73,10 +78,49 @@ export function useProfileData({ viewedUserId, currentUserId, enabled }: UseProf
     queryKey: ['profileSavedPosts', viewedUserId],
     queryFn: async () => {
       if (!viewedUserId) return [];
-      const res = await apiService.get(`/users/${viewedUserId}/saved-posts`);
-      return res?.success && Array.isArray(res.data) ? res.data : [];
+      try {
+        const res = await apiService.get(`/users/${viewedUserId}/saved-posts`);
+        return res?.success && Array.isArray(res.data) ? res.data : [];
+      } catch (error: any) {
+        if (error.response?.status === 404) return [];
+        throw error;
+      }
     },
     enabled: enabled && !!viewedUserId && isOwnProfile,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // 6. Fetch Tagged Posts
+  const taggedPostsQuery = useQuery({
+    queryKey: ['profileTaggedPosts', viewedUserId],
+    queryFn: async () => {
+      if (!viewedUserId) return [];
+      try {
+        const res = await apiService.get(`/users/${viewedUserId}/tagged-posts`);
+        return res?.success && Array.isArray(res.data) ? res.data : [];
+      } catch (error: any) {
+        if (error.response?.status === 404) return [];
+        throw error;
+      }
+    },
+    enabled: enabled && !!viewedUserId && canViewPrivateProfile,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  // 7. Fetch Highlights
+  const highlightsQuery = useQuery({
+    queryKey: ['profileHighlights', viewedUserId],
+    queryFn: async () => {
+      if (!viewedUserId) return [];
+      try {
+        const res = await apiService.get(`/users/${viewedUserId}/highlights`);
+        return res?.success && Array.isArray(res.data) ? res.data : [];
+      } catch (error: any) {
+        if (error.response?.status === 404) return [];
+        throw error;
+      }
+    },
+    enabled: enabled && !!viewedUserId && canViewPrivateProfile,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -86,14 +130,20 @@ export function useProfileData({ viewedUserId, currentUserId, enabled }: UseProf
     sections: sectionsQuery.data || [],
     userStories: storiesQuery.data || [],
     savedSectionPosts: savedPostsQuery.data || [],
+    taggedPosts: taggedPostsQuery.data || [],
+    highlights: highlightsQuery.data || [],
     isLoading: profileQuery.isLoading,
     isRefetching: profileQuery.isRefetching,
-    refetchAll: () => {
-      profileQuery.refetch();
-      postsQuery.refetch();
-      sectionsQuery.refetch();
-      storiesQuery.refetch();
-      if (isOwnProfile) savedPostsQuery.refetch();
+    refetchAll: async () => {
+      await Promise.all([
+        profileQuery.refetch(),
+        postsQuery.refetch(),
+        sectionsQuery.refetch(),
+        storiesQuery.refetch(),
+        taggedPostsQuery.refetch(),
+        highlightsQuery.refetch(),
+        isOwnProfile ? savedPostsQuery.refetch() : Promise.resolve(),
+      ]);
     }
   };
 }

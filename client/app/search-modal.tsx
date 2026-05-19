@@ -197,7 +197,7 @@ export default function SearchModal() {
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     router.push({
-      pathname: '/location/[placeId]',
+      pathname: '/location/[placeId]' as any,
       params: {
         placeId,
         locationName,
@@ -606,7 +606,7 @@ export default function SearchModal() {
                       style={styles.suggestionCardList}
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                        router.push({ pathname: '/location/[placeId]', params: { placeId: item.placeId, locationName: item.title, locationAddress: item.subtitle } });
+                        router.push({ pathname: '/location/[placeId]' as any, params: { placeId: item.placeId, locationName: item.title, locationAddress: item.subtitle } });
                       }}
                     >
                       <View style={styles.suggestionIconList}>

@@ -24,10 +24,25 @@ import {
 } from '../src/_services/dmHelpers';
 import { apiService } from '../src/_services/apiService';
 
+import { useAppStore } from '@/store/useAppStore';
+
 export function useDM(conversationIdParam: string | null, otherUserId: string | null, currentUserId: string | null, onMessageReceived?: (msg: any) => void) {
-  const [conversationId, setConversationId] = useState<string | null>(conversationIdParam);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { messageCache, setCachedMessages, convoMap } = useAppStore();
+  
+  // Resolve conversationId from param or global map (for instant profile-to-chat navigation)
+  const resolvedConvoId = conversationIdParam || (otherUserId ? convoMap[otherUserId] : null);
+  
+  const [conversationId, setConversationId] = useState<string | null>(resolvedConvoId);
+  
+  // Initialize from memory cache for instant UI
+  const [messages, setMessages] = useState<any[]>(() => {
+    if (resolvedConvoId && messageCache[resolvedConvoId]) {
+      return messageCache[resolvedConvoId];
+    }
+    return [];
+  });
+
+  const [loading, setLoading] = useState(!resolvedConvoId || !messageCache[resolvedConvoId]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [skip, setSkip] = useState(0);
@@ -73,6 +88,38 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
     return () => clearTimeout(t);
   }, [loading]);
 
+  // Warm Start Cache Loading
+  useEffect(() => {
+    if (!conversationId) return;
+    
+    let mounted = true;
+    const cacheKey = `messages_cache_${conversationId}`;
+
+    const loadCache = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(cacheKey);
+        if (!raw || !mounted) return;
+        
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // If we already have messages from a faster fetch, don't overwrite with stale cache
+          setMessages(prev => {
+            if (prev.length > 0) return prev;
+            return parsed.map(m => normalizeMessage(m));
+          });
+          setLoading(false);
+          hasPreloadedMessagesRef.current = true;
+          if (__DEV__) console.log(`⚡ [useDM] Cache loaded: ${parsed.length} messages`);
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('[useDM] Cache load error:', e);
+      }
+    };
+
+    loadCache();
+    return () => { mounted = false; };
+  }, [conversationId]);
+
   // Load Messages & Setup Socket
   useEffect(() => {
     if (!conversationId || !currentUserId) return;
@@ -81,26 +128,86 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
     const cid = conversationId;
     const cacheKey = `messages_cache_${conversationId}`;
 
-    setLoading(!hasPreloadedMessagesRef.current);
+    // If we have preloaded messages, don't show the initial spinner
+    if (!hasPreloadedMessagesRef.current) {
+      setLoading(true);
+    }
     
     const fetchAll = async () => {
       if (!conversationId && !otherUserId) return;
+      
+      const extractMessages = (res: any): any[] => {
+        if (!res) return [];
+        const raw = res?.data || res?.messages || (Array.isArray(res) ? res : []);
+        return Array.isArray(raw) ? raw : [];
+      };
       
       try {
         // Strategy 1: Fetch by conversationId (if valid)
         const validId = (conversationId && conversationId !== 'null' && conversationId !== 'undefined') ? conversationId : null;
         let msgRes = validId ? await fetchMessages(validId) : null;
+        let msgList = extractMessages(msgRes);
+        if (__DEV__) console.log(`[DM] Strategy 1 (${validId}): ${msgList.length} messages`);
         
-        // Strategy 2: Participant-based fetch (Always try if Strategy 1 yields nothing)
-        if ((!msgRes?.success || !msgRes.messages?.length) && otherUserId && currentUserId) {
-           console.log('[DM] Trying participant-based fallback for user:', otherUserId);
-           const fallbackRes = await apiService.get(`/conversations/resolve/messages?otherUserId=${otherUserId}`);
-           if (fallbackRes?.success) msgRes = fallbackRes;
+        // Strategy 2: Try concatenated ID format (backend stores messages under "userId1_userId2")
+        if (msgList.length === 0 && currentUserId && otherUserId) {
+          const concatId1 = `${currentUserId}_${otherUserId}`;
+          const concatId2 = `${otherUserId}_${currentUserId}`;
+          try {
+            const concatRes1 = await fetchMessages(concatId1);
+            const concatList1 = extractMessages(concatRes1);
+            if (concatList1.length > 0) {
+              msgRes = concatRes1;
+              msgList = concatList1;
+            } else {
+              const concatRes2 = await fetchMessages(concatId2);
+              const concatList2 = extractMessages(concatRes2);
+              if (concatList2.length > 0) {
+                msgRes = concatRes2;
+                msgList = concatList2;
+              }
+            }
+          } catch {}
+        }
+        
+        // Strategy 3: Participant-based fallback from conversation list
+        if (msgList.length === 0 && otherUserId && currentUserId) {
+           try {
+             const convosRes = await apiService.get(`/conversations?userId=${currentUserId}`);
+             const convos = convosRes?.data || convosRes?.conversations || (Array.isArray(convosRes) ? convosRes : []);
+             if (Array.isArray(convos)) {
+                const matchingConvos = convos.filter((c: any) => {
+                 if (c.isGroup) return false;
+                 const pRaw = c.participants ?? c.participantIds ?? c.members;
+                 const mP = Array.isArray(pRaw) && pRaw.some((p: any) => String(p.id || p._id || p) === String(otherUserId));
+                 const mO = (c.otherUser && String(c.otherUser.id || c.otherUser._id) === String(otherUserId)) || String(c.otherUserId) === String(otherUserId);
+                 return mP || mO;
+               });
+               matchingConvos.sort((a: any, b: any) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
+               for (const convo of matchingConvos) {
+                 const tryId = convo?.id || convo?._id || convo?.conversationId;
+                 if (!tryId || String(tryId) === String(conversationId)) continue;
+                 const altRes = await fetchMessages(tryId);
+                 const altList = extractMessages(altRes);
+                 if (altList.length > 0) {
+                   msgRes = altRes;
+                   msgList = altList;
+                   setConversationId(tryId);
+                   break;
+                 }
+               }
+             }
+           } catch {}
         }
 
-        if (!cancelled && msgRes?.success) {
-          const incoming: any[] = Array.isArray(msgRes.messages) ? msgRes.messages : [];
-          setMessages(incoming.map((m: any) => normalizeMessage(m)));
+        if (!cancelled) {
+          const normalized = msgList.map((m: any) => normalizeMessage(m));
+          setMessages(normalized);
+          // Update memory and disk cache
+          if (normalized.length > 0) {
+            setCachedMessages(cid, normalized.slice(0, 30));
+            AsyncStorage.setItem(cacheKey, JSON.stringify(normalized.slice(0, 50))).catch(() => {});
+          }
         }
       } catch (error) {
         console.error('[DM] Fetch error:', error);
@@ -121,6 +228,7 @@ export function useDM(conversationIdParam: string | null, otherUserId: string | 
       const incoming = normalizeMessage(msg);
       setMessages(prev => {
         const merged = mergeMessages(prev, [incoming]);
+        setCachedMessages(cid, merged.slice(0, 30));
         AsyncStorage.setItem(cacheKey, JSON.stringify(merged.slice(0, 50))).catch(() => {});
         return merged;
       });

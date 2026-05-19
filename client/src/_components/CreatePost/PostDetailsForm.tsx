@@ -35,12 +35,12 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       <View style={{ paddingHorizontal: 15 }}>
         {/* Caption Input Row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }}>
-          <Feather name="align-justify" size={20} color="#000" style={{ marginRight: 15 }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }}>
+          <Feather name="align-justify" size={18} color="#333" style={{ marginRight: 15 }} />
           <TextInput
-            style={{ flex: 1, fontSize: 16, color: '#000' }}
+            style={{ flex: 1, fontSize: 14, color: '#000', fontWeight: '500' }}
             placeholder="Add a text"
-            placeholderTextColor="#666"
+            placeholderTextColor="#333"
             value={caption}
             onChangeText={setCaption}
             multiline={false}
@@ -48,13 +48,13 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
         </View>
 
         {/* Tags Row */}
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-            <Feather name="hash" size={20} color="#000" style={{ marginRight: 15 }} />
+        <View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }}>
+            <Feather name="hash" size={18} color="#333" style={{ marginRight: 15 }} />
             <TextInput
-              style={{ flex: 1, fontSize: 16, color: '#000' }}
+              style={{ flex: 1, fontSize: 14, color: '#000', fontWeight: '500' }}
               placeholder="Add tags"
-              placeholderTextColor="#666"
+              placeholderTextColor="#333"
               value={hashtagInput}
               onChangeText={onHashtagInputChange}
               onSubmitEditing={onHashtagCommit}
@@ -75,18 +75,18 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
         </View>
 
         {/* Category Row */}
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} onPress={onOpenCategories}>
-          <Feather name="bookmark" size={20} color="#000" style={{ marginRight: 15 }} />
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }} onPress={onOpenCategories}>
+          <Feather name="bookmark" size={18} color="#333" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, color: selectedCategories.length > 0 ? '#000' : '#666' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', color: selectedCategories.length > 0 ? '#000' : '#333' }}>
               {selectedCategories.length > 0 ? selectedCategories.map(c => c.name).join(', ') : 'Add a category for the home feed'}
             </Text>
           </View>
         </TouchableOpacity>
 
         {/* Location Row */}
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} onPress={onOpenLocation}>
-          <Feather name="map-pin" size={20} color="#000" style={{ marginRight: 15 }} />
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }} onPress={onOpenLocation}>
+          <Feather name="map-pin" size={18} color="#333" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
             {locationName ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -105,17 +105,17 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
                 </View>
               </View>
             ) : (
-              <Text style={{ fontSize: 16, color: '#666' }}>Add a location</Text>
+              <Text style={{ fontSize: 14, fontWeight: '500', color: '#333' }}>Add a location</Text>
             )}
           </View>
         </TouchableOpacity>
 
         {/* Verified Location Row */}
         <TouchableOpacity 
-          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} 
+          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }} 
           onPress={onOpenVerifiedLocation}
         >
-          <Feather name="award" size={20} color="#000" style={{ marginRight: 15 }} />
+          <Feather name="lock" size={18} color="#333" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
             {verifiedLocation ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -140,27 +140,27 @@ const PostDetailsForm: React.FC<PostDetailsFormProps> = ({
                 </View>
               </View>
             ) : (
-              <Text style={{ fontSize: 16, color: '#666' }}>Add a verified location</Text>
+              <Text style={{ fontSize: 14, fontWeight: '500', color: '#333' }}>Add a verified location</Text>
             )}
           </View>
         </TouchableOpacity>
 
         {/* Tag People Row */}
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' }} onPress={onOpenTagPeople}>
-          <Feather name="users" size={20} color="#000" style={{ marginRight: 15 }} />
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }} onPress={onOpenTagPeople}>
+          <Feather name="user-plus" size={18} color="#333" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, color: taggedUsers.length > 0 ? '#000' : '#666' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', color: taggedUsers.length > 0 ? '#000' : '#333' }}>
               {taggedUsers.length > 0 ? `${taggedUsers.length} people tagged` : 'Tag people'}
             </Text>
           </View>
         </TouchableOpacity>
 
         {/* Visibility Row */}
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }} onPress={onOpenVisibility}>
-          <Feather name="eye" size={20} color="#000" style={{ marginRight: 15 }} />
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }} onPress={onOpenVisibility}>
+          <Feather name="eye" size={18} color="#333" style={{ marginRight: 15 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, color: '#000' }}>
-              Post visibility: <Text style={{ color: '#666' }}>{visibility}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '500', color: '#333' }}>
+              Post visibility{visibility !== 'Everyone' ? `: ${visibility}` : ''}
             </Text>
           </View>
         </TouchableOpacity>

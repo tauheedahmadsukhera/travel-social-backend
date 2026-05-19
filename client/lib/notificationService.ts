@@ -91,6 +91,17 @@ export const notificationService = {
     }
   },
 
+  async deleteAllNotifications(): Promise<boolean> {
+    try {
+      await apiService.delete('/notifications/all');
+      console.log('[notificationService] Deleted all notifications');
+      return true;
+    } catch (err) {
+      console.error('[notificationService] Error deleting all notifications:', err);
+      return false;
+    }
+  },
+
   // Send like notification
   async notifyLike(postOwnerId: string, likerId: string, postId: string) {
     return this.createNotification(

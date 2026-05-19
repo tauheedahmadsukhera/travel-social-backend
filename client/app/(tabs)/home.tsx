@@ -21,6 +21,7 @@ import AsyncStorage from '@/lib/storage';
 import { FlashList } from '@shopify/flash-list';
 import PostCard from '@/src/_components/PostCard';
 import LiveStreamsRow from '@/src/_components/LiveStreamsRow';
+import { Skeleton } from '@/src/_components/SkeletonLoader';
 import { useHeaderVisibility } from './_layout';
 import { useTabEvent } from './_layout';
 
@@ -36,6 +37,7 @@ import { getDisplayRatio } from '@/src/_components/PostCard/PostMedia';
 import { useHomeFeed } from '@/hooks/useHomeFeed';
 import { useCategories } from '@/hooks/useCategories';
 import { useFeedEvents } from '@/hooks/useFeedEvents';
+import { useAssetPreloader } from '@/hooks/useAssetPreloader';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const MIRROR_HOME = false;
@@ -214,9 +216,18 @@ export default function Home() {
     if (filter) {
       result = result.filter((p: any) => p.category?.toLowerCase() === filter.toLowerCase());
     }
-
     return result;
   }, [posts, filter, params.location, params.postId]);
+
+  useAssetPreloader(filteredRaw, (item: any) => {
+    const media = Array.isArray(item.media) ? item.media : [];
+    return [
+      ...media.map((m: any) => m.url),
+      item.imageUrl,
+      item.thumbnailUrl,
+      item.userAvatar
+    ].filter(Boolean);
+  });
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -242,23 +253,23 @@ export default function Home() {
   );
 
   const renderSkeletonItem = useCallback(() => (
-    <View style={{ paddingVertical: 10, backgroundColor: '#fff' }}>
+    <View style={{ paddingVertical: 10, backgroundColor: '#fff', marginBottom: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 10 }}>
-        <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#eee' }} />
+        <Skeleton width={34} height={34} borderRadius={17} />
         <View style={{ marginLeft: 10, flex: 1 }}>
-          <View style={{ width: '46%', height: 10, borderRadius: 5, backgroundColor: '#eee', marginBottom: 8 }} />
-          <View style={{ width: '32%', height: 10, borderRadius: 5, backgroundColor: '#f0f0f0' }} />
+          <Skeleton width="46%" height={10} style={{ marginBottom: 8 }} />
+          <Skeleton width="32%" height={10} />
         </View>
       </View>
-      <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#eee' }} />
+      <Skeleton width="100%" height={SCREEN_WIDTH} borderRadius={0} />
       <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10, gap: 10 }}>
-        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#eee' }} />
-        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#eee' }} />
-        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#eee' }} />
+        <Skeleton width={22} height={22} borderRadius={11} />
+        <Skeleton width={22} height={22} borderRadius={11} />
+        <Skeleton width={22} height={22} borderRadius={11} />
       </View>
       <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-        <View style={{ width: '78%', height: 10, borderRadius: 5, backgroundColor: '#eee', marginBottom: 8 }} />
-        <View style={{ width: '52%', height: 10, borderRadius: 5, backgroundColor: '#f0f0f0' }} />
+        <Skeleton width="78%" height={10} style={{ marginBottom: 8 }} />
+        <Skeleton width="52%" height={10} />
       </View>
     </View>
   ), []);

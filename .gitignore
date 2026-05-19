@@ -22,6 +22,9 @@ serviceAccountKey.json
 serviceAccount*.json
 private*.json
 
+# Sensitive/binary files
+ngrok.exe
+
 # Build outputs
 /dist
 /build
@@ -47,7 +50,6 @@ backend/build/
 
 # OS
 Thumbs.db
-.DS_Store
 
 # Testing
 coverage/
@@ -120,5 +122,13 @@ client/assets/fake data/
 client/assets/fake profile/
 client/assets/cities/
 client/assets/countries/
-client/assets/images/
 client/admin/node_modules/
+
+# Ad-hoc migration/binary blobs accidentally dropped under src/
+src/tmp_*
+audit_*.js
+check_*.js
+debug_*.js
+verify_*.js
+resolved_ips.txt
+users_log.txt

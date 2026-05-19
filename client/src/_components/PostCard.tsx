@@ -295,7 +295,7 @@ const PostCard: React.FC<PostCardProps> = ({
         onLocationPress={() => {
           const pid = post?.locationData?.placeId || 'unknown';
           router.push({
-            pathname: '/location/[placeId]',
+            pathname: '/location/[placeId]' as any,
             params: {
               placeId: pid,
               locationName: post?.locationData?.name || locationName,

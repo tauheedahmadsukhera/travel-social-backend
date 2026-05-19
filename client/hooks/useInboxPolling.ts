@@ -11,6 +11,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { startConversationsPolling, startMessagesPolling, stopPolling } from '../lib/pollingService';
 import { getCachedUserProfile, cacheUserProfile } from '../lib/redisCache';
 import AsyncStorage from '@/lib/storage';
+import { useAppStore } from '@/store/useAppStore';
 
 interface UseInboxPollingOptions {
   pollingInterval?: number;
@@ -21,6 +22,7 @@ export function useInboxPolling(
   userId: string | null,
   options: UseInboxPollingOptions = {}
 ) {
+  const { setConvoMapping } = useAppStore();
   // Default to a calmer poll interval to reduce loading/spinner churn and battery usage.
   const { pollingInterval = 12000, autoStart = true } = options;
 
@@ -70,6 +72,12 @@ export function useInboxPolling(
         }
         if (!mounted) return;
         setConversations(data);
+        
+        // Populate convoMap from cache
+        data.forEach((c: any) => {
+          if (!c.isGroup && c.otherUserId) setConvoMapping(String(c.otherUserId), String(c.id || c._id));
+        });
+
         setLoading(false);
         setReady(true);
       } catch { }
@@ -100,11 +108,17 @@ export function useInboxPolling(
 
           // Always update conversations on every poll so inbox stays fresh.
           setConversations(data);
+          
+          // Populate convoMap from poll results
+          data.forEach((c: any) => {
+            if (!c.isGroup && c.otherUserId) setConvoMapping(String(c.otherUserId), String(c.id || c._id));
+          });
+
           // Persist cache asynchronously
           if (cacheKey) {
             AsyncStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data })).catch(() => {});
           }
-
+          
           // Only use loadingEnded to stop the initial loading spinner.
           if (!loadingEnded) {
             loadingEnded = true;
