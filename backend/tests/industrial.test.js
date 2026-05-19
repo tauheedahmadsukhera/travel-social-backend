@@ -2,40 +2,7 @@ const request = require('supertest');
 const express = require('express');
 const mongoose = require('mongoose');
 
-// Mock Mongoose to prevent DB connection during tests
-jest.mock('mongoose', () => {
-  const actualMongoose = jest.requireActual('mongoose');
-  return {
-    ...actualMongoose,
-    connect: jest.fn().mockResolvedValue(true),
-    connection: {
-      close: jest.fn().mockResolvedValue(true),
-      readyState: 1,
-    },
-    model: jest.fn().mockImplementation((name) => {
-      const Model = function(data) {
-        Object.assign(this, data);
-        this.save = jest.fn().mockResolvedValue(true);
-        this.toObject = jest.fn().mockReturnValue(this);
-      };
-      const chain = {
-        sort: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue([]),
-        then: jest.fn().mockImplementation(function(onFulfilled) {
-          return Promise.resolve([]).then(onFulfilled);
-        }),
-      };
-      Model.find = jest.fn().mockReturnValue(chain);
-      Model.findOne = jest.fn().mockReturnValue(chain);
-      Model.findById = jest.fn().mockReturnValue(chain);
-      Model.countDocuments = jest.fn().mockResolvedValue(0);
-      Model.aggregate = jest.fn().mockResolvedValue([]);
-      return Model;
-    }),
-  };
-});
+
 
 // Mock Firebase Admin
 jest.mock('firebase-admin', () => ({
@@ -75,7 +42,8 @@ describe('🚀 Industrial Security & Stability Suite', () => {
     test('POST /api/admin/stats - Should fail for non-admin even if authenticated', async () => {
       // Create a valid token for a regular user
       const { generateToken } = require('../src/middleware/authMiddleware');
-      const token = generateToken('regular_user_id', 'user@example.com');
+      const validObjectId = new mongoose.Types.ObjectId().toString();
+      const token = generateToken(validObjectId, 'user@example.com');
 
       const res = await request(app)
         .get('/api/admin/stats')
@@ -89,7 +57,8 @@ describe('🚀 Industrial Security & Stability Suite', () => {
   describe('🧪 Injection & Input Sanitization', () => {
     test('GET /api/users/search - Should handle regex characters safely', async () => {
       const { generateToken } = require('../src/middleware/authMiddleware');
-      const token = generateToken('user_id', 'user@example.com');
+      const validObjectId = new mongoose.Types.ObjectId().toString();
+      const token = generateToken(validObjectId, 'user@example.com');
 
       const res = await request(app)
         .get('/api/users/search?q=.*')

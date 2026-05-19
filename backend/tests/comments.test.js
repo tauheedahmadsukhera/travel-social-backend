@@ -1,6 +1,6 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
-const { app } = require('../src/index');
+const app = require('../src/index');
 
 describe('Comments API', () => {
   let testUser;
@@ -9,9 +9,9 @@ describe('Comments API', () => {
   let token;
 
   beforeAll(async () => {
-    const User = require('../models/User');
-    const Post = require('../models/Post');
-    const Comment = require('../models/Comment');
+    const User = require('../src/models/User');
+    const Post = require('../src/models/Post');
+    const Comment = require('../src/models/Comment');
     const jwt = require('jsonwebtoken');
 
     // Create a test user
@@ -45,9 +45,9 @@ describe('Comments API', () => {
   });
 
   afterAll(async () => {
-    const Post = require('../models/Post');
-    const User = require('../models/User');
-    const Comment = require('../models/Comment');
+    const Post = require('../src/models/Post');
+    const User = require('../src/models/User');
+    const Comment = require('../src/models/Comment');
     if (testComment) await Comment.deleteOne({ _id: testComment._id });
     if (testPost) await Post.deleteOne({ _id: testPost._id });
     if (testUser) await User.deleteOne({ _id: testUser._id });

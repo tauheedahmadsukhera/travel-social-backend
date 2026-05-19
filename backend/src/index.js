@@ -158,29 +158,41 @@ app.use((err, req, res, next) => {
 const initSockets = require('./loaders/socket');
 
 // Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Local Access: http://localhost:${PORT}`);
-});
+let server;
+let io;
 
-// Initialize Socket.IO
-const JWT_SECRET = process.env.JWT_SECRET;
-const io = initSockets(server, JWT_SECRET);
+if (process.env.NODE_ENV !== 'test') {
+  server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📡 Local Access: http://localhost:${PORT}`);
+  });
+
+  // Initialize Socket.IO
+  const JWT_SECRET = process.env.JWT_SECRET;
+  io = initSockets(server, JWT_SECRET);
+}
 
 // ============= GRACEFUL SHUTDOWN =============
 // Properly close connections on deploy/restart to avoid interrupted DB writes
 function gracefulShutdown(signal) {
   console.log(`\n⚠️ ${signal} received. Shutting down gracefully...`);
-  server.close(() => {
-    console.log('✅ HTTP server closed.');
-    if (io) {
-      io.close(() => console.log('✅ Socket.IO closed.'));
-    }
+  if (server) {
+    server.close(() => {
+      console.log('✅ HTTP server closed.');
+      if (io) {
+        io.close(() => console.log('✅ Socket.IO closed.'));
+      }
+      mongoose.connection.close(false).then(() => {
+        console.log('✅ MongoDB connection closed.');
+        process.exit(0);
+      }).catch(() => process.exit(0));
+    });
+  } else {
     mongoose.connection.close(false).then(() => {
       console.log('✅ MongoDB connection closed.');
       process.exit(0);
     }).catch(() => process.exit(0));
-  });
+  }
   // Force shutdown after 10s if graceful shutdown fails
   setTimeout(() => {
     console.error('🔴 Forced shutdown after timeout.');
@@ -188,7 +200,9 @@ function gracefulShutdown(signal) {
   }, 10000);
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+if (process.env.NODE_ENV !== 'test') {
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+}
 
-module.exports = server;
+module.exports = server || app;

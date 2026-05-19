@@ -1,21 +1,40 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
-const { app } = require('../src/index');
-const connectDB = require('../src/loaders/database');
+const app = require('../src/index');
 
 describe('Posts API', () => {
   let Post;
   let User;
+  let testUser;
+  let testPost;
 
   beforeAll(async () => {
-    // Manually connect to DB for testing
-    await connectDB();
-    Post = require('../models/Post');
-    User = require('../models/User');
-  }, 30000); // Increase timeout for DB connection
+    Post = require('../src/models/Post');
+    User = require('../src/models/User');
+
+    // Ensure we have a test user and a test post for the feed queries to succeed quickly
+    testUser = await User.findOneAndUpdate(
+      { email: 'test-posts-api@example.com' },
+      { 
+        email: 'test-posts-api@example.com', 
+        displayName: 'Test Posts User',
+        firebaseUid: 'test-posts-uid-' + Date.now()
+      },
+      { upsert: true, new: true }
+    );
+
+    testPost = await Post.create({
+      userId: testUser._id,
+      content: 'Test Posts API Content',
+      caption: 'Caption for test posts API',
+      isPrivate: false,
+      visibility: 'Everyone'
+    });
+  });
 
   afterAll(async () => {
-    await mongoose.connection.close();
+    if (testPost) await Post.deleteOne({ _id: testPost._id });
+    if (testUser) await User.deleteOne({ _id: testUser._id });
   });
 
   describe('GET /api/posts/feed', () => {

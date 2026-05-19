@@ -1,6 +1,6 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
-const { app } = require('../src/index');
+const app = require('../src/index');
 
 describe('Feed API', () => {
   let testUser;
@@ -8,8 +8,8 @@ describe('Feed API', () => {
   let token;
 
   beforeAll(async () => {
-    const User = require('../models/User');
-    const Post = require('../models/Post');
+    const User = require('../src/models/User');
+    const Post = require('../src/models/Post');
     const jwt = require('jsonwebtoken');
 
     // Create a test user
@@ -38,8 +38,8 @@ describe('Feed API', () => {
   });
 
   afterAll(async () => {
-    const Post = require('../models/Post');
-    const User = require('../models/User');
+    const Post = require('../src/models/Post');
+    const User = require('../src/models/User');
     if (testPost) await Post.deleteOne({ _id: testPost._id });
     if (testUser) await User.deleteOne({ _id: testUser._id });
   });
