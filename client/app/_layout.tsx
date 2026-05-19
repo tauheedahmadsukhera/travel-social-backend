@@ -29,8 +29,6 @@ import { useAppStore } from '@/store/useAppStore';
 // Load location service (foreground passport checks + optional TaskManager shim)
 import '../services/locationService';
 
-const queryClient = new QueryClient();
-
 let setupNotificationListeners: any = () => {};
 let initializeBackend: any = () => Promise.resolve();
 
