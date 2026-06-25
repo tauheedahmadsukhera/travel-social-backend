@@ -31,18 +31,20 @@ router.get('/active', optionalAuth, async (req, res) => {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { userId } = req.query;
-    const requesterUserId = req.userId || null; // Use authenticated userId if available
+    const requesterUserId = req.userId || null;
     const limit = Math.min(parseInt(req.query.limit || '50'), 100);
-    
-    // Build initial match query
+
     const matchQuery = { expiresAt: { $gt: new Date() } };
     if (userId) matchQuery.userId = userId;
 
+    // PERF: match → sort → limit FIRST, then do the expensive $lookup joins.
+    // Without this order, MongoDB joins every document in the collection.
     const pipeline = [
       { $match: matchQuery },
       { $sort: { createdAt: -1 } },
       { $limit: limit },
-      // 1. Join with Users collection to get author details and privacy status
+
+      // 1. Join user details (only on the limited set)
       {
         $lookup: {
           from: 'users',
@@ -59,14 +61,15 @@ router.get('/', optionalAuth, async (req, res) => {
                 }
               }
             },
-            { $project: { displayName: 1, name: 1, avatar: 1, photoURL: 1, profilePicture: 1, isPrivate: 1 } }
+            { $project: { displayName: 1, name: 1, avatar: 1, photoURL: 1, profilePicture: 1, isPrivate: 1 } },
+            { $limit: 1 }
           ],
           as: 'author'
         }
       },
       { $unwind: { path: '$author', preserveNullAndEmptyArrays: true } },
-      
-      // 2. Join with Follows collection IF requesterUserId is provided
+
+      // 2. Follow-status join only when requester is known
       ...(requesterUserId ? [
         {
           $lookup: {
@@ -82,7 +85,8 @@ router.get('/', optionalAuth, async (req, res) => {
                     ]
                   }
                 }
-              }
+              },
+              { $limit: 1 }
             ],
             as: 'followStatus'
           }
@@ -92,28 +96,25 @@ router.get('/', optionalAuth, async (req, res) => {
         { $addFields: { isFollowing: false } }
       ]),
 
-      // 3. Privacy Filtering Logic
+      // 3. Privacy filter
       {
         $match: {
           $or: [
-            { 'author.isPrivate': { $ne: true } }, // Author is public
-            { userId: requesterUserId },           // Own story
-            { isFollowing: true }                  // Requester follows author
+            { 'author.isPrivate': { $ne: true } },
+            { userId: requesterUserId },
+            { isFollowing: true }
           ]
         }
       },
 
-      // 4. Format final output
+      // 4. Flatten output fields
       {
         $addFields: {
-          // Map author fields to flat structure for backward compatibility
           userName: { $ifNull: ['$author.displayName', { $ifNull: ['$author.name', { $ifNull: ['$userName', 'Anonymous'] }] }] },
           userAvatar: { $ifNull: ['$author.avatar', { $ifNull: ['$author.photoURL', { $ifNull: ['$author.profilePicture', '$userAvatar'] }] }] },
         }
       },
-      {
-        $unset: ['followStatus', 'isFollowing', 'author']
-      }
+      { $unset: ['followStatus', 'isFollowing', 'author'] }
     ];
 
     const stories = await mongoose.model('Story').aggregate(pipeline);
@@ -195,6 +196,7 @@ router.post('/', verifyToken, async (req, res) => {
     await story.save();
 
     console.log('[POST /stories] Story created:', story._id, 'for user:', user?.displayName || userName, 'postMetadata:', normalizedPostMetadata ? 'yes' : 'no', 'textOverlays:', normalizedPostMetadata?.textOverlays?.length ?? 0);
+    console.log('[POST /stories] Full postMetadata saved:', JSON.stringify(normalizedPostMetadata, null, 2));
 
     // BACKGROUND TRIGGER: Notify followers about new story
     (async () => {

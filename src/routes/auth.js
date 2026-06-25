@@ -634,4 +634,75 @@ router.post('/tiktok', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/auth/snapchat
+ * Exchanges a Snapchat OAuth code for access token and profile info.
+ */
+router.post('/snapchat', async (req, res) => {
+  try {
+    const { code, redirectUri } = req.body;
+    if (!code || !redirectUri) {
+      return res.status(400).json({ success: false, error: 'Missing code or redirectUri' });
+    }
+
+    const clientId = process.env.SNAPCHAT_CLIENT_ID || 'df984df9-50a4-43a7-a90f-7a9e303dc92d';
+    const clientSecret = process.env.SNAPCHAT_CLIENT_SECRET || '0727a5df-e02e-4bf0-a716-5dba1c20f017';
+
+    const axios = require('axios');
+
+    // Exchange code for access token
+    const params = new URLSearchParams();
+    params.append('client_id', clientId);
+    params.append('client_secret', clientSecret);
+    params.append('code', code);
+    params.append('grant_type', 'authorization_code');
+    params.append('redirect_uri', redirectUri);
+
+    const tokenResponse = await axios.post(
+      'https://accounts.snapchat.com/accounts/oauth2/token',
+      params.toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    const tokenData = tokenResponse.data;
+    if (!tokenData || !tokenData.access_token) {
+      logger.error('❌ Snapchat token exchange failed: %O', tokenData);
+      return res.status(400).json({ success: false, error: 'Failed to obtain access token from Snapchat' });
+    }
+
+    // Fetch user info via Snap Kit GraphQL
+    const userInfoResponse = await axios.post(
+      'https://kit.snapchat.com/v1/me',
+      { query: '{me{displayName bitmoji{avatar} externalId}}' },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenData.access_token}`,
+        },
+      }
+    );
+
+    const me = userInfoResponse.data?.data?.me;
+    if (!me) {
+      logger.error('❌ Snapchat user info failed: %O', userInfoResponse.data);
+      return res.status(400).json({ success: false, error: 'Failed to retrieve Snapchat user profile' });
+    }
+
+    res.json({
+      success: true,
+      accessToken: tokenData.access_token,
+      externalId: me.externalId,
+      displayName: me.displayName || 'Snapchat User',
+      avatarUrl: me.bitmoji?.avatar || null,
+    });
+  } catch (error) {
+    logger.error('❌ Snapchat auth error: %s', error.response?.data ? JSON.stringify(error.response.data) : error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error_description || error.response?.data?.error || error.message || 'Internal server error'
+    });
+  }
+});
+
 module.exports = router;
+

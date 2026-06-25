@@ -23,5 +23,7 @@ const storySchema = new mongoose.Schema({
 
 storySchema.index({ userId: 1, createdAt: -1 });
 storySchema.index({ createdAt: -1 });
+// Compound index for the active-stories feed: match expiresAt > now, sort by createdAt
+storySchema.index({ expiresAt: 1, createdAt: -1 });
 
 module.exports = mongoose.models.Story || mongoose.model('Story', storySchema);

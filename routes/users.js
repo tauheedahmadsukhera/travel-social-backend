@@ -442,6 +442,10 @@ router.get('/:userId/aggregated', optionalAuth, async (req, res) => {
           { userId: { $in: targetResolved.candidates.filter(c => mongoose.Types.ObjectId.isValid(c)).map(c => new mongoose.Types.ObjectId(c)) } }
         ]
       }).select('ticketCount stamps').lean(),
+      // Actual Followers count
+      Follow.countDocuments({ followingId: { $in: targetResolved.candidates } }),
+      // Actual Following count
+      Follow.countDocuments({ followerId: { $in: targetResolved.candidates } }),
     ];
 
     // Optional follow status check
@@ -462,7 +466,7 @@ router.get('/:userId/aggregated', optionalAuth, async (req, res) => {
       promises.push(Promise.resolve(null)); // dummy request
     }
 
-    const [postCount, passportData, followDoc, followReqDoc] = await Promise.all(promises);
+    const [postCount, passportData, followersCount, followingCount, followDoc, followReqDoc] = await Promise.all(promises);
 
     const isFollowing = !!followDoc;
     const followRequestPending = !!followReqDoc;
@@ -474,8 +478,8 @@ router.get('/:userId/aggregated', optionalAuth, async (req, res) => {
     const responseData = {
       ...user,
       postsCount: postCount || 0,
-      followersCount: user.followersCount || 0,
-      followingCount: user.followingCount || 0,
+      followersCount: followersCount || 0,
+      followingCount: followingCount || 0,
       passportCount: passportData?.stamps?.length ?? passportData?.ticketCount ?? 0,
       isFollowing,
       followRequestPending,
@@ -526,6 +530,16 @@ router.get('/:userId', optionalAuth, async (req, res) => {
       user.avatar = avatarUrl;
       user.photoURL = avatarUrl;
       user.profilePicture = avatarUrl;
+
+      // Query actual followers/following count from Follow collection
+      const Follow = mongoose.model('Follow');
+      const targetResolved = await resolveUserIdentifiers(userId);
+      const [followersCount, followingCount] = await Promise.all([
+        Follow.countDocuments({ followingId: { $in: targetResolved.candidates } }),
+        Follow.countDocuments({ followerId: { $in: targetResolved.candidates } })
+      ]);
+      user.followersCount = followersCount;
+      user.followingCount = followingCount;
       
       const userObj = user;
 
