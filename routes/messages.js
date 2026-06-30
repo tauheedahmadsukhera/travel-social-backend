@@ -35,8 +35,18 @@ router.get('/:conversationId/messages', verifyToken, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Forbidden: You are not a participant in this conversation' });
     }
 
-    // 2. Fetch messages
-    const messages = await Message.find({ conversationId: req.params.conversationId }).sort({ createdAt: 1 }).lean();
+    // 2. Fetch messages with pagination (Industrial Standard)
+    const limit = parseInt(req.query.limit, 10) || 40;
+    const skip = parseInt(req.query.skip, 10) || 0;
+
+    const messages = await Message.find({ conversationId: req.params.conversationId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Reverse to return in chronological order (oldest to newest)
+    messages.reverse();
 
     // BATCH FETCH: Get all unique sender IDs
     const senderIds = Array.from(new Set(messages.map(m => String(m.senderId))));
