@@ -347,11 +347,24 @@ router.get('/users/:userId/following', optionalAuth, async (req, res) => {
       followingId: { $in: targetUserIdCandidates }
     });
 
+    // Check if the current requesting user is following each user in the list
+    let currentUserFollowing = [];
+    if (currentUserId) {
+      const current = await resolveUserIdentifiers(currentUserId);
+      currentUserFollowing = await Follow.find({
+        followerId: { $in: current.candidates },
+        followingId: { $in: followerIdCandidates }
+      });
+    }
+
     // Map to user items with follow status
     const userItems = users.map(user => {
       const uid = user._id ? String(user._id) : (user.firebaseUid ? String(user.firebaseUid) : '');
       const idCandidates = [uid, user.firebaseUid ? String(user.firebaseUid) : null].filter(Boolean);
       const isFollowingYou = followsBack.some(f => idCandidates.includes(String(f.followerId)));
+      const isFollowing = currentUserId
+        ? currentUserFollowing.some(f => idCandidates.includes(String(f.followingId)))
+        : (userId === currentUserId);
 
       const displayName = user.displayName || user.name || 'User';
       const resolvedAvatar = user.avatar || user.photoURL || user.profilePicture || '';
@@ -362,7 +375,7 @@ router.get('/users/:userId/following', optionalAuth, async (req, res) => {
         name: displayName,
         username: user.username || '',
         avatar: resolvedAvatar,
-        isFollowing: true, // They are in following list
+        isFollowing,
         isFollowingYou
       };
     });

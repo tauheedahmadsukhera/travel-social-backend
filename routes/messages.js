@@ -46,7 +46,7 @@ router.get('/:conversationId/messages', verifyToken, async (req, res) => {
       $or: [
         { firebaseUid: { $in: senderIds } },
         { uid: { $in: senderIds } },
-        { _id: { $in: senderIds.filter(id => mongoose.Types.isValidObjectId(id) || mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } }
+        { _id: { $in: senderIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } }
       ]
     }).select('displayName name username avatar photoURL profilePicture email').lean().catch(() => []);
 

@@ -10,7 +10,7 @@ const createPostSchema = z.object({
     location: z.string().optional(),
     category: z.string().optional(),
     isPrivate: z.boolean().optional(),
-    visibility: z.enum(['Everyone', 'Friends', 'Family']).optional(),
+    visibility: z.string().optional(),
   })
 });
 
@@ -21,7 +21,7 @@ const updatePostSchema = z.object({
     location: z.string().optional(),
     category: z.string().optional(),
     isPrivate: z.boolean().optional(),
-    visibility: z.enum(['Everyone', 'Friends', 'Family']).optional(),
+    visibility: z.string().optional(),
   })
 });
 

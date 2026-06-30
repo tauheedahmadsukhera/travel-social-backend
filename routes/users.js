@@ -1812,7 +1812,14 @@ router.delete('/:userId', async (req, res) => {
       Comment.deleteMany({ userId: { $in: candidateStrings } }),
       Follow.deleteMany({ followerId: { $in: candidateStrings } }),
       Follow.deleteMany({ followingId: { $in: candidateStrings } }),
-      Passport.deleteMany({ userId: { $in: candidateStrings } })
+      Passport.deleteMany({ userId: { $in: candidateStrings } }),
+      Post.updateMany({}, {
+        $pull: {
+          taggedUserIds: { $in: candidateStrings },
+          likes: { $in: candidateStrings },
+          savedBy: { $in: candidateStrings }
+        }
+      })
     ]);
 
     // Finally delete the user
