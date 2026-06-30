@@ -25,6 +25,16 @@ const sendMessageSchema = z.object({
   })
 });
 
+const createConversationSchema = z.object({
+  body: z.object({
+    name: z.string().min(1, 'Group name is required'),
+    avatar: z.string().optional(),
+    description: z.string().optional(),
+    memberIds: z.array(z.string()).min(1, 'At least one member is required'),
+  })
+});
+
 module.exports = {
-  sendMessageSchema
+  sendMessageSchema,
+  createConversationSchema
 };
