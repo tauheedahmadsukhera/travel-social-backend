@@ -964,6 +964,18 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
       ].filter(Boolean)
     });
 
+    const senderVariants = await resolveUserIdVariants(String(normalizedSenderId));
+    const senderSet = new Set([String(normalizedSenderId), ...senderVariants.map(String)]);
+
+    // SECURITY AUTHORIZATION CHECK: Sender must be a participant of the conversation if it already exists
+    if (convo) {
+      const isParticipant = Array.isArray(convo.participants) && convo.participants.some(p => senderSet.has(String(p)));
+      if (!isParticipant) {
+        logger.warn(`🚫 Forbidden message send attempt by user ${normalizedSenderId} to conversation ${convo.conversationId || convo._id}`);
+        return res.status(403).json({ success: false, error: 'Forbidden: You are not a participant in this conversation' });
+      }
+    }
+
     // Always calculate standardConversationId for consistency
     const participants = [normalizedSenderId, normalizedRecipientId].filter(Boolean);
     const sortedParticipants = participants.sort();
@@ -987,8 +999,6 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
     const isGroupConversation = !!convo?.isGroup;
 
     // If sender had previously hidden/archived this conversation, revive it on new outgoing message.
-    const senderVariants = await resolveUserIdVariants(String(normalizedSenderId));
-    const senderSet = new Set([String(normalizedSenderId), ...senderVariants.map(String)]);
     convo.deletedBy = (Array.isArray(convo.deletedBy) ? convo.deletedBy : []).filter((id) => !senderSet.has(String(id)));
     convo.archivedBy = (Array.isArray(convo.archivedBy) ? convo.archivedBy : []).filter((id) => !senderSet.has(String(id)));
 
