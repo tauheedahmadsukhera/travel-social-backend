@@ -6,10 +6,18 @@ const { verifyToken } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
 
 // Configure Cloudinary
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+if (!cloudName || !apiKey || !apiSecret) {
+  logger.error('🚨 Cloudinary Configuration Error: Missing required environment variables (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, or CLOUDINARY_API_SECRET). Please verify your environment settings.');
+}
+
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  cloud_name: cloudName,
+  api_key: apiKey,
+  api_secret: apiSecret
 });
 
 // Configure multer for memory storage with strict limits
@@ -27,6 +35,9 @@ const uploadStory = multer({
  * Upload file to Cloudinary
  */
 async function uploadToCloudinary(fileBuffer, folder, resourceType = 'auto', options = {}) {
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error('Cloudinary environment variables are missing on the server. Please define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your server environment variables (e.g. Render Dashboard).');
+  }
   return new Promise((resolve, reject) => {
     const uploadOptions = {
       folder: folder,

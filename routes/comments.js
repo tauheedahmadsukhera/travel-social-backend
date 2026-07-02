@@ -176,6 +176,25 @@ router.post('/:postId/comments/:commentId/like', verifyToken, async (req, res) =
         comment.likes.push(userId);
         comment.likesCount = comment.likes.length;
         await comment.save();
+
+        // Notify comment author
+        if (comment.userId && String(comment.userId) !== String(userId)) {
+          try {
+            const User = mongoose.model('User');
+            const sender = await User.findById(userId).select('displayName name').lean();
+            const senderName = sender?.displayName || sender?.name || 'Someone';
+
+            notificationQueue.add('commentLike', {
+              userId: comment.userId,
+              senderId: userId,
+              title: 'Comment Liked! ❤️',
+              body: `${senderName} liked your comment: "${comment.text.substring(0, 40)}${comment.text.length > 40 ? '...' : ''}"`,
+              data: { postId, type: 'COMMENT_LIKE', screen: 'home' }
+            }).catch(() => {});
+          } catch (notiErr) {
+            console.warn('Comment like notification warning:', notiErr.message);
+          }
+        }
       }
       return res.json({ success: true, likesCount: comment.likesCount });
     }
@@ -199,6 +218,25 @@ router.post('/:postId/comments/:commentId/like', verifyToken, async (req, res) =
           if (!c.likes.includes(userId)) {
             c.likes.push(userId);
             c.likesCount = c.likes.length;
+
+            // Notify comment author (Legacy inline)
+            if (c.userId && String(c.userId) !== String(userId)) {
+              try {
+                const User = mongoose.model('User');
+                const sender = await User.findById(userId).select('displayName name').lean();
+                const senderName = sender?.displayName || sender?.name || 'Someone';
+
+                notificationQueue.add('commentLike', {
+                  userId: c.userId,
+                  senderId: userId,
+                  title: 'Comment Liked! ❤️',
+                  body: `${senderName} liked your comment: "${(c.text || c.content || '').substring(0, 40)}"`,
+                  data: { postId, type: 'COMMENT_LIKE', screen: 'home' }
+                }).catch(() => {});
+              } catch (notiErr) {
+                console.warn('Comment like notification warning:', notiErr.message);
+              }
+            }
           }
           newLikesCount = c.likesCount;
           post.markModified(field);
@@ -419,6 +457,26 @@ router.post('/:postId/comments/:commentId/like', verifyToken, async (req, res) =
     comment.likes.push(userId);
     comment.likesCount = comment.likes.length;
     await comment.save();
+
+    // Notify comment author
+    if (comment.userId && String(comment.userId) !== String(userId)) {
+      try {
+        const User = mongoose.model('User');
+        const sender = await User.findById(userId).select('displayName name').lean();
+        const senderName = sender?.displayName || sender?.name || 'Someone';
+
+        notificationQueue.add('commentLike', {
+          userId: comment.userId,
+          senderId: userId,
+          title: 'Comment Liked! ❤️',
+          body: `${senderName} liked your comment: "${comment.text.substring(0, 40)}${comment.text.length > 40 ? '...' : ''}"`,
+          data: { postId: req.params.postId, type: 'COMMENT_LIKE', screen: 'home' }
+        }).catch(() => {});
+      } catch (notiErr) {
+        console.warn('Comment like notification warning:', notiErr.message);
+      }
+    }
+
     res.json({ success: true, likesCount: comment.likesCount });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -479,6 +537,25 @@ router.post('/:postId/comments/:commentId/replies/:replyId/like', verifyToken, a
       reply.likesCount = reply.likes.length;
       comment.markModified('replies');
       await comment.save();
+
+      // Notify reply author
+      if (reply.userId && String(reply.userId) !== String(userId)) {
+        try {
+          const User = mongoose.model('User');
+          const sender = await User.findById(userId).select('displayName name').lean();
+          const senderName = sender?.displayName || sender?.name || 'Someone';
+
+          notificationQueue.add('replyLike', {
+            userId: reply.userId,
+            senderId: userId,
+            title: 'Reply Liked! ❤️',
+            body: `${senderName} liked your reply: "${reply.text.substring(0, 40)}${reply.text.length > 40 ? '...' : ''}"`,
+            data: { postId: req.params.postId, type: 'REPLY_LIKE', screen: 'home' }
+          }).catch(() => {});
+        } catch (notiErr) {
+          console.warn('Reply like notification warning:', notiErr.message);
+        }
+      }
     }
 
     res.json({ success: true, likesCount: reply.likesCount });
@@ -559,6 +636,24 @@ router.post('/:postId/comments/:commentId/replies', verifyToken, async (req, res
       await Post.findByIdAndUpdate(req.params.postId, { $inc: { commentsCount: 1, commentCount: 1 } });
     } catch (e) {
       console.warn('Post count update failed:', e.message);
+    }
+
+    if (result && result.userId && String(result.userId) !== String(userId)) {
+      try {
+        const User = mongoose.model('User');
+        const sender = await User.findById(userId).select('displayName name').lean();
+        const senderName = sender?.displayName || sender?.name || 'Someone';
+
+        notificationQueue.add('commentReply', {
+          userId: result.userId,
+          senderId: userId,
+          title: 'New Reply! 💬',
+          body: `${senderName} replied to your comment: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`,
+          data: { postId: req.params.postId, type: 'COMMENT_REPLY', screen: 'home' }
+        }).catch(() => {});
+      } catch (notiErr) {
+        console.warn('Comment reply notification warning:', notiErr.message);
+      }
     }
 
     res.status(201).json({ success: true, id: reply._id, data: reply });
