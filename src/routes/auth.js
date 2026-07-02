@@ -586,8 +586,8 @@ router.post('/tiktok', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing code or redirectUri' });
     }
 
-    const clientKey = 'awsmbaw0wj2exq5v';
-    const clientSecret = 'YG9FFyouPCjN4xmbh0qjftUvMga6XD9t';
+    const clientKey = process.env.TIKTOK_CLIENT_KEY || 'aw5vf8hmmx7aqtn1';
+    const clientSecret = process.env.TIKTOK_CLIENT_SECRET || 'kxrCEDpT7CeHg9vM9Axuga8STjc5xdrX';
 
     const axios = require('axios');
     const params = new URLSearchParams();
