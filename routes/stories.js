@@ -12,13 +12,56 @@ const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware'
 router.get('/active', optionalAuth, async (req, res) => {
   try {
     const now = new Date();
-    const Post = mongoose.model('Post'); // Some stories might be posts? No, usually Story.
     const Story = mongoose.model('Story');
+    const User = mongoose.model('User');
+    const Group = mongoose.model('Group');
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
     
-    // Simple fetch of all non-expired stories
-    const stories = await Story.find({ expiresAt: { $gt: now } }).sort({ createdAt: -1 }).limit(100).lean();
+    // Resolve requester's user variants and group memberships
+    const requesterUserId = req.userId || null;
+    let viewerVariants = [];
+    let viewerGroupIds = [];
+    if (requesterUserId) {
+      const { candidates } = await resolveUserIdentifiers(requesterUserId);
+      viewerVariants = candidates.map(id => String(id));
+      const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+      viewerGroupIds = viewerGroups.map(g => String(g._id));
+    }
+
+    const matchQuery = { expiresAt: { $gt: now } };
+    if (requesterUserId) {
+      matchQuery.$or = [
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ];
+    } else {
+      matchQuery.isPrivate = { $ne: true };
+      matchQuery.visibility = { $in: ['Everyone', 'everyone', null, undefined] };
+    }
+
+    // Fetch filtered non-expired stories
+    const stories = await Story.find(matchQuery).sort({ createdAt: -1 }).limit(100).lean();
     
-    res.json({ success: true, data: stories });
+    // Resolve active users to filter out stories from deleted users
+    const userIds = [...new Set(stories.map(s => s.userId))].filter(Boolean);
+    const activeUsers = await User.find({
+      $or: [
+        { _id: { $in: userIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
+        { firebaseUid: { $in: userIds } },
+        { uid: { $in: userIds } }
+      ]
+    }).select('_id firebaseUid uid').lean();
+
+    const activeUserSet = new Set();
+    activeUsers.forEach(u => {
+      activeUserSet.add(String(u._id));
+      if (u.firebaseUid) activeUserSet.add(String(u.firebaseUid));
+      if (u.uid) activeUserSet.add(String(u.uid));
+    });
+
+    const filteredStories = stories.filter(s => s.userId && activeUserSet.has(String(s.userId)));
+    res.json({ success: true, data: filteredStories });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -33,9 +76,31 @@ router.get('/', optionalAuth, async (req, res) => {
     const { userId } = req.query;
     const requesterUserId = req.userId || null;
     const limit = Math.min(parseInt(req.query.limit || '50'), 100);
+    const Group = mongoose.model('Group');
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+
+    let viewerVariants = [];
+    let viewerGroupIds = [];
+    if (requesterUserId) {
+      const { candidates } = await resolveUserIdentifiers(requesterUserId);
+      viewerVariants = candidates.map(id => String(id));
+      const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+      viewerGroupIds = viewerGroups.map(g => String(g._id));
+    }
 
     const matchQuery = { expiresAt: { $gt: new Date() } };
     if (userId) matchQuery.userId = userId;
+
+    if (requesterUserId) {
+      matchQuery.$or = [
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ];
+    } else {
+      matchQuery.isPrivate = { $ne: true };
+      matchQuery.visibility = { $in: ['Everyone', 'everyone', null, undefined] };
+    }
 
     // PERF: match → sort → limit FIRST, then do the expensive $lookup joins.
     // Without this order, MongoDB joins every document in the collection.
@@ -96,10 +161,12 @@ router.get('/', optionalAuth, async (req, res) => {
         { $addFields: { isFollowing: false } }
       ]),
 
-      // 3. Privacy filter
+      // 3. Privacy filter and author existence check
       {
         $match: {
+          author: { $exists: true, $ne: null },
           $or: [
+            { isPrivate: true },
             { 'author.isPrivate': { $ne: true } },
             { userId: requesterUserId },
             { isFollowing: true }
@@ -440,7 +507,7 @@ router.post('/:storyId/comments', verifyToken, async (req, res) => {
     const comment = {
       _id: new mongoose.Types.ObjectId(),
       userId,
-      userName: user?.displayName || user?.name || userName || 'Anonymous',
+      userName: user?.displayName || user?.name || user?.username || userName || 'Anonymous',
       userAvatar: user?.avatar || user?.photoURL || null,
       text,
       createdAt: new Date()

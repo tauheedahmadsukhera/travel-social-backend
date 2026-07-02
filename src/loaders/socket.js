@@ -10,6 +10,8 @@ const initSockets = (server, secret) => {
   // SECURITY: Use same origin policy as Express CORS — no wildcard in production
   const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
   const io = new Server(server, { 
+    pingInterval: 5000,
+    pingTimeout: 4000,
     cors: { 
       origin: process.env.NODE_ENV === 'production' ? allowedOrigins : '*',
       methods: ['GET', 'POST']

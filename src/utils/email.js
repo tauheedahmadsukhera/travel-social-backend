@@ -1,6 +1,12 @@
 const nodemailer = require('nodemailer');
 
 const sendEmail = async (options) => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    const error = new Error('SMTP credentials are not configured in the server environment.');
+    error.isConfigError = true;
+    throw error;
+  }
+
   // Create a transporter using SMTP settings from .env
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',

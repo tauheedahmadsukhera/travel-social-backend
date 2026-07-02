@@ -788,9 +788,32 @@ router.get('/:userId/posts', optionalAuth, async (req, res) => {
 
     // Find posts by userId (could be MongoDB ObjectId or Firebase UID)
     const resolved = await resolveUserIdentifiers(userId);
+
+    // Resolve requester's user variants and group memberships
+    let viewerVariants = [];
+    let viewerGroupIds = [];
+    if (requesterUserId) {
+      const requester = await resolveUserIdentifiers(requesterUserId);
+      viewerVariants = requester.candidates.map(id => String(id));
+      const Group = mongoose.model('Group');
+      const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+      viewerGroupIds = viewerGroups.map(g => String(g._id));
+    }
+
     const postsQuery = {
       userId: { $in: resolved.candidates.map(String) }
     };
+
+    if (requesterUserId) {
+      postsQuery.$or = [
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ];
+    } else {
+      postsQuery.isPrivate = { $ne: true };
+      postsQuery.visibility = { $in: ['Everyone', 'everyone', null, undefined] };
+    }
 
     const enriched = await postService.getEnrichedPosts(postsQuery, {
       skip,
@@ -1779,6 +1802,17 @@ router.put('/:userId/push-token', async (req, res) => {
   }
 });
 
+// Helper to lazy-load Firebase Admin SDK for user deletion
+function getFirebaseAdmin() {
+  try {
+    const admin = require('firebase-admin');
+    if (!admin.apps.length) return null;
+    return admin;
+  } catch {
+    return null;
+  }
+}
+
 // DELETE /api/users/:userId - Delete user account
 router.delete('/:userId', async (req, res) => {
   try {
@@ -1789,6 +1823,10 @@ router.delete('/:userId', async (req, res) => {
     const Comment = mongoose.model('Comment');
     const Follow = mongoose.model('Follow');
     const Passport = mongoose.model('Passport');
+    const Story = mongoose.model('Story');
+    const SavedPost = mongoose.model('SavedPost');
+    const Highlight = mongoose.model('Highlight');
+    const Section = mongoose.model('Section');
 
     const query = {
       $or: [
@@ -1804,15 +1842,39 @@ router.delete('/:userId', async (req, res) => {
     }
 
     const userCandidates = await resolveUserIdentifiers(userId);
-    const candidateStrings = userCandidates.candidates.map(String);
+    const candidateStrings = [...new Set([
+      ...userCandidates.candidates.map(String),
+      String(user._id),
+      user.firebaseUid,
+      user.uid,
+      userId
+    ].filter(Boolean).map(String))];
 
-    // Delete associated data
+    // Delete associated authentication record in Firebase Auth
+    const firebaseUid = user.firebaseUid || user.uid;
+    if (firebaseUid) {
+      const admin = getFirebaseAdmin();
+      if (admin) {
+        try {
+          await admin.auth().deleteUser(firebaseUid);
+          console.log('[DELETE /users/:userId] Successfully deleted user from Firebase Auth:', firebaseUid);
+        } catch (authErr) {
+          console.error('[DELETE /users/:userId] Firebase Auth deletion warning:', authErr.message);
+        }
+      }
+    }
+
+    // Delete associated data across all models
     await Promise.all([
       Post.deleteMany({ userId: { $in: candidateStrings } }),
       Comment.deleteMany({ userId: { $in: candidateStrings } }),
       Follow.deleteMany({ followerId: { $in: candidateStrings } }),
       Follow.deleteMany({ followingId: { $in: candidateStrings } }),
       Passport.deleteMany({ userId: { $in: candidateStrings } }),
+      Story.deleteMany({ userId: { $in: candidateStrings } }),
+      SavedPost.deleteMany({ userId: { $in: candidateStrings } }),
+      Highlight.deleteMany({ userId: { $in: candidateStrings } }),
+      Section.deleteMany({ userId: { $in: candidateStrings } }),
       Post.updateMany({}, {
         $pull: {
           taggedUserIds: { $in: candidateStrings },

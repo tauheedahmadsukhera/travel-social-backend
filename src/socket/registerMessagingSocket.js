@@ -133,6 +133,7 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
 
   async function assertMessagingAllowed(convo, authUserId, recipientId) {
     if (!(await isConversationMember(convo, authUserId))) return false;
+    if (convo.isGroup) return true;
     const recipVars = await resolveUserIdVariants(recipientId);
     const parts = (convo.participants || []).map(String);
     return recipVars.some((v) => parts.includes(v));
@@ -257,7 +258,7 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
         return socket.emit('messageError', { error: 'Invalid message payload', details: validation.error.format() });
       }
 
-      let { conversationId, senderId, recipientId, text, timestamp } = data || {};
+      let { conversationId, senderId, recipientId, text, timestamp, sharedPost, sharedStory, mediaType, mediaUrl } = data || {};
       const authId = jwtSecret ? socket.data.authUserId : senderId;
       if (jwtSecret && !authId) {
         return socket.emit('messageError', { error: 'Unauthorized' });
@@ -282,11 +283,25 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
         timestamp: timestamp || new Date(),
         read: false,
         delivered: false,
+        sharedPost,
+        sharedStory,
+        mediaType: mediaType || (sharedPost ? 'post' : (sharedStory ? 'story' : 'text')),
+        mediaUrl
       };
 
       const actualConversationId = convo.conversationId || String(convo._id);
-      convo.messages.push(message);
-      convo.lastMessage = text;
+      
+      let previewText = text || '';
+      if (!previewText) {
+        if (sharedPost) {
+          previewText = 'Shared a post';
+        } else if (sharedStory) {
+          previewText = 'Shared a story';
+        } else if (mediaType) {
+          previewText = `[${mediaType.toUpperCase()}]`;
+        }
+      }
+      convo.lastMessage = previewText;
       convo.lastMessageAt = new Date();
       await convo.save();
 
@@ -302,6 +317,10 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
           timestamp: message.timestamp,
           read: false,
           delivered: false,
+          sharedPost,
+          sharedStory,
+          mediaType: message.mediaType,
+          mediaUrl
         });
       } catch (e) {
         logger.warn('⚠️ Message collection write failed: %s', e.message);
@@ -357,20 +376,29 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
       if (convo) {
         if (jwtSecret && !(await isConversationMember(convo, authId))) return;
 
-        const message = convo.messages.find((m) => m.id === messageId);
+        const Message = mongoose.model('Message');
+        const message = await Message.findOne({
+          $or: [
+            { id: messageId },
+            { _id: mongoose.Types.ObjectId.isValid(messageId) ? new mongoose.Types.ObjectId(messageId) : null }
+          ]
+        });
         if (!message) return;
+
+        const recipientId = String(message.recipientId);
+        const senderId = String(message.senderId);
 
         if (jwtSecret) {
           const variants = await resolveUserIdVariants(authId);
-          if (!variants.includes(String(message.recipientId))) return;
-        } else if (message.recipientId !== userId) {
+          if (!variants.includes(recipientId)) return;
+        } else if (recipientId !== String(userId)) {
           return;
         }
 
         message.read = true;
-        await convo.save();
+        await message.save();
 
-        const senderSocketId = connectedUsers.get(message.senderId);
+        const senderSocketId = connectedUsers.get(senderId);
         if (senderSocketId) {
           io.to(senderSocketId).emit('messageRead', { messageId, conversationId });
         }
@@ -426,8 +454,8 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
         tempId,
       } = data || {};
 
-      if (!conversationId || !recipientId) {
-        return socket.emit('messageError', { error: 'Invalid message payload' });
+      if (!conversationId) {
+        return socket.emit('messageError', { error: 'Invalid message payload: missing conversationId' });
       }
       text = clampText(text || '', 4000);
       mediaType = clampText(String(mediaType || ''), 20);
@@ -472,7 +500,6 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
       };
 
       const actualConversationId = convo.conversationId || String(convo._id);
-      convo.messages.push(message);
       convo.lastMessage = `[${mediaType?.toUpperCase()}]`;
       convo.lastMessageAt = new Date();
       await convo.save();

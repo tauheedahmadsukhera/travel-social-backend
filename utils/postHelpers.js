@@ -28,7 +28,7 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       return false;
     };
     
-    // Collect all unique user IDs from reactions and inline comments
+    // Collect all unique user IDs from reactions, inline comments, and tags
     const userIds = new Set();
     posts.forEach(post => {
       const p = post.toObject ? post.toObject() : post;
@@ -39,6 +39,9 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       }
       if (Array.isArray(p.comments)) {
         p.comments.forEach(c => { if (c.userId) userIds.add(String(c.userId)); });
+      }
+      if (Array.isArray(p.taggedUserIds)) {
+        p.taggedUserIds.forEach(id => { if (id) userIds.add(String(id)); });
       }
     });
 
@@ -64,7 +67,8 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
         photoURL: u.photoURL || avatar || null,
         profilePicture: u.profilePicture || avatar || null,
         name,
-        displayName: u.displayName || name
+        displayName: u.displayName || name,
+        username: u.username || u.displayName || name
       };
       
       if (id) userMap[id] = profile;
@@ -197,6 +201,29 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
           userName: userMap[String(r.userId)]?.name || r.userName || 'User',
           userAvatar: userMap[String(r.userId)]?.avatar || userMap[String(r.userId)]?.photoURL || userMap[String(r.userId)]?.profilePicture || r.userAvatar || null
         }));
+      }
+
+      // Enrich taggedUsers array
+      if (Array.isArray(p.taggedUserIds) && p.taggedUserIds.length > 0) {
+        p.taggedUsers = p.taggedUserIds.map(id => {
+          const u = userMap[String(id)];
+          return u ? {
+            _id: String(id),
+            id: String(id),
+            uid: String(id),
+            displayName: u.displayName || u.name || 'User',
+            username: u.username || u.displayName || 'user',
+            avatar: u.avatar || u.photoURL || null
+          } : {
+            _id: String(id),
+            id: String(id),
+            uid: String(id),
+            displayName: 'User',
+            username: 'user'
+          };
+        });
+      } else {
+        p.taggedUsers = [];
       }
 
       p.likeCount = Math.max(p.likesCount || 0, Array.isArray(p.likes) ? p.likes.length : 0);

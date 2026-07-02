@@ -19,6 +19,27 @@ const sendMessageSchema = z.object({
       text: z.string(),
       senderId: z.string()
     }).optional(),
+    sharedPost: z.object({
+      postId: z.string().optional(),
+      imageUrl: z.string().optional(),
+      mediaUrls: z.array(z.string()).optional(),
+      mediaCount: z.number().optional(),
+      text: z.string().optional(),
+      caption: z.string().optional(),
+      userId: z.string().optional(),
+      userDisplayName: z.string().optional(),
+      userName: z.string().optional(),
+      userAvatar: z.string().optional(),
+    }).optional(),
+    sharedStory: z.object({
+      storyId: z.string().optional(),
+      id: z.string().optional(),
+      mediaUrl: z.string().optional(),
+      mediaType: z.string().optional(),
+      userId: z.string().optional(),
+      userName: z.string().optional(),
+      userAvatar: z.string().optional(),
+    }).optional(),
   }).refine((data) => data.senderId || data.sender, {
     message: "Missing senderId or sender",
     path: ["senderId"]

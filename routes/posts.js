@@ -37,7 +37,23 @@ router.get('/', verifyToken, cacheMiddleware(300), async (req, res) => {
     const skip = parseInt(req.query.skip || '0');
     const viewerId = req.userId; // Use authenticated userId
 
-    const enriched = await postService.getEnrichedPosts({}, { skip, limit, viewerId });
+    // Resolve viewer variants and group memberships to restrict search query
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { candidates } = await resolveUserIdentifiers(viewerId);
+    const viewerVariants = candidates.map(id => String(id));
+    const Group = mongoose.model('Group');
+    const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+    const viewerGroupIds = viewerGroups.map(g => String(g._id));
+
+    const visibilityQuery = {
+      $or: [
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ]
+    };
+
+    const enriched = await postService.getEnrichedPosts(visibilityQuery, { skip, limit, viewerId });
     
     // Log feed view for analytics
     logEvent('FEED_VIEWED', { count: enriched.length, skip, limit }, viewerId);
@@ -139,10 +155,8 @@ router.get('/recommended', optionalAuth, async (req, res, next) => {
     const posts = await Post.aggregate([
       { 
         $match: { 
-          $or: [
-            { isPrivate: { $ne: true } },
-            { visibility: 'Everyone' }
-          ]
+          isPrivate: { $ne: true },
+          visibility: { $in: ['Everyone', 'everyone', null, undefined] }
         } 
       },
       { $sample: { size: limit } },
@@ -698,11 +712,11 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
           { firebaseUid: c.userId },
           { uid: c.userId }
         ].filter(q => q._id !== null || q.firebaseUid || q.uid)
-      }).select('displayName name avatar photoURL profilePicture').lean();
+      }).select('displayName name username avatar photoURL profilePicture').lean();
 
       return {
         ...c,
-        userName: author?.displayName || author?.name || 'Anonymous',
+        userName: author?.displayName || author?.name || author?.username || 'Anonymous',
         userAvatar: author?.avatar || author?.photoURL || author?.profilePicture || null
       };
     }));

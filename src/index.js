@@ -1,4 +1,21 @@
 require('dotenv').config();
+// Force Node.js to prefer IPv4 over IPv6 resolving to prevent 30s delays on DNS resolution for Google/Firebase services (Firebase/OAuth APIs)
+// Intercepting dns.lookup globally is more robust than setDefaultResultOrder because on environments with misconfigured IPv6 (like Render),
+// the OS resolver might still hang on the IPv6 (AAAA) query before returning results, causing a 30s delay. Forcing family: 4 prevents this entirely.
+const dns = require('dns');
+const originalLookup = dns.lookup;
+dns.lookup = function (hostname, options, callback) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  } else if (typeof options === 'number') {
+    options = { family: options };
+  } else if (!options) {
+    options = {};
+  }
+  options.family = 4;
+  return originalLookup.call(dns, hostname, options, callback);
+};
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -122,6 +139,28 @@ const connectDatabase = async () => {
       serverSelectionTimeoutMS: 5000, // Match test-db options
     });
     console.log('✅ MongoDB connected');
+
+    // Clean up any incorrectly created 1-to-1 conversations that reference group IDs
+    try {
+      const Conversation = mongoose.model('Conversation');
+      const groups = await Conversation.find({ isGroup: true }).select('_id').lean();
+      const groupIds = groups.map(g => String(g._id));
+
+      if (groupIds.length > 0) {
+        const deleteRes = await Conversation.deleteMany({
+          isGroup: { $ne: true },
+          $or: [
+            { participants: { $regex: /^grp_/ } },
+            { participants: { $in: groupIds } }
+          ]
+        });
+        if (deleteRes.deletedCount > 0) {
+          console.log(`🧹 Cleaned up ${deleteRes.deletedCount} corrupted 1-to-1 conversations referencing group IDs.`);
+        }
+      }
+    } catch (cleanupErr) {
+      console.warn('⚠️ Conversation cleanup warning:', cleanupErr.message);
+    }
   } catch (err) {
     console.error('🔴 FATAL: MongoDB connection failed:', err.message);
     process.exit(1);

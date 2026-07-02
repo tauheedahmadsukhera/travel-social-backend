@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 
 // Import all routes
-const messageRoutes = require('../../routes/messages');
 const postRoutes = require('../../routes/posts'); // Restored full featured posts
 const commentRoutes = require('../../routes/comments'); // Restored full featured comments
 const livestreamRoutes = require('../../routes/livestream');
@@ -23,7 +22,6 @@ const gdprRoutes = require('../../routes/gdpr');
 const conversationRoutes = require('./conversations');
 
 // Register routes
-router.use('/conversations', messageRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/posts', commentRoutes);
 router.use('/posts', postRoutes);

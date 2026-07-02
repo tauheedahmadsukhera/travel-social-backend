@@ -288,20 +288,20 @@ router.get('/resolve/messages', verifyToken, async (req, res) => {
     const convo = await Conversation.findOne({
       isGroup: { $ne: true },
       participants: { $all: [...actorVariants, String(otherUserId)], $size: 2 }
-    }).populate('messages');
+    });
 
     if (!convo) {
       return res.json({ success: true, messages: [] });
     }
 
-    // Sort messages newest first
-    const sorted = (convo.messages || []).sort((a, b) => {
-      const ta = a.timestamp || a.createdAt || 0;
-      const tb = b.timestamp || b.createdAt || 0;
-      return new Date(tb).getTime() - new Date(ta).getTime();
-    });
+    const actualConversationId = convo.conversationId || String(convo._id);
 
-    res.json({ success: true, messages: sorted, conversationId: convo.conversationId || String(convo._id) });
+    // Fetch messages from the standalone collection
+    const messages = await Message.find({ conversationId: actualConversationId })
+      .sort({ timestamp: -1, createdAt: -1 })
+      .lean();
+
+    res.json({ success: true, messages, conversationId: actualConversationId });
   } catch (error) {
     logger.error('Error in /resolve/messages:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -1069,7 +1069,9 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
     }
     
     // Add an ID to the message for easier deletion/editing
-    messageData.id = new mongoose.Types.ObjectId().toString();
+    const generatedId = new mongoose.Types.ObjectId();
+    messageData._id = generatedId;
+    messageData.id = generatedId.toString();
 
     const newMessage = new Message(messageData);
     await newMessage.save();

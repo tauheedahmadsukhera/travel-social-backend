@@ -3,10 +3,10 @@ const { z } = require('zod');
 const updateProfileSchema = z.object({
   body: z.object({
     displayName: z.string().min(1, 'Display name cannot be empty').optional(),
-    avatar: z.string().url().or(z.string().regex(/^data:image\/.*;base64,/)).optional(),
+    avatar: z.string().optional(),
     bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
     location: z.string().optional(),
-    website: z.string().url().or(z.string().length(0)).optional(),
+    website: z.string().optional(),
     phoneNumber: z.string().optional(),
     isPrivate: z.boolean().optional(),
     lastKnownLocation: z.object({

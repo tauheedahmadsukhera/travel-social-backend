@@ -105,7 +105,7 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
                 }
               }
             },
-            { $project: { displayName: 1, name: 1, avatar: 1, photoURL: 1, profilePicture: 1 } }
+            { $project: { displayName: 1, name: 1, username: 1, avatar: 1, photoURL: 1, profilePicture: 1 } }
           ],
           as: 'author'
         }
@@ -113,7 +113,7 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
       { $unwind: { path: '$author', preserveNullAndEmptyArrays: true } },
       {
         $addFields: {
-          userName: { $ifNull: ['$author.displayName', { $ifNull: ['$author.name', '$userName'] }] },
+          userName: { $ifNull: ['$author.displayName', { $ifNull: ['$author.name', { $ifNull: ['$author.username', '$userName'] }] }] },
           userAvatar: { $ifNull: ['$author.avatar', { $ifNull: ['$author.photoURL', { $ifNull: ['$author.profilePicture', '$userAvatar'] }] }] }
         }
       },

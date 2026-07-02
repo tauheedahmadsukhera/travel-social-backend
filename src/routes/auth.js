@@ -57,6 +57,7 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
 
     // SECURITY: Verify Firebase ID Token on backend
     let firebaseUid = clientUid;
+    let isVerified = false;
     if (idToken) {
       const admin = getFirebaseAdmin();
       if (!admin) {
@@ -69,7 +70,8 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
         try {
           const decodedToken = await admin.auth().verifyIdToken(idToken);
           firebaseUid = decodedToken.uid;
-          logger.info(`✅ Firebase token verified for UID: ${firebaseUid}`);
+          isVerified = decodedToken.email_verified || false;
+          logger.info(`✅ Firebase token verified for UID: ${firebaseUid}, email_verified: ${isVerified}`);
         } catch (err) {
           logger.error('❌ Firebase token verification failed: %s', err.message);
           return res.status(401).json({ success: false, error: 'Invalid authentication token' });
@@ -97,6 +99,7 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
         displayName: displayName || (email ? email.split('@')[0] : 'User'),
         avatar: avatar || null,
         username: username ? username.toLowerCase().trim() : undefined,
+        isVerified,
         followersCount: 0,
         followingCount: 0
       });
@@ -105,6 +108,7 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
     } else {
       user.displayName = displayName || user.displayName;
       user.avatar = avatar || user.avatar;
+      user.isVerified = isVerified;
       if (username && !user.username) {
         user.username = username.toLowerCase().trim();
       }
@@ -142,6 +146,7 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
 
     // SECURITY: Verify Firebase ID Token on backend
     let firebaseUid = clientUid;
+    let isVerified = false;
     if (idToken) {
       const admin = getFirebaseAdmin();
       if (!admin) {
@@ -153,7 +158,8 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
         try {
           const decodedToken = await admin.auth().verifyIdToken(idToken);
           firebaseUid = decodedToken.uid;
-          logger.info(`✅ Firebase token verified for UID: ${firebaseUid}`);
+          isVerified = decodedToken.email_verified || false;
+          logger.info(`✅ Firebase token verified for UID: ${firebaseUid}, email_verified: ${isVerified}`);
         } catch (err) {
           logger.error('❌ Firebase token verification failed: %s', err.message);
           return res.status(401).json({ success: false, error: 'Invalid authentication token' });
@@ -179,13 +185,15 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
         firebaseUid,
         email: email ? email.toLowerCase() : `${firebaseUid}@trips.app`,
         displayName: displayName || (email ? email.split('@')[0] : 'User'),
-        avatar: avatar || null
+        avatar: avatar || null,
+        isVerified
       });
       await user.save();
       logger.info(`✅ New user created on login: ${user.email}`);
     } else {
       user.displayName = displayName || user.displayName;
       user.avatar = avatar || user.avatar;
+      user.isVerified = isVerified;
       user.updatedAt = new Date();
       await user.save();
       logger.info(`✅ User updated on login: ${user.email}`);
