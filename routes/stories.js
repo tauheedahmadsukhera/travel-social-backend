@@ -33,7 +33,7 @@ router.get('/active', optionalAuth, async (req, res) => {
       matchQuery.$or = [
         { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
         { userId: { $in: viewerVariants } },
-        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
       ];
     } else {
       matchQuery.isPrivate = { $ne: true };
@@ -95,7 +95,7 @@ router.get('/', optionalAuth, async (req, res) => {
       matchQuery.$or = [
         { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
         { userId: { $in: viewerVariants } },
-        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
       ];
     } else {
       matchQuery.isPrivate = { $ne: true };
@@ -198,7 +198,7 @@ router.get('/', optionalAuth, async (req, res) => {
  */
 router.post('/', verifyToken, async (req, res) => {
   try {
-    const { userName, mediaUrl, mediaType, caption, locationData, thumbnailUrl, thumbnail, postMetadata, isPostShare } = req.body;
+    const { userName, mediaUrl, mediaType, caption, locationData, thumbnailUrl, thumbnail, postMetadata, isPostShare, visibility, allowedFollowers, isPrivate } = req.body;
     const userId = req.userId; // Always use authenticated userId
 
     if (!userId || !mediaUrl) {
@@ -248,6 +248,9 @@ router.post('/', verifyToken, async (req, res) => {
       locationData: resolvedLocationData,
       postMetadata: normalizedPostMetadata,
       isPostShare: !!(isPostShare || normalizedPostMetadata?.postId),
+      visibility: visibility || 'Everyone',
+      allowedFollowers: Array.isArray(allowedFollowers) ? allowedFollowers : [],
+      isPrivate: isPrivate !== undefined ? !!isPrivate : (visibility && visibility !== 'Everyone'),
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
     };

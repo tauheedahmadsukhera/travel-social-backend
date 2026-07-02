@@ -110,8 +110,7 @@ router.get('/feed', optionalAuth, async (req, res, next) => {
     // 2. Construct optimized query
     const visibilityQuery = {
       $or: [
-        { isPrivate: { $ne: true } }, 
-        { visibility: 'Everyone' },   
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } }, 
         { userId: { $in: viewerVariants } }, 
         { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } } 
       ]
