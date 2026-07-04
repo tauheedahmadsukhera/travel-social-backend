@@ -583,18 +583,37 @@ router.get('/tiktok/callback', (req, res) => {
   const { code, state, error, error_description } = req.query;
   
   let redirectUrl = 'trave-social://oauth/redirect';
-  const params = [];
-  if (code) params.push(`code=${code}`);
-  if (state) params.push(`state=${state}`);
-  if (error) params.push(`error=${error}`);
-  if (error_description) params.push(`error_description=${encodeURIComponent(error_description)}`);
-  
-  if (params.length > 0) {
-    redirectUrl += `?${params.join('&')}`;
+  let csrfToken = state;
+
+  if (state) {
+    try {
+      const decodedStr = state.startsWith('%') || state.startsWith('{') ? decodeURIComponent(state) : state;
+      const stateObj = JSON.parse(decodedStr);
+      if (stateObj && stateObj.returnUrl) {
+        redirectUrl = stateObj.returnUrl;
+      }
+      if (stateObj && stateObj.csrf) {
+        csrfToken = stateObj.csrf;
+      }
+    } catch (e) {
+      // Fallback for simple string state
+    }
   }
   
-  logger.info(`Redirecting TikTok OAuth back to app: ${redirectUrl}`);
-  return res.redirect(redirectUrl);
+  // Standardize query appending
+  const baseUrl = redirectUrl.split('?')[0];
+  const existingParams = redirectUrl.includes('?') ? redirectUrl.split('?')[1] : '';
+  const urlParams = new URLSearchParams(existingParams);
+  
+  if (code) urlParams.set('code', String(code));
+  if (csrfToken) urlParams.set('state', String(csrfToken));
+  if (error) urlParams.set('error', String(error));
+  if (error_description) urlParams.set('error_description', String(error_description));
+  
+  const finalRedirect = `${baseUrl}?${urlParams.toString()}`;
+  
+  logger.info(`Redirecting TikTok OAuth back to app: ${finalRedirect}`);
+  return res.redirect(finalRedirect);
 });
 
 /**
