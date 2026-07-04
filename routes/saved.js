@@ -183,7 +183,6 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const skip = parseInt(String(req.query.skip || '0'), 10) || 0;
 
     const postService = require('../services/postService');
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
 
     // Resolve viewer candidates and group memberships to restrict search query
     const viewerResolved = await resolveUserIdentifiers(userId);
