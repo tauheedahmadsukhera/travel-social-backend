@@ -265,9 +265,22 @@ exports.searchUsers = async (req, res) => {
         { name: { $regex: escapedQ, $options: 'i' } },
         { username: { $regex: escapedQ, $options: 'i' } },
       ]
-    }).select('displayName name avatar photoURL username uid firebaseUid').limit(20);
+    })
+      .select('displayName name avatar photoURL profilePicture username email uid firebaseUid')
+      .limit(20)
+      .lean();
 
-    res.json(users);
+    const mappedUsers = users.map(user => {
+      const avatarUrl = user.avatar || user.photoURL || user.profilePicture || null;
+      return {
+        ...user,
+        avatar: avatarUrl,
+        photoURL: avatarUrl,
+        profilePicture: avatarUrl
+      };
+    });
+
+    res.json(mappedUsers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

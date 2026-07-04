@@ -72,12 +72,22 @@ router.get('/search', verifyToken, cacheMiddleware(60), async (req, res) => {
 
     const users = await User.find(searchQuery)
       .limit(parseInt(limit) || 20)
-      .select('_id firebaseUid displayName avatar bio followersCount followingCount isPrivate')
-      .exec();
+      .select('_id firebaseUid uid displayName username email avatar photoURL profilePicture bio followersCount followingCount isPrivate')
+      .lean();
 
-    console.log('[GET /search] Found', users.length, 'users (excluding self)');
+    const mappedUsers = users.map(user => {
+      const avatarUrl = user.avatar || user.photoURL || user.profilePicture || null;
+      return {
+        ...user,
+        avatar: avatarUrl,
+        photoURL: avatarUrl,
+        profilePicture: avatarUrl
+      };
+    });
 
-    res.json({ success: true, data: users });
+    console.log('[GET /search] Found', mappedUsers.length, 'users (excluding self)');
+
+    res.json({ success: true, data: mappedUsers });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
