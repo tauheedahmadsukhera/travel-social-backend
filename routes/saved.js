@@ -26,12 +26,12 @@ router.post('/:userId/saved', verifyToken, validate(savePostSchema), async (req,
   try {
     const { userId } = req.params;
     const authenticatedUserId = req.userId;
-    
+
     // Ownership check
     const resolved = await resolveUserIdentifiers(authenticatedUserId);
     const target = await resolveUserIdentifiers(userId);
     const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
-    
+
     if (!isSelf) {
       return res.status(403).json({ success: false, error: 'Forbidden' });
     }
@@ -44,7 +44,7 @@ router.post('/:userId/saved', verifyToken, validate(savePostSchema), async (req,
     if (existing) {
       return res.json({ success: true, message: 'Already saved' });
     }
-    
+
     const savedPost = new SavedPost({ userId: resolved.canonicalId, postId: cleanPostId });
     await savedPost.save();
 
@@ -66,7 +66,7 @@ router.post('/:userId/saved', verifyToken, validate(savePostSchema), async (req,
         await targetPost.save();
       }
     }
-    
+
     res.json({ success: true, data: savedPost });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -83,7 +83,7 @@ router.delete('/:userId/saved/:postId', verifyToken, async (req, res) => {
     const resolved = await resolveUserIdentifiers(authenticatedUserId);
     const target = await resolveUserIdentifiers(userId);
     const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
-    
+
     if (!isSelf) {
       return res.status(403).json({ success: false, error: 'Forbidden' });
     }
@@ -115,12 +115,12 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     const authenticatedUserId = req.userId;
-    
+
     const { resolveUserIdentifiers } = require('../src/utils/userUtils');
     const resolved = await resolveUserIdentifiers(userId);
     const authResolved = await resolveUserIdentifiers(authenticatedUserId);
     const isSelf = resolved.candidates.some(c => authResolved.candidates.map(String).includes(String(c)));
-    
+
     const idCandidates = [...new Set(resolved.candidates.map((v) => String(v)))];
     const idObjectCandidates = idCandidates
       .filter((id) => mongoose.Types.ObjectId.isValid(id))
@@ -151,7 +151,7 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const authorizedSections = sections.filter(s => {
       if (isSelf) return true;
       if (s.visibility === 'public' || !s.visibility) return true;
-      
+
       const collabs = Array.isArray(s.collaborators) ? s.collaborators.map(c => typeof c === 'string' ? c : String(c.userId || c.uid || c._id || '')) : [];
       const hasCollab = collabs.some(c => authCandidateStrings.includes(c));
       if (hasCollab) return true;
@@ -184,7 +184,7 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
 
     const postService = require('../services/postService');
     const { resolveUserIdentifiers } = require('../src/utils/userUtils');
-    
+
     // Resolve viewer candidates and group memberships to restrict search query
     const viewerResolved = await resolveUserIdentifiers(userId);
     const viewerVariants = viewerResolved.candidates.map(id => String(id));
@@ -213,12 +213,12 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
       ]
     };
 
-    const enrichedPosts = await postService.getEnrichedPosts(query, { 
-      skip, 
-      limit, 
-      viewerId: userId 
+    const enrichedPosts = await postService.getEnrichedPosts(query, {
+      skip,
+      limit,
+      viewerId: userId
     });
-    
+
     res.json({ success: true, data: enrichedPosts });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
