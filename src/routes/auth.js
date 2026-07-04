@@ -576,6 +576,28 @@ router.post('/reset-password', validate(require('../validations/authValidation')
 });
 
 /**
+ * GET /api/auth/tiktok/callback
+ * Handles TikTok OAuth redirect by redirecting back to the app's custom URL scheme.
+ */
+router.get('/tiktok/callback', (req, res) => {
+  const { code, state, error, error_description } = req.query;
+  
+  let redirectUrl = 'trave-social://oauth/redirect';
+  const params = [];
+  if (code) params.push(`code=${code}`);
+  if (state) params.push(`state=${state}`);
+  if (error) params.push(`error=${error}`);
+  if (error_description) params.push(`error_description=${encodeURIComponent(error_description)}`);
+  
+  if (params.length > 0) {
+    redirectUrl += `?${params.join('&')}`;
+  }
+  
+  logger.info(`Redirecting TikTok OAuth back to app: ${redirectUrl}`);
+  return res.redirect(redirectUrl);
+});
+
+/**
  * POST /api/auth/tiktok
  * Exchanges a TikTok OAuth code for access token and profile info.
  */
@@ -601,7 +623,7 @@ router.post('/tiktok', async (req, res) => {
       logger.info(`Sending TikTok token request with redirectUri: ${redirectUri}`);
     }
 
-    const tokenResponse = await axios.post('https://open.tiktokapis.com/v2/oauth/token/', params.toString(), {
+    const tokenResponse = await axios.post('https://open.tiktokapis.com/v2/oauth/token', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -613,7 +635,7 @@ router.post('/tiktok', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Failed to obtain access token from TikTok' });
     }
 
-    const userInfoResponse = await axios.get('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name', {
+    const userInfoResponse = await axios.get('https://open.tiktokapis.com/v2/user/info?fields=open_id,union_id,avatar_url,display_name', {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
       },
