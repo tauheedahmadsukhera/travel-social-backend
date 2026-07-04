@@ -116,20 +116,21 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const { userId } = req.params;
     const authenticatedUserId = req.userId;
     
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
     const resolved = await resolveUserIdentifiers(userId);
     const authResolved = await resolveUserIdentifiers(authenticatedUserId);
     const isSelf = resolved.candidates.some(c => authResolved.candidates.map(String).includes(String(c)));
     
-    if (!isSelf) {
-      return res.status(403).json({ success: false, error: 'Forbidden' });
-    }
     const idCandidates = [...new Set(resolved.candidates.map((v) => String(v)))];
     const idObjectCandidates = idCandidates
       .filter((id) => mongoose.Types.ObjectId.isValid(id))
       .map((id) => new mongoose.Types.ObjectId(id));
 
-    const savedPosts = await SavedPost.find({ userId: { $in: idCandidates } }).sort({ savedAt: -1 });
-    const legacyPostIds = savedPosts.map((s) => String(s.postId)).filter(Boolean);
+    let legacyPostIds = [];
+    if (isSelf) {
+      const savedPosts = await SavedPost.find({ userId: { $in: idCandidates } }).sort({ savedAt: -1 });
+      legacyPostIds = savedPosts.map((s) => String(s.postId)).filter(Boolean);
+    }
 
     // Include collection posts where user is owner/collaborator
     const Section = mongoose.model('Section');
@@ -144,8 +145,26 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
       ]
     }).lean();
 
+    const authCandidateStrings = authResolved.candidates.map(v => String(v));
+
+    // Filter sections by visibility
+    const authorizedSections = sections.filter(s => {
+      if (isSelf) return true;
+      if (s.visibility === 'public' || !s.visibility) return true;
+      
+      const collabs = Array.isArray(s.collaborators) ? s.collaborators.map(c => typeof c === 'string' ? c : String(c.userId || c.uid || c._id || '')) : [];
+      const hasCollab = collabs.some(c => authCandidateStrings.includes(c));
+      if (hasCollab) return true;
+
+      if (s.visibility === 'specific') {
+        const allowed = Array.isArray(s.allowedUsers) ? s.allowedUsers.map(String) : [];
+        if (allowed.some(c => authCandidateStrings.includes(c))) return true;
+      }
+      return false;
+    });
+
     const sectionPostIds = [];
-    (Array.isArray(sections) ? sections : []).forEach((s) => {
+    authorizedSections.forEach((s) => {
       const ids = Array.isArray(s?.postIds) ? s.postIds : [];
       ids.forEach((pid) => {
         const nextId = pid && typeof pid === 'object'

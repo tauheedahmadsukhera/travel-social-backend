@@ -1594,14 +1594,10 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const { userId } = req.params;
     const authenticatedUserId = req.userId;
 
-    // Ownership check
     const resolved = await resolveUserIdentifiers(authenticatedUserId);
     const target = await resolveUserIdentifiers(userId);
     const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
     
-    if (!isSelf) {
-      return res.status(403).json({ success: false, error: 'Forbidden' });
-    }
     const { limit = 20, skip = 0 } = req.query;
 
     const Post = mongoose.model('Post');
@@ -1634,7 +1630,7 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
       .filter(id => mongoose.Types.ObjectId.isValid(id))
       .map(id => new mongoose.Types.ObjectId(id));
 
-    // 2. Find all sections where the user is an owner or collaborator
+    // 2. Find all sections where the target user is an owner or collaborator
     const sections = await Section.find({
       $or: [
         { userId: { $in: uniqueVariants } },
@@ -1646,9 +1642,27 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
       ]
     }).lean();
 
-    // 3. Extract all postIds from those sections
+    const authCandidateStrings = resolved.candidates.map(v => String(v));
+
+    // Filter sections by visibility
+    const authorizedSections = sections.filter(s => {
+      if (isSelf) return true;
+      if (s.visibility === 'public' || !s.visibility) return true;
+      
+      const collabs = Array.isArray(s.collaborators) ? s.collaborators.map(c => typeof c === 'string' ? c : String(c.userId || c.uid || c._id || '')) : [];
+      const hasCollab = collabs.some(c => authCandidateStrings.includes(c));
+      if (hasCollab) return true;
+
+      if (s.visibility === 'specific') {
+        const allowed = Array.isArray(s.allowedUsers) ? s.allowedUsers.map(String) : [];
+        if (allowed.some(c => authCandidateStrings.includes(c))) return true;
+      }
+      return false;
+    });
+
+    // 3. Extract all postIds from those authorized sections
     let collPostIds = [];
-    sections.forEach(s => {
+    authorizedSections.forEach(s => {
       if (Array.isArray(s.postIds)) {
         s.postIds.forEach((pid) => {
           if (pid && typeof pid === 'object') {
@@ -1660,6 +1674,12 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
         });
       }
     });
+
+    // If isSelf is true, include the legacy savedBy posts. If not, only return section posts.
+    let uniqueVariantsForSavedBy = [];
+    if (isSelf) {
+      uniqueVariantsForSavedBy = uniqueVariants;
+    }
 
     const validColPostIds = collPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
     const stringColPostIds = collPostIds.map(id => String(id));
@@ -1683,7 +1703,7 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
       $and: [
         {
           $or: [
-            { savedBy: { $in: uniqueVariants } },
+            { savedBy: { $in: uniqueVariantsForSavedBy } },
             { _id: { $in: [...validColPostIds, ...stringColPostIds, ...collPostIds] } }
           ]
         },
