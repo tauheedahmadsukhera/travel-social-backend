@@ -4,6 +4,8 @@ const Story = require('../src/models/Story');
 const mongoose = require('mongoose');
 
 const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
+const validate = require('../src/middleware/validateMiddleware');
+const { createStorySchema } = require('../src/validations/storyValidation');
 
 /**
  * GET /api/stories/active
@@ -196,7 +198,7 @@ router.get('/', optionalAuth, async (req, res) => {
  * POST /api/stories
  * Create a new story (Requires Auth)
  */
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', verifyToken, validate(createStorySchema), async (req, res) => {
   try {
     const { userName, mediaUrl, mediaType, caption, locationData, thumbnailUrl, thumbnail, postMetadata, isPostShare, visibility, allowedFollowers, isPrivate } = req.body;
     const userId = req.userId; // Always use authenticated userId
@@ -243,7 +245,7 @@ router.post('/', verifyToken, async (req, res) => {
     const storyData = {
       userId,
       userName: user?.displayName || user?.name || userName || 'Anonymous',
-      userAvatar: user?.avatar || user?.photoURL || null,
+      userAvatar: user?.avatar || user?.photoURL || user?.profilePicture || null,
       caption: caption || '',
       locationData: resolvedLocationData,
       postMetadata: normalizedPostMetadata,

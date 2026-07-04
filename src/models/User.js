@@ -29,6 +29,14 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  photoURL: {
+    type: String,
+    default: null,
+  },
+  profilePicture: {
+    type: String,
+    default: null,
+  },
 
   firebaseUid: {
     type: String,
@@ -151,15 +159,6 @@ const UserSchema = new mongoose.Schema({
     default: null,
   },
 });
-
-// Define virtual fields for backward compatibility with photoURL and profilePicture
-UserSchema.virtual('photoURL')
-  .get(function() { return this.avatar; })
-  .set(function(v) { this.avatar = v; });
-
-UserSchema.virtual('profilePicture')
-  .get(function() { return this.avatar; })
-  .set(function(v) { this.avatar = v; });
 
 // Ensure virtuals are serialized in JSON and Object outputs
 UserSchema.set('toJSON', { virtuals: true });
