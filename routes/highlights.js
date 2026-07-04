@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const { resolveUserIdentifiers } = require('../src/utils/userUtils');
-const { verifyToken } = require('../src/middleware/authMiddleware');
+const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
 
 // Use Highlight model (already loaded in server)
 const getHighlight = () => {
@@ -411,7 +411,7 @@ router.delete('/highlights/:highlightId', verifyToken, async (req, res) => {
 });
 
 // Get stories for a highlight
-router.get('/highlights/:highlightId/stories', async (req, res) => {
+router.get('/highlights/:highlightId/stories', optionalAuth, async (req, res) => {
   try {
     const { highlightId } = req.params;
     const Highlight = getHighlight();
@@ -477,7 +477,30 @@ router.get('/highlights/:highlightId/stories', async (req, res) => {
         const Story = mongoose.model('Story');
         const validIds = bareStringIds.filter(id => mongoose.Types.ObjectId.isValid(id));
         if (validIds.length > 0) {
-          const foundStories = await Story.find({ _id: { $in: validIds } }).lean();
+          const requesterUserId = req.userId || null;
+          const matchQuery = {
+            _id: { $in: validIds }
+          };
+
+          if (requesterUserId) {
+            const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+            const requester = await resolveUserIdentifiers(requesterUserId);
+            const viewerVariants = requester.candidates.map(id => String(id));
+            const Group = mongoose.model('Group');
+            const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+            const viewerGroupIds = viewerGroups.map(g => String(g._id));
+
+            matchQuery.$or = [
+              { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+              { userId: { $in: viewerVariants } },
+              { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+            ];
+          } else {
+            matchQuery.isPrivate = { $ne: true };
+            matchQuery.visibility = { $in: ['Everyone', 'everyone', null, undefined] };
+          }
+
+          const foundStories = await Story.find(matchQuery).lean();
           dbLookedUp = foundStories.map(story => ({
             id: String(story._id),
             _id: String(story._id),

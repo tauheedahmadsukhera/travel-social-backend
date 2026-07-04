@@ -1664,10 +1664,30 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const validColPostIds = collPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
     const stringColPostIds = collPostIds.map(id => String(id));
 
-    const postQuery = {
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const viewerResolved = await resolveUserIdentifiers(authenticatedUserId);
+    const viewerVariants = viewerResolved.candidates.map(id => String(id));
+    const Group = mongoose.model('Group');
+    const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+    const viewerGroupIds = viewerGroups.map(g => String(g._id));
+
+    const visibilityQuery = {
       $or: [
-        { savedBy: { $in: uniqueVariants } },
-        { _id: { $in: [...validColPostIds, ...stringColPostIds, ...collPostIds] } }
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ]
+    };
+
+    const postQuery = {
+      $and: [
+        {
+          $or: [
+            { savedBy: { $in: uniqueVariants } },
+            { _id: { $in: [...validColPostIds, ...stringColPostIds, ...collPostIds] } }
+          ]
+        },
+        visibilityQuery
       ]
     };
 

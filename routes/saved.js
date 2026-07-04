@@ -164,12 +164,33 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const skip = parseInt(String(req.query.skip || '0'), 10) || 0;
 
     const postService = require('../services/postService');
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
     
-    const query = {
+    // Resolve viewer candidates and group memberships to restrict search query
+    const viewerResolved = await resolveUserIdentifiers(userId);
+    const viewerVariants = viewerResolved.candidates.map(id => String(id));
+    const Group = mongoose.model('Group');
+    const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+    const viewerGroupIds = viewerGroups.map(g => String(g._id));
+
+    const visibilityQuery = {
       $or: [
-        { savedBy: { $in: idCandidates } },
-        { _id: { $in: objectPostIds } },
-        { id: { $in: allPostIds } }
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ]
+    };
+
+    const query = {
+      $and: [
+        {
+          $or: [
+            { savedBy: { $in: idCandidates } },
+            { _id: { $in: objectPostIds } },
+            { id: { $in: allPostIds } }
+          ]
+        },
+        visibilityQuery
       ]
     };
 
