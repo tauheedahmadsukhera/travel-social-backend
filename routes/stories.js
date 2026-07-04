@@ -310,7 +310,7 @@ router.post('/', verifyToken, async (req, res) => {
  * Get a single story by ID
  * Returns story data enriched with user info, or expired flag if unavailable
  */
-router.get('/:storyId', async (req, res) => {
+router.get('/:storyId', optionalAuth, async (req, res) => {
   try {
     const { storyId } = req.params;
 
@@ -338,6 +338,35 @@ router.get('/:storyId', async (req, res) => {
           userAvatar: storyObj.userAvatar,
         }
       });
+    }
+
+    // Verify requester visibility access to story
+    const requesterUserId = req.userId || null;
+    let hasAccess = false;
+
+    if (!story.isPrivate || ['Everyone', 'everyone', null, undefined].includes(story.visibility)) {
+      hasAccess = true;
+    } else if (requesterUserId) {
+      const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+      const requester = await resolveUserIdentifiers(requesterUserId);
+      const viewerVariants = requester.candidates.map(id => String(id));
+      
+      const isCreator = viewerVariants.includes(String(story.userId));
+      if (isCreator) {
+        hasAccess = true;
+      } else {
+        const Group = mongoose.model('Group');
+        const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+        const viewerGroupIds = viewerGroups.map(g => String(g._id));
+        
+        hasAccess = story.allowedFollowers.some(id => 
+          viewerVariants.includes(String(id)) || viewerGroupIds.includes(String(id))
+        );
+      }
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: 'Unauthorized to view this story' });
     }
 
     // Enrich with user data

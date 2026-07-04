@@ -49,7 +49,7 @@ router.get('/', verifyToken, cacheMiddleware(300), async (req, res) => {
       $or: [
         { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
         { userId: { $in: viewerVariants } },
-        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
       ]
     };
 
@@ -217,7 +217,8 @@ router.get('/hashtags/posts', async (req, res) => {
 
     const query = {
       hashtags: new RegExp('^' + escapeRegExp(tag) + '$', 'i'), // Match exact hashtag
-      $or: [{ isPrivate: { $ne: true } }, { visibility: 'Everyone' }]
+      isPrivate: { $ne: true },
+      visibility: { $in: ['Everyone', 'everyone', null, undefined] }
     };
 
     const posts = await Post.find(query)
@@ -394,13 +395,9 @@ router.get('/by-location', optionalAuth, async (req, res) => {
     const query = {
       $and: [
         { $or: conditions.length > 0 ? conditions : [{ location: new RegExp(escapeRegExp(location), 'i') }] },
-        { 
-          $or: [
-            { isPrivate: { $ne: true } },
-            { visibility: 'Everyone' },
-            { visibility: { $exists: false } },
-            { visibility: null }
-          ] 
+        {
+          isPrivate: { $ne: true },
+          visibility: { $in: ['Everyone', 'everyone', null, undefined] }
         }
       ]
     };
@@ -517,7 +514,37 @@ router.get('/:postId', optionalAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Post not found' });
     }
 
-    res.json({ success: true, data: enriched[0] });
+    const post = enriched[0];
+
+    // Check visibility access permission
+    let hasAccess = false;
+    if (!post.isPrivate || ['Everyone', 'everyone', null, undefined].includes(post.visibility)) {
+      hasAccess = true;
+    } else if (viewerId) {
+      const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+      const requester = await resolveUserIdentifiers(viewerId);
+      const viewerVariants = requester.candidates.map(id => String(id));
+      
+      const isCreator = viewerVariants.includes(String(post.userId));
+      if (isCreator) {
+        hasAccess = true;
+      } else {
+        const Group = mongoose.model('Group');
+        const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+        const viewerGroupIds = viewerGroups.map(g => String(g._id));
+        
+        const allowed = Array.isArray(post.allowedFollowers) ? post.allowedFollowers.map(String) : [];
+        hasAccess = allowed.some(id => 
+          viewerVariants.includes(id) || viewerGroupIds.includes(id)
+        );
+      }
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: 'Unauthorized to view this post' });
+    }
+
+    res.json({ success: true, data: post });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

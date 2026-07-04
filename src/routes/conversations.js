@@ -1796,11 +1796,29 @@ router.get('/stories/user/:userId', verifyToken, async (req, res) => {
   try {
     const Story = mongoose.model('Story');
     const { userId } = req.params;
+    const requesterUserId = req.userId;
+    const { resolveUserIdentifiers } = require('../../src/utils/userUtils');
+    
+    // Resolve requester's user variants and group memberships
+    const requester = await resolveUserIdentifiers(requesterUserId);
+    const viewerVariants = requester.candidates.map(id => String(id));
+    
+    const Group = mongoose.model('Group');
+    const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+    const viewerGroupIds = viewerGroups.map(g => String(g._id));
 
-    const stories = await Story.find({
+    const matchQuery = {
       userId,
       expiresAt: { $gt: new Date() }
-    }).sort({ createdAt: -1 });
+    };
+
+    matchQuery.$or = [
+      { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+      { userId: { $in: viewerVariants } },
+      { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+    ];
+
+    const stories = await Story.find(matchQuery).sort({ createdAt: -1 });
 
     res.json({ success: true, data: stories });
   } catch (err) {
@@ -1813,9 +1831,28 @@ router.get('/stories/user/:userId', verifyToken, async (req, res) => {
 router.get('/stories/feed', verifyToken, async (req, res) => {
   try {
     const Story = mongoose.model('Story');
-    const stories = await Story.find({
+    const requesterUserId = req.userId;
+    const { resolveUserIdentifiers } = require('../../src/utils/userUtils');
+    
+    // Resolve requester's user variants and group memberships
+    const requester = await resolveUserIdentifiers(requesterUserId);
+    const viewerVariants = requester.candidates.map(id => String(id));
+    
+    const Group = mongoose.model('Group');
+    const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+    const viewerGroupIds = viewerGroups.map(g => String(g._id));
+
+    const matchQuery = {
       expiresAt: { $gt: new Date() }
-    }).sort({ createdAt: -1 }).limit(100);
+    };
+
+    matchQuery.$or = [
+      { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+      { userId: { $in: viewerVariants } },
+      { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+    ];
+
+    const stories = await Story.find(matchQuery).sort({ createdAt: -1 }).limit(100);
 
     res.json({ success: true, data: stories });
   } catch (err) {

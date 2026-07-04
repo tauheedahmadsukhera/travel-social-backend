@@ -818,7 +818,7 @@ router.get('/:userId/posts', optionalAuth, async (req, res) => {
       postsQuery.$or = [
         { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
         { userId: { $in: viewerVariants } },
-        { isPrivate: true, allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
       ];
     } else {
       postsQuery.isPrivate = { $ne: true };
@@ -1121,11 +1121,30 @@ router.get('/:userId/stories', async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
+    const matchQuery = {
+      userId: userId,
+      expiresAt: { $gt: new Date() }
+    };
+
+    if (requesterUserId) {
+      const requesterResolved = await resolveUserIdentifiers(requesterUserId);
+      const viewerVariants = requesterResolved.candidates.map(String);
+      const Group = mongoose.model('Group');
+      const viewerGroups = await Group.find({ members: { $in: viewerVariants } }).lean();
+      const viewerGroupIds = viewerGroups.map(g => String(g._id));
+
+      matchQuery.$or = [
+        { isPrivate: { $ne: true }, visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+        { userId: { $in: viewerVariants } },
+        { allowedFollowers: { $in: [...viewerVariants, ...viewerGroupIds] } }
+      ];
+    } else {
+      matchQuery.isPrivate = { $ne: true };
+      matchQuery.visibility = { $in: ['Everyone', 'everyone', null, undefined] };
+    }
+
     const stories = await Story
-      .find({
-        userId: userId,
-        expiresAt: { $gt: new Date() }
-      })
+      .find(matchQuery)
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: stories || [] });
