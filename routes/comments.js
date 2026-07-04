@@ -223,10 +223,6 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
     console.log(`[GET comments] Found ${enrichedComments.length} collection comments.`);
 
     // 3. Attempt to extract inline comments (Legacy fallback)
-    const inlineComments = Array.isArray(postObj?.comments) ? postObj.comments : 
-                         (Array.isArray(postObj?.post_comments) ? postObj.post_comments : 
-                         (Array.isArray(postObj?.replies) ? postObj.replies : []));
-
     if (inlineComments.length > 0) {
       // Merge logic if there are inline comments
       const commentMap = new Map();
