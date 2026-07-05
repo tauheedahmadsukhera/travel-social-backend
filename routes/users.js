@@ -1784,10 +1784,24 @@ router.get('/:userId/blocked', async (req, res) => {
   }
 });
 
-// PUT /api/users/:userId/block/:targetId - Block a user
-router.put('/:userId/block/:targetId', async (req, res) => {
+// PUT /api/users/:userId/block/:targetId - Block a user (Requires Auth)
+router.put('/:userId/block/:targetId', verifyToken, async (req, res) => {
   try {
     const { userId, targetId } = req.params;
+    const authenticatedUserId = req.userId;
+
+    // Prevent self-block
+    if (userId === targetId) {
+      return res.status(400).json({ success: false, error: 'Cannot block yourself' });
+    }
+
+    // Ownership check: verify the authenticated user matches the userId param
+    const authResolved = await resolveUserIdentifiers(authenticatedUserId);
+    const targetResolved = await resolveUserIdentifiers(userId);
+    const isSelf = authResolved.candidates.some(c => targetResolved.candidates.map(String).includes(String(c)));
+    if (!isSelf) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You can only block from your own account' });
+    }
 
     const query = { $or: [{ firebaseUid: userId }, { uid: userId }] };
     if (mongoose.Types.ObjectId.isValid(userId)) {
@@ -1805,6 +1819,43 @@ router.put('/:userId/block/:targetId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
+    // Auto-unfollow: remove all follow relationships between blocker and blocked user
+    try {
+      const Follow = mongoose.model('Follow');
+      const blockerCandidates = authResolved.candidates.map(String);
+      const blockedResolved = await resolveUserIdentifiers(targetId);
+      const blockedCandidates = blockedResolved.candidates.map(String);
+
+      // Remove: blocker follows blocked
+      const removedFollowing = await Follow.deleteMany({
+        followerId: { $in: blockerCandidates },
+        followingId: { $in: blockedCandidates }
+      });
+
+      // Remove: blocked follows blocker
+      const removedFollower = await Follow.deleteMany({
+        followerId: { $in: blockedCandidates },
+        followingId: { $in: blockerCandidates }
+      });
+
+      // Decrement counters atomically
+      if (removedFollowing.deletedCount > 0) {
+        await User.updateOne({ _id: user._id }, { $inc: { followingCount: -removedFollowing.deletedCount } });
+        // Find blocked user and decrement their followersCount
+        const blockedUser = await User.findOne({ $or: [{ firebaseUid: targetId }, { uid: targetId }, ...(mongoose.Types.ObjectId.isValid(targetId) ? [{ _id: new mongoose.Types.ObjectId(targetId) }] : [])] });
+        if (blockedUser) await User.updateOne({ _id: blockedUser._id }, { $inc: { followersCount: -removedFollowing.deletedCount } });
+      }
+      if (removedFollower.deletedCount > 0) {
+        await User.updateOne({ _id: user._id }, { $inc: { followersCount: -removedFollower.deletedCount } });
+        const blockedUser = await User.findOne({ $or: [{ firebaseUid: targetId }, { uid: targetId }, ...(mongoose.Types.ObjectId.isValid(targetId) ? [{ _id: new mongoose.Types.ObjectId(targetId) }] : [])] });
+        if (blockedUser) await User.updateOne({ _id: blockedUser._id }, { $inc: { followingCount: -removedFollower.deletedCount } });
+      }
+
+      console.log(`[BLOCK] Auto-unfollowed: removed ${removedFollowing.deletedCount} following, ${removedFollower.deletedCount} follower relationships`);
+    } catch (unfollowErr) {
+      console.warn('[BLOCK] Auto-unfollow failed (non-critical):', unfollowErr.message);
+    }
+
     res.json({ success: true, message: 'User blocked successfully', data: user.blockedUsers });
   } catch (err) {
     console.error('[PUT /:userId/block/:targetId] Error:', err.message);
@@ -1812,10 +1863,19 @@ router.put('/:userId/block/:targetId', async (req, res) => {
   }
 });
 
-// DELETE /api/users/:userId/block/:targetId - Unblock a user
-router.delete('/:userId/block/:targetId', async (req, res) => {
+// DELETE /api/users/:userId/block/:targetId - Unblock a user (Requires Auth)
+router.delete('/:userId/block/:targetId', verifyToken, async (req, res) => {
   try {
     const { userId, targetId } = req.params;
+    const authenticatedUserId = req.userId;
+
+    // Ownership check
+    const authResolved = await resolveUserIdentifiers(authenticatedUserId);
+    const targetResolved = await resolveUserIdentifiers(userId);
+    const isSelf = authResolved.candidates.some(c => targetResolved.candidates.map(String).includes(String(c)));
+    if (!isSelf) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You can only unblock from your own account' });
+    }
 
     const query = { $or: [{ firebaseUid: userId }, { uid: userId }] };
     if (mongoose.Types.ObjectId.isValid(userId)) {
