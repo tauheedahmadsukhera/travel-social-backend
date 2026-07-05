@@ -1649,7 +1649,10 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
       if (isSelf) return true;
       if (s.visibility === 'public' || !s.visibility) return true;
       
-      const collabs = Array.isArray(s.collaborators) ? s.collaborators.map(c => typeof c === 'string' ? c : String(c.userId || c.uid || c._id || '')) : [];
+      const collabs = Array.isArray(s.collaborators) ? s.collaborators.map(c => {
+        if (!c) return '';
+        return typeof c === 'string' ? c : String(c.userId || c.uid || c._id || '');
+      }).filter(Boolean) : [];
       const hasCollab = collabs.some(c => authCandidateStrings.includes(c));
       if (hasCollab) return true;
 
