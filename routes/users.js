@@ -1293,79 +1293,83 @@ router.put('/:userId/sections/:sectionId', verifyToken, async (req, res) => {
     const { userId, sectionId } = req.params;
     const authenticatedUserId = req.userId;
 
-    // Ownership check
-    const resolved = await resolveUserIdentifiers(authenticatedUserId);
-    const target = await resolveUserIdentifiers(userId);
-    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
-    
-    if (!isSelf) {
-      return res.status(403).json({ success: false, error: 'Forbidden' });
-    }
-    const { name, postIds, coverImage, visibility, collaborators, allowedUsers, allowedGroups, addPostId, removePostId } = req.body;
-
     const Section = mongoose.model('Section');
 
-    const user = await resolveUserIdentifiers(userId);
-    const userIdCandidates = [...user.candidates];
-    
-    // Make sure canonical id as object id is included
-    let hasObjectId = false;
-    let canonicalObj = null;
-    try { canonicalObj = new mongoose.Types.ObjectId(user.canonicalId); } catch(e){}
-    for(const c of userIdCandidates) {
-      if(String(c) === String(canonicalObj)) hasObjectId = true;
-    }
-    if(canonicalObj && !hasObjectId) userIdCandidates.push(canonicalObj);
+    // 1. Resolve candidates of the authenticated user to verify who is updating
+    const authResolved = await resolveUserIdentifiers(authenticatedUserId);
+    const authCandidateStrings = authResolved.candidates.map(String);
 
-    // Build update fields — only update what's provided
-    const updateFields = { updatedAt: new Date() };
-    if (name !== undefined) updateFields.name = name;
-    if (Array.isArray(postIds)) {
-      updateFields.postIds = postIds.map(id => String(id).split('-loop')[0]);
-    }
-    if (coverImage !== undefined) updateFields.coverImage = coverImage;
-    if (visibility !== undefined) updateFields.visibility = visibility;
-    if (Array.isArray(collaborators)) updateFields.collaborators = collaborators;
-    if (Array.isArray(allowedUsers)) updateFields.allowedUsers = allowedUsers;
-    if (Array.isArray(allowedGroups)) updateFields.allowedGroups = allowedGroups;
-
-    // Try to match by ObjectId first, then by name
+    // 2. Try to find the section by _id or name
     const sectionCandidates = [sectionId];
     try { sectionCandidates.push(new mongoose.Types.ObjectId(sectionId)); } catch {}
 
-    const filter = { 
-      $or: [
-        { userId: { $in: userIdCandidates } },
-        { collaborators: { $in: userIdCandidates } }
-      ],
-      $and: [
-        { $or: [{ _id: { $in: sectionCandidates } }, { name: sectionId }] }
-      ]
-    };
+    const section = await Section.findOne({
+      $or: [{ _id: { $in: sectionCandidates } }, { name: sectionId }]
+    });
 
-    const updateOp = { $set: updateFields };
-    // addPostId / removePostId — atomic array ops (works even without full postIds)
-    if (addPostId) {
-      const cleanAddPostId = String(addPostId).split('-loop')[0];
-      updateOp.$addToSet = { postIds: cleanAddPostId };
-    }
-    if (removePostId) {
-      const cleanRemovePostId = String(removePostId).split('-loop')[0];
-      updateOp.$pull = { postIds: cleanRemovePostId };
-    }
-
-    const result = await Section.findOneAndUpdate(
-      filter,
-      updateOp,
-      { new: true }
-    );
-
-    if (!result) {
-      console.log('[PUT /users/:userId/sections/:sectionId] 404 - filter:', filter);
+    if (!section) {
+      console.log('[PUT /users/:userId/sections/:sectionId] 404 - Section not found:', sectionId);
       return res.status(404).json({ success: false, error: 'Section not found' });
     }
 
-    res.json({ success: true, data: result });
+    // 3. Check ownership and collaborator status
+    const isOwner = authCandidateStrings.includes(String(section.userId));
+    
+    // Check if the user is a collaborator
+    const isCollab = Array.isArray(section.collaborators) && section.collaborators.some(c => {
+      if (!c) return false;
+      const cId = typeof c === 'object' ? (c.userId || c._id || c.uid || c.firebaseUid || '') : String(c);
+      return authCandidateStrings.includes(String(cId));
+    });
+
+    if (!isOwner && !isCollab) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You do not have permission to edit this collection' });
+    }
+
+    const { name, postIds, coverImage, visibility, collaborators, allowedUsers, allowedGroups, addPostId, removePostId } = req.body;
+
+    // Helper: safely add/remove a postId from the string array
+    const safeAddPost = (id) => {
+      const sid = String(id).split('-loop')[0];
+      if (!section.postIds.includes(sid)) section.postIds.push(sid);
+    };
+    const safeRemovePost = (id) => {
+      const sid = String(id).split('-loop')[0];
+      section.postIds = section.postIds.filter(p => String(p) !== sid);
+    };
+
+    if (isCollab && !isOwner) {
+      // Collaborators can ONLY add or remove posts
+      if (addPostId) safeAddPost(addPostId);
+      if (removePostId) safeRemovePost(removePostId);
+      if (Array.isArray(postIds)) {
+        section.postIds = postIds.map(id => String(id).split('-loop')[0]);
+      }
+    } else {
+      // Owner: full update
+      if (name !== undefined) section.name = name;
+      if (coverImage !== undefined) section.coverImage = coverImage;
+      if (visibility !== undefined) section.visibility = visibility;
+      if (Array.isArray(allowedUsers)) section.allowedUsers = allowedUsers.map(String);
+      if (Array.isArray(allowedGroups)) section.allowedGroups = allowedGroups.map(String);
+      if (Array.isArray(collaborators)) {
+        // Store as plain strings/objects matching the existing format
+        section.collaborators = collaborators.map(c => {
+          if (!c) return '';
+          return typeof c === 'object' ? String(c.userId || c._id || c.uid || c.firebaseUid || c) : String(c);
+        }).filter(Boolean);
+      }
+      if (Array.isArray(postIds)) {
+        section.postIds = postIds.map(id => String(id).split('-loop')[0]);
+      }
+      if (addPostId) safeAddPost(addPostId);
+      if (removePostId) safeRemovePost(removePostId);
+    }
+
+    section.updatedAt = new Date();
+    await section.save();
+
+    res.json({ success: true, data: section });
   } catch (err) {
     console.error('[PUT /:userId/sections/:sectionId] Error:', err.message);
     res.status(500).json({ success: false, error: err.message });
