@@ -124,7 +124,8 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-app.use('/assests', express.static(path.join(__dirname, '../assests')));
+app.use('/assets', express.static(path.join(__dirname, '../assets')));
+app.use('/assests', express.static(path.join(__dirname, '../assets'))); // Backwards-compatible alias (legacy typo)
 app.use('/stamps', express.static(path.join(__dirname, '../stamps')));
 
 // ============= DATABASE CONNECTION FUNCTION =============

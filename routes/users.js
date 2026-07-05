@@ -921,9 +921,8 @@ router.get('/:userId/tagged-posts', optionalAuth, async (req, res) => {
 
 // GET /api/users/:userId/sections - Get user sections (with privacy check)
 router.get('/:userId/sections', async (req, res) => {
-  try {
     const { userId } = req.params;
-    const { requesterUserId } = req.query;
+    const requesterUserId = req.query.requesterUserId || req.query.viewerId || req.query.requesterId;
 
     const Section = mongoose.model('Section');
     const User = mongoose.model('User');
@@ -1687,7 +1686,6 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
     const validColPostIds = collPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
     const stringColPostIds = collPostIds.map(id => String(id));
 
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
     const viewerResolved = await resolveUserIdentifiers(authenticatedUserId);
     const viewerVariants = viewerResolved.candidates.map(id => String(id));
     const Group = mongoose.model('Group');

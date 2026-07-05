@@ -56,3 +56,14 @@ debug_*.js
 verify_*.js
 resolved_ips.txt
 users_log.txt
+
+# Scratch/debug scripts (one-off throwaway files)
+scratch/
+
+# Tool output logs
+tools/*.log
+tools/*.txt
+
+# Temp/backup files
+.tmp-*
+*.bak
