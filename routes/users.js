@@ -921,6 +921,7 @@ router.get('/:userId/tagged-posts', optionalAuth, async (req, res) => {
 
 // GET /api/users/:userId/sections - Get user sections (with privacy check)
 router.get('/:userId/sections', async (req, res) => {
+  try {
     const { userId } = req.params;
     const requesterUserId = req.query.requesterUserId || req.query.viewerId || req.query.requesterId;
 
