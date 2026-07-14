@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { uploadMedia } = require('../utils/s3Service');
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 // Multer for multipart/form-data uploads
 const upload = multer({
@@ -18,45 +24,47 @@ const { verifyToken } = require('../middleware/authMiddleware');
 router.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
   try {
     const mediaType = req.body.mediaType || 'auto';
-    const userId = req.userId || 'anonymous';
-    const folder = `media/${userId}`;
+    const resourceType = mediaType === 'audio' ? 'video' : (mediaType === 'video' ? 'video' : 'auto');
 
-    let fileBuffer;
-    let originalName = 'file';
+    let uploadSource;
 
     if (req.file) {
       // Multipart upload - file is in memory buffer
-      fileBuffer = req.file.buffer;
-      originalName = req.file.originalname;
+      uploadSource = await new Promise((resolve, reject) => {
+        const uploadOpts = { folder: 'trave-social', resource_type: resourceType };
+        // Enable chunked upload for large files (>6MB) to bypass Cloudinary single-upload limits
+        const isLarge = req.file.buffer.length > 6 * 1024 * 1024;
+        if (isLarge) {
+          uploadOpts.chunk_size = 6 * 1024 * 1024;
+        }
+        const stream = isLarge
+          ? cloudinary.uploader.upload_large_stream(
+              uploadOpts,
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            )
+          : cloudinary.uploader.upload_stream(
+              uploadOpts,
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+        stream.end(req.file.buffer);
+      });
     } else {
       // JSON body - base64 data URI or remote URL
       const file = req.body.file || req.body.image;
       if (!file) {
         return res.status(400).json({ success: false, error: 'No file provided' });
       }
-
-      // Check if it's base64 data URI
-      if (typeof file === 'string' && file.startsWith('data:')) {
-        const matches = file.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        if (!matches || matches.length !== 3) {
-          return res.status(400).json({ success: false, error: 'Invalid base64 data URI format' });
-        }
-        fileBuffer = Buffer.from(matches[2], 'base64');
-      } else if (typeof file === 'string') {
-        // Assume pure base64 string
-        fileBuffer = Buffer.from(file, 'base64');
-      } else {
-        return res.status(400).json({ success: false, error: 'Unsupported file payload format' });
-      }
+      uploadSource = await cloudinary.uploader.upload(file, {
+        folder: 'trave-social',
+        resource_type: resourceType
+      });
     }
-
-    const uploadSource = await uploadMedia(
-      fileBuffer,
-      folder,
-      'media',
-      mediaType,
-      originalName
-    );
 
     return res.json({
       success: true,
@@ -66,14 +74,13 @@ router.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
         url: uploadSource.secure_url,
         width: uploadSource.width,
         height: uploadSource.height,
-        format: uploadSource.mediaType === 'image' ? 'jpg' : 'mp4',
-        resourceType: uploadSource.mediaType,
-        thumbnailUrl: uploadSource.thumbnailUrl
+        format: uploadSource.format,
+        resourceType: uploadSource.resource_type
       }
     });
   } catch (err) {
     console.error('❌ Media upload error:', err.message);
-    return res.status(500).json({ success: false, error: 'Operation failed: ' + err.message });
+    return res.status(500).json({ success: false, error: 'Operation failed' });
   }
 });
 
