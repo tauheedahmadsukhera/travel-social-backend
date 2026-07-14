@@ -1034,7 +1034,7 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
       conversationId: String(convo.conversationId || standardConversationId || convo._id),
       senderId: normalizedSenderId, 
       text,
-      mediaType: mediaType || (storyIdFromText ? 'story' : 'text'),
+      mediaType: mediaType || (storyIdFromText ? 'story' : (req.body.sharedPost ? 'post' : (req.body.sharedStory ? 'story' : 'text'))),
       mediaUrl,
       audioUrl,
       audioDuration,

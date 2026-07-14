@@ -601,4 +601,110 @@ router.get('/:storyId/comments', async (req, res) => {
   }
 });
 
+
+/**
+ * DELETE /api/stories/:storyId/comments/:commentId
+ * Delete a comment from a story (owner of comment OR story owner)
+ */
+router.delete('/:storyId/comments/:commentId', verifyToken, async (req, res) => {
+  try {
+    const { storyId, commentId } = req.params;
+    const userId = req.userId; // authenticated user's MongoDB _id
+
+    if (!mongoose.Types.ObjectId.isValid(storyId) || !mongoose.Types.ObjectId.isValid(commentId)) {
+      return res.status(400).json({ success: false, error: 'Invalid storyId or commentId' });
+    }
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({ success: false, error: 'Story not found' });
+    }
+
+    // Build the full candidates list for the authenticated user
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { candidates: userCandidates } = await resolveUserIdentifiers(userId);
+    const userCandidateStrings = userCandidates.map(String);
+
+    // Find the target comment
+    const commentIndex = (story.comments || []).findIndex(
+      c => String(c._id) === commentId
+    );
+
+    if (commentIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Comment not found' });
+    }
+
+    const comment = story.comments[commentIndex];
+
+    // Authorization: comment owner OR story owner
+    const isCommentOwner = userCandidateStrings.includes(String(comment.userId));
+    const isStoryOwner   = userCandidateStrings.includes(String(story.userId));
+
+    if (!isCommentOwner && !isStoryOwner) {
+      return res.status(403).json({ success: false, error: 'Not authorized to delete this comment' });
+    }
+
+    story.comments.splice(commentIndex, 1);
+    await story.save();
+
+    console.log(`[DELETE /stories/${storyId}/comments/${commentId}] Comment deleted by user: ${userId}`);
+    res.json({ success: true, message: 'Comment deleted successfully', data: story.comments });
+  } catch (err) {
+    console.error('[DELETE /stories/:storyId/comments/:commentId] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/stories/:storyId/comments/:commentId
+ * Edit a comment on a story (comment owner only)
+ */
+router.patch('/:storyId/comments/:commentId', verifyToken, async (req, res) => {
+  try {
+    const { storyId, commentId } = req.params;
+    const { text } = req.body;
+    const userId = req.userId;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'text is required' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(storyId) || !mongoose.Types.ObjectId.isValid(commentId)) {
+      return res.status(400).json({ success: false, error: 'Invalid storyId or commentId' });
+    }
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({ success: false, error: 'Story not found' });
+    }
+
+    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { candidates: userCandidates } = await resolveUserIdentifiers(userId);
+    const userCandidateStrings = userCandidates.map(String);
+
+    const comment = (story.comments || []).find(c => String(c._id) === commentId);
+    if (!comment) {
+      return res.status(404).json({ success: false, error: 'Comment not found' });
+    }
+
+    // Only comment owner can edit
+    if (!userCandidateStrings.includes(String(comment.userId))) {
+      return res.status(403).json({ success: false, error: 'Not authorized to edit this comment' });
+    }
+
+    // Use positional $set operator — reliable for nested array mutations without markModified
+    const editedAt = new Date();
+    await Story.updateOne(
+      { _id: storyId, 'comments._id': new mongoose.Types.ObjectId(commentId) },
+      { $set: { 'comments.$.text': text.trim(), 'comments.$.editedAt': editedAt } }
+    );
+
+    console.log(`[PATCH /stories/${storyId}/comments/${commentId}] Comment edited by user: ${userId}`);
+    res.json({ success: true, message: 'Comment updated successfully', data: { ...comment.toObject(), text: text.trim(), editedAt } });
+  } catch (err) {
+    console.error('[PATCH /stories/:storyId/comments/:commentId] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

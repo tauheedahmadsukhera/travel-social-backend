@@ -25,9 +25,10 @@ function validateEnv() {
 
     // These must be set in production
     const requiredInProduction = [
-      'CLOUDINARY_CLOUD_NAME',
-      'CLOUDINARY_API_KEY',
-      'CLOUDINARY_API_SECRET',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+      'AWS_REGION',
+      'AWS_S3_BUCKET_NAME',
       'ALLOWED_ORIGINS',
     ];
     requiredInProduction.forEach(requireVar);
