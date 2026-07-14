@@ -421,8 +421,14 @@ router.delete('/:storyId', verifyToken, async (req, res) => {
     }
 
     // Verify ownership (if userId provided)
-    if (userId && story.userId !== userId) {
-      return res.status(403).json({ success: false, error: 'Not authorized to delete this story' });
+    if (userId) {
+      const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+      const { candidates: userCandidates } = await resolveUserIdentifiers(userId);
+      const userCandidateStrings = userCandidates.map(String);
+      
+      if (!userCandidateStrings.includes(String(story.userId))) {
+        return res.status(403).json({ success: false, error: 'Not authorized to delete this story' });
+      }
     }
 
     // Delete the story
