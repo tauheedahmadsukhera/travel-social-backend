@@ -1493,10 +1493,16 @@ router.post('/:conversationId/messages/:messageId/reactions', verifyToken, async
     const userIndex = reactionsArray.indexOf(userId);
     
     if (userIndex === -1) {
-      reactionsArray.push(userId);
+      // Concurrency check: make sure userId is not already present before pushing
+      if (!reactionsArray.includes(userId)) {
+        reactionsArray.push(userId);
+      }
       logger.info('[POST] Added reaction:', actualReaction, 'from user:', userId);
     } else {
-      reactionsArray.splice(userIndex, 1);
+      // Clean up all occurrences of userId to handle any duplicate reactions from fast/race taps
+      while (reactionsArray.indexOf(userId) !== -1) {
+        reactionsArray.splice(reactionsArray.indexOf(userId), 1);
+      }
       logger.info('[POST] Removed reaction:', actualReaction, 'from user:', userId);
 
       // Remove empty reaction arrays
