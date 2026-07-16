@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const cacheMiddleware = require('../src/middleware/cacheMiddleware');
 
-// GET /api/regions - Public route with mapping for Mobile App
-router.get('/', async (req, res) => {
+// GET /api/regions - Public route with mapping for Mobile App (Cached for 1 hour)
+router.get('/', cacheMiddleware(3600), async (req, res) => {
   try {
     const Region = mongoose.model('Region');
     const regions = await Region.find().sort({ name: 1 });

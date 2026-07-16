@@ -196,11 +196,20 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       }
 
       if (Array.isArray(p.reactions)) {
-        p.reactions = p.reactions.map(r => ({
-          ...r,
-          userName: userMap[String(r.userId)]?.name || r.userName || 'User',
-          userAvatar: userMap[String(r.userId)]?.avatar || userMap[String(r.userId)]?.photoURL || userMap[String(r.userId)]?.profilePicture || r.userAvatar || null
-        }));
+        const uniqueReactions = [];
+        const seenReactors = new Set();
+        for (const r of p.reactions) {
+          const rId = String(r.userId || '');
+          if (rId && !seenReactors.has(rId)) {
+            seenReactors.add(rId);
+            uniqueReactions.push({
+              ...r,
+              userName: userMap[rId]?.name || r.userName || 'User',
+              userAvatar: userMap[rId]?.avatar || userMap[rId]?.photoURL || userMap[rId]?.profilePicture || r.userAvatar || null
+            });
+          }
+        }
+        p.reactions = uniqueReactions;
       }
 
       // Enrich taggedUsers array

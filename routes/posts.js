@@ -607,25 +607,50 @@ router.post('/:postId/react', verifyToken, async (req, res) => {
     const { userName, userAvatar, emoji } = req.body;
     const userId = req.userId;
     const Post = mongoose.model('Post');
-    await Post.updateOne(
-      resolvePostQuery(req.params.postId),
-      { $pull: { reactions: { userId: String(userId) } } }
-    );
-    const post = await Post.findOneAndUpdate(
-      resolvePostQuery(req.params.postId),
-      { 
-        $push: { 
-          reactions: { 
-            userId: String(userId), 
-            userName: userName || 'User', 
-            userAvatar: userAvatar || '', 
-            emoji: emoji || '❤️', 
-            createdAt: new Date() 
-          } 
-        } 
+    // First, try to update the existing reaction for the user atomically.
+    let post = await Post.findOneAndUpdate(
+      {
+        ...resolvePostQuery(req.params.postId),
+        "reactions.userId": String(userId)
+      },
+      {
+        $set: {
+          "reactions.$.userName": userName || 'User',
+          "reactions.$.userAvatar": userAvatar || '',
+          "reactions.$.emoji": emoji || '❤️',
+          "reactions.$.createdAt": new Date()
+        }
       },
       { new: true }
     );
+
+    // If no existing reaction was found, push a new one atomically.
+    // The conditional check "reactions.userId": { $ne: String(userId) } prevents duplicate push race conditions.
+    if (!post) {
+      post = await Post.findOneAndUpdate(
+        {
+          ...resolvePostQuery(req.params.postId),
+          "reactions.userId": { $ne: String(userId) }
+        },
+        {
+          $push: {
+            reactions: {
+              userId: String(userId),
+              userName: userName || 'User',
+              userAvatar: userAvatar || '',
+              emoji: emoji || '❤️',
+              createdAt: new Date()
+            }
+          }
+        },
+        { new: true }
+      );
+    }
+
+    // Fallback find if another concurrent process completed the push
+    if (!post) {
+      post = await Post.findOne(resolvePostQuery(req.params.postId));
+    }
     if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
     res.json({ success: true, data: post });
   } catch (err) {

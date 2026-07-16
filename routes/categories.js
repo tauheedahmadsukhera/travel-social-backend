@@ -4,9 +4,10 @@ const router = express.Router();
 
 
 const Category = require('../src/models/Category');
+const cacheMiddleware = require('../src/middleware/cacheMiddleware');
 
-// GET /api/categories - Return all categories from DB
-router.get('/', async (req, res) => {
+// GET /api/categories - Return all categories from DB (Cached for 1 hour)
+router.get('/', cacheMiddleware(3600), async (req, res) => {
   try {
     const categories = await Category.find();
     res.status(200).json({ success: true, data: Array.isArray(categories) ? categories : [] });

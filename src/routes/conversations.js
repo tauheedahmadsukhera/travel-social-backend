@@ -183,7 +183,7 @@ router.get('/', verifyToken, async (req, res) => {
       let lastCleared = 0;
       const clearedMap = convObj?.clearedBy || {};
       for (const uid of idsToMatch) {
-        const timeVal = clearedMap instanceof Map ? clearedMap.get(uid) : clearedMap[uid];
+        const timeVal = (clearedMap && typeof clearedMap.get === 'function') ? clearedMap.get(uid) : (clearedMap ? clearedMap[uid] : undefined);
         if (timeVal) {
           const t = new Date(timeVal).getTime();
           if (t > lastCleared) lastCleared = t;
@@ -765,7 +765,7 @@ router.get('/:id/messages', verifyToken, async (req, res) => {
         const clearedMap = c.clearedBy;
         if (clearedMap) {
           for (const uid of idsToMatch) {
-            const timeVal = clearedMap instanceof Map ? clearedMap.get(uid) : clearedMap[uid];
+            const timeVal = (clearedMap && typeof clearedMap.get === 'function') ? clearedMap.get(uid) : (clearedMap ? clearedMap[uid] : undefined);
             if (timeVal) {
               const t = new Date(timeVal).getTime();
               if (t > lastCleared) lastCleared = t;

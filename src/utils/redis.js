@@ -5,7 +5,7 @@ let redis;
 const localCache = new Map();
 let hasFallback = false;
 
-if (process.env.REDIS_URL) {
+if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
   try {
     redis = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
@@ -29,7 +29,9 @@ if (process.env.REDIS_URL) {
     logger.warn('⚠️ Redis Initialization Error: %s', e.message);
   }
 } else {
-  logger.info('ℹ️ Redis URL not provided, enabling in-memory fallback cache.');
+  if (process.env.NODE_ENV !== 'test') {
+    logger.info('ℹ️ Redis URL not provided, enabling in-memory fallback cache.');
+  }
   redis = undefined; // Kept undefined to pass industrial security test
   hasFallback = true;
 }

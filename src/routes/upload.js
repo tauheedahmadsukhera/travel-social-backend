@@ -4,6 +4,7 @@ const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const { verifyToken } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
+const s3Service = require('../utils/s3Service');
 
 // Configure Cloudinary
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -56,7 +57,7 @@ async function uploadToCloudinary(fileBuffer, folder, resourceType = 'auto', opt
     }
 
     const uploadStream = isLarge
-      ? cloudinary.uploader.upload_large_stream(
+      ? cloudinary.uploader.upload_chunked_stream(
           uploadOptions,
           (error, result) => {
             if (error) {
@@ -98,7 +99,13 @@ router.post('/avatar', verifyToken, upload.single('file'), handleMulterError, as
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file provided' });
     const userId = req.userId || 'anonymous';
-    const url = await uploadToCloudinary(req.file.buffer, `avatars/${userId}`, 'image');
+    let url;
+    if (process.env.STORAGE_PROVIDER === 's3') {
+      const result = await s3Service.uploadMedia(req.file.buffer, `avatars/${userId}`, 'avatar', 'image', req.file.originalname || 'avatar.jpg');
+      url = result.secure_url;
+    } else {
+      url = await uploadToCloudinary(req.file.buffer, `avatars/${userId}`, 'image');
+    }
     res.json({ success: true, url });
   } catch (err) {
     logger.error('Error uploading avatar: %s', err.message);
@@ -112,7 +119,13 @@ router.post('/post', verifyToken, upload.single('file'), handleMulterError, asyn
     if (!req.file) return res.status(400).json({ success: false, error: 'No file provided' });
     const userId = req.userId || 'anonymous';
     const mediaType = req.body.mediaType || 'auto';
-    const result = await uploadToCloudinary(req.file.buffer, `posts/${userId}`, mediaType, { returnResult: true });
+    
+    let result;
+    if (process.env.STORAGE_PROVIDER === 's3') {
+      result = await s3Service.uploadMedia(req.file.buffer, `posts/${userId}`, 'post', mediaType, req.file.originalname || 'file');
+    } else {
+      result = await uploadToCloudinary(req.file.buffer, `posts/${userId}`, mediaType, { returnResult: true });
+    }
     
     res.json({ 
       success: true, 
@@ -135,14 +148,20 @@ router.post('/story', verifyToken, uploadStory.single('file'), handleMulterError
     const userId = req.userId || 'anonymous';
     const mediaType = req.body.mediaType || 'auto';
 
-    const result = await uploadToCloudinary(req.file.buffer, `stories/${userId}`, mediaType, { returnResult: true });
-
+    let result;
     let thumbnailUrl;
-    if (result.resource_type === 'video') {
-      thumbnailUrl = cloudinary.url(result.public_id, {
-        resource_type: 'video', format: 'jpg', secure: true,
-        transformation: [{ width: 300, height: 300, crop: 'fill' }, { quality: 'auto' }]
-      });
+
+    if (process.env.STORAGE_PROVIDER === 's3') {
+      result = await s3Service.uploadMedia(req.file.buffer, `stories/${userId}`, 'story', mediaType, req.file.originalname || 'file');
+      thumbnailUrl = result.thumbnailUrl;
+    } else {
+      result = await uploadToCloudinary(req.file.buffer, `stories/${userId}`, mediaType, { returnResult: true });
+      if (result.resource_type === 'video') {
+        thumbnailUrl = cloudinary.url(result.public_id, {
+          resource_type: 'video', format: 'jpg', secure: true,
+          transformation: [{ width: 300, height: 300, crop: 'fill' }, { quality: 'auto' }]
+        });
+      }
     }
 
     res.json({ success: true, url: result.secure_url, mediaType: result.resource_type, thumbnailUrl });
@@ -161,14 +180,20 @@ router.post('/upload', verifyToken, upload.single('file'), handleMulterError, as
     const folder = req.body.path || `media/${userId}`;
     const resourceType = req.body.mediaType === 'audio' ? 'video' : (req.body.mediaType || 'auto');
 
-    const result = await uploadToCloudinary(req.file.buffer, folder, resourceType, { returnResult: true });
-
+    let result;
     let thumbnailUrl;
-    if (result.resource_type === 'video') {
-      thumbnailUrl = cloudinary.url(result.public_id, {
-        resource_type: 'video', format: 'jpg', secure: true,
-        transformation: [{ width: 300, height: 300, crop: 'fill' }, { quality: 'auto' }]
-      });
+
+    if (process.env.STORAGE_PROVIDER === 's3') {
+      result = await s3Service.uploadMedia(req.file.buffer, folder, 'media', req.body.mediaType || 'auto', req.file.originalname || 'file');
+      thumbnailUrl = result.thumbnailUrl;
+    } else {
+      result = await uploadToCloudinary(req.file.buffer, folder, resourceType, { returnResult: true });
+      if (result.resource_type === 'video') {
+        thumbnailUrl = cloudinary.url(result.public_id, {
+          resource_type: 'video', format: 'jpg', secure: true,
+          transformation: [{ width: 300, height: 300, crop: 'fill' }, { quality: 'auto' }]
+        });
+      }
     }
 
     res.json({ 
