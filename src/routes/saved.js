@@ -31,31 +31,33 @@ router.post('/:userId/saved', verifyToken, async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing postId' });
         }
 
-        let user = await User.findById(userId) || await User.findOne({ uid: userId });
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'User not found' });
-        }
+        const { canonicalId, candidates } = await resolveUserIdentifiers(userId);
 
-        if (user.savedPosts && user.savedPosts.includes(postId)) {
+        const Save = mongoose.model('Save');
+
+        const alreadySaved = await Save.findOne({
+            postId: String(postId),
+            userId: { $in: candidates }
+        });
+
+        if (alreadySaved) {
             return res.json({ success: true, message: 'Post already saved' });
         }
 
-        if (!user.savedPosts) user.savedPosts = [];
-        user.savedPosts.push(postId);
-        await user.save();
+        // Create Save entry
+        await Save.create({
+            postId: String(postId),
+            userId: canonicalId
+        });
 
+        // Increment counter on post
         try {
-            const post = await Post.findById(postId);
-            if (post) {
-                if (!post.savedBy) post.savedBy = [];
-                if (!post.savedBy.includes(userId)) {
-                    post.savedBy.push(userId);
-                    post.savesCount = (post.savesCount || 0) + 1;
-                    await post.save();
-                }
-            }
+            await Post.updateOne(
+                { _id: mongoose.Types.ObjectId.isValid(postId) ? new mongoose.Types.ObjectId(postId) : postId },
+                { $inc: { savesCount: 1 } }
+            );
         } catch (postErr) {
-            console.warn('[SAVED] Could not update post.savedBy:', postErr.message);
+            console.warn('[SAVED] Could not update post savesCount:', postErr.message);
         }
 
         return res.json({ success: true, message: 'Post saved successfully' });
@@ -72,25 +74,30 @@ router.delete('/:userId/saved/:postId', verifyToken, async (req, res) => {
 
         if (!(await assertSelf(req.userId, userId, res))) return;
 
-        let user = await User.findById(userId) || await User.findOne({ uid: userId });
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'User not found' });
-        }
+        const { candidates } = await resolveUserIdentifiers(userId);
 
-        if (user.savedPosts) {
-            user.savedPosts = user.savedPosts.filter(id => id !== postId && id.toString() !== postId);
-            await user.save();
-        }
+        const Save = mongoose.model('Save');
 
-        try {
-            const post = await Post.findById(postId);
-            if (post && post.savedBy) {
-                post.savedBy = post.savedBy.filter(id => id !== userId && id.toString() !== userId);
-                post.savesCount = Math.max((post.savesCount || 1) - 1, 0);
-                await post.save();
+        const deleteRes = await Save.deleteMany({
+            postId: String(postId),
+            userId: { $in: candidates }
+        });
+
+        if (deleteRes.deletedCount > 0) {
+            try {
+                const cleanPostId = mongoose.Types.ObjectId.isValid(postId) ? new mongoose.Types.ObjectId(postId) : postId;
+                const post = await Post.findOneAndUpdate(
+                    { _id: cleanPostId },
+                    { $inc: { savesCount: -1 } },
+                    { new: true }
+                );
+                if (post && post.savesCount < 0) {
+                    post.savesCount = 0;
+                    await post.save();
+                }
+            } catch (postErr) {
+                console.warn('[SAVED] Could not update post savesCount:', postErr.message);
             }
-        } catch (postErr) {
-            console.warn('[SAVED] Could not update post.savedBy:', postErr.message);
         }
 
         return res.json({ success: true, message: 'Post unsaved successfully' });
@@ -108,16 +115,19 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
         if (!(await assertSelf(req.userId, userId, res))) return;
 
         const { limit = 50 } = req.query;
+        const { candidates } = await resolveUserIdentifiers(userId);
 
-        let user = await User.findById(userId) || await User.findOne({ uid: userId });
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'User not found', data: [] });
-        }
+        const Save = mongoose.model('Save');
 
-        const savedPostIds = user.savedPosts || [];
-        if (savedPostIds.length === 0) {
+        const savedRecords = await Save.find({
+            userId: { $in: candidates }
+        }).sort({ createdAt: -1 }).limit(parseInt(limit)).lean();
+
+        if (savedRecords.length === 0) {
             return res.json({ success: true, data: [] });
         }
+
+        const savedPostIds = savedRecords.map(r => r.postId);
 
         const posts = await Post.find({
             _id: {
@@ -125,7 +135,7 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
                     try { return new mongoose.Types.ObjectId(id); } catch { return id; }
                 })
             }
-        }).sort({ createdAt: -1 }).limit(parseInt(limit));
+        }).sort({ createdAt: -1 });
 
         return res.json({ success: true, data: posts });
     } catch (err) {

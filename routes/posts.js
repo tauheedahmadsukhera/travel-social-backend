@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../src/utils/userUtils');
 const { 
   enrichPostsWithUserData, 
   escapeRegExp, 
@@ -77,10 +77,12 @@ router.get('/feed', optionalAuth, async (req, res, next) => {
     // Use the verified token's userId if authenticated.
     const currentUserId = req.userId || null;
     let viewerVariants = [];
+    let blockedIds = [];
     
     if (currentUserId) {
       const { candidates } = await resolveUserIdentifiers(currentUserId);
       viewerVariants = candidates.map(id => String(id));
+      blockedIds = await getBlockedUserBoundaries(currentUserId);
     }
 
     const limit = Math.min(parseInt(req.query.limit || '20'), 100);
@@ -131,6 +133,13 @@ router.get('/feed', optionalAuth, async (req, res, next) => {
       }
     }
 
+    // Exclude posts from blocked users or users who blocked this user
+    if (blockedIds.length > 0) {
+      const blockedObjectIds = blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+      const blockedIdQueries = [...blockedIds, ...blockedObjectIds];
+      visibilityQuery.userId = { $nin: blockedIdQueries };
+    }
+
     // 3. Execute optimized fetch
     const finalPosts = await postService.getEnrichedPosts(visibilityQuery, { 
       skip, 
@@ -149,21 +158,56 @@ router.get('/recommended', optionalAuth, async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit || '20'), 50);
     const Post = mongoose.model('Post');
+    const viewerId = req.userId || null;
+
+    let redisClient, isRedisAvailable;
+    try {
+      const queueService = require('../services/queue');
+      redisClient = queueService.redisClient;
+      isRedisAvailable = queueService.isRedisAvailable;
+    } catch (e) {}
+
+    const cacheKey = `feed:recommended:${viewerId || 'anonymous'}:${limit}`;
+    if (isRedisAvailable && isRedisAvailable()) {
+      try {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          return res.json({ success: true, data: JSON.parse(cached), cached: true });
+        }
+      } catch (cacheErr) {}
+    }
+
+    let blockedIds = [];
+    if (viewerId) {
+      blockedIds = await getBlockedUserBoundaries(viewerId);
+    }
+
+    const matchQuery = { 
+      isPrivate: { $ne: true },
+      visibility: { $in: ['Everyone', 'everyone', null, undefined] }
+    };
+
+    if (blockedIds.length > 0) {
+      const blockedObjectIds = blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+      const blockedIdQueries = [...blockedIds, ...blockedObjectIds];
+      matchQuery.userId = { $nin: blockedIdQueries };
+    }
     
     // Aggregation for random public posts
     const posts = await Post.aggregate([
-      { 
-        $match: { 
-          isPrivate: { $ne: true },
-          visibility: { $in: ['Everyone', 'everyone', null, undefined] }
-        } 
-      },
+      { $match: matchQuery },
       { $sample: { size: limit } },
       { $sort: { createdAt: -1 } }
     ]);
 
-    const viewerId = req.userId || null;
     const finalPosts = await enrichPostsWithUserData(posts, viewerId);
+
+    if (isRedisAvailable && isRedisAvailable()) {
+      try {
+        await redisClient.setex(cacheKey, 300, JSON.stringify(finalPosts)); // Cache for 5 mins
+      } catch (cacheErr) {}
+    }
+
     res.json({ success: true, data: finalPosts });
   } catch (err) {
     next(err);
@@ -607,51 +651,47 @@ router.post('/:postId/react', verifyToken, async (req, res) => {
     const { userName, userAvatar, emoji } = req.body;
     const userId = req.userId;
     const Post = mongoose.model('Post');
-    // First, try to update the existing reaction for the user atomically.
-    let post = await Post.findOneAndUpdate(
-      {
-        ...resolvePostQuery(req.params.postId),
-        "reactions.userId": String(userId)
-      },
-      {
-        $set: {
-          "reactions.$.userName": userName || 'User',
-          "reactions.$.userAvatar": userAvatar || '',
-          "reactions.$.emoji": emoji || '❤️',
-          "reactions.$.createdAt": new Date()
-        }
-      },
-      { new: true }
-    );
+    const Reaction = mongoose.model('Reaction');
+    const { candidates, canonicalId } = await resolveUserIdentifiers(userId);
 
-    // If no existing reaction was found, push a new one atomically.
-    // The conditional check "reactions.userId": { $ne: String(userId) } prevents duplicate push race conditions.
-    if (!post) {
+    const targetPost = await Post.findOne(resolvePostQuery(req.params.postId));
+    if (!targetPost) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    // Check if user already reacted
+    const existingReaction = await Reaction.findOne({
+      postId: String(targetPost._id),
+      userId: { $in: candidates }
+    });
+
+    let increment = 0;
+    if (existingReaction) {
+      // Update existing reaction
+      existingReaction.userName = userName || existingReaction.userName || 'User';
+      existingReaction.userAvatar = userAvatar || existingReaction.userAvatar || '';
+      existingReaction.emoji = emoji || '❤️';
+      existingReaction.createdAt = new Date();
+      await existingReaction.save();
+    } else {
+      // Create new reaction
+      await Reaction.create({
+        postId: String(targetPost._id),
+        userId: canonicalId,
+        userName: userName || 'User',
+        userAvatar: userAvatar || '',
+        emoji: emoji || '❤️'
+      });
+      increment = 1;
+    }
+
+    let post = targetPost;
+    if (increment > 0) {
       post = await Post.findOneAndUpdate(
-        {
-          ...resolvePostQuery(req.params.postId),
-          "reactions.userId": { $ne: String(userId) }
-        },
-        {
-          $push: {
-            reactions: {
-              userId: String(userId),
-              userName: userName || 'User',
-              userAvatar: userAvatar || '',
-              emoji: emoji || '❤️',
-              createdAt: new Date()
-            }
-          }
-        },
+        { _id: targetPost._id },
+        { $inc: { reactionsCount: 1 } },
         { new: true }
       );
     }
 
-    // Fallback find if another concurrent process completed the push
-    if (!post) {
-      post = await Post.findOne(resolvePostQuery(req.params.postId));
-    }
-    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
     res.json({ success: true, data: post });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -661,20 +701,20 @@ router.post('/:postId/react', verifyToken, async (req, res) => {
 router.post('/:postId/like', verifyToken, async (req, res) => {
   try {
     const userId = req.userId;
-    const { userName } = req.body;
     const Post = mongoose.model('Post');
+    const Like = mongoose.model('Like');
     
     // 1. Resolve all user ID variants
     const { canonicalId, candidates } = await resolveUserIdentifiers(userId);
     
-    // 2. Check if already liked using any known variant
+    // 2. Check if post exists
     const existingPost = await Post.findOne(resolvePostQuery(req.params.postId));
     if (!existingPost) return res.status(404).json({ success: false, error: 'Post not found' });
 
-    // Use candidates to check if ANY of the user's IDs are in the likes array
-    const alreadyLiked = Array.isArray(existingPost.likes) && existingPost.likes.some(l => {
-      const lid = String(l?._id || l?.id || l || '');
-      return candidates.includes(lid);
+    // 3. Check if already liked using separate Like model
+    const alreadyLiked = await Like.findOne({
+      postId: String(existingPost._id),
+      userId: { $in: candidates }
     });
     
     if (alreadyLiked) {
@@ -682,10 +722,16 @@ router.post('/:postId/like', verifyToken, async (req, res) => {
       return res.json({ success: true, data: existingPost, message: 'Already liked' });
     }
 
-    // 3. Add canonicalId to ensure consistency in the database
+    // 4. Create Like record
+    await Like.create({
+      postId: String(existingPost._id),
+      userId: canonicalId
+    });
+
+    // 5. Increment counter
     const post = await Post.findOneAndUpdate(
-      resolvePostQuery(req.params.postId),
-      { $addToSet: { likes: canonicalId }, $inc: { likesCount: 1 } },
+      { _id: existingPost._id },
+      { $inc: { likesCount: 1 } },
       { new: true }
     );
 
@@ -715,13 +761,25 @@ router.delete('/:postId/like', verifyToken, async (req, res) => {
     const userId = req.userId;
     const { candidates } = await resolveUserIdentifiers(userId);
     const Post = mongoose.model('Post');
+    const Like = mongoose.model('Like');
     
-    // Pull any known ID variant from the likes array
-    const post = await Post.findOneAndUpdate(
-      resolvePostQuery(req.params.postId),
-      { $pull: { likes: { $in: candidates } }, $inc: { likesCount: -1 } },
-      { new: true }
-    );
+    const existingPost = await Post.findOne(resolvePostQuery(req.params.postId));
+    if (!existingPost) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    // Delete Like record
+    const deleteRes = await Like.deleteMany({
+      postId: String(existingPost._id),
+      userId: { $in: candidates }
+    });
+    
+    let post = existingPost;
+    if (deleteRes.deletedCount > 0) {
+      post = await Post.findOneAndUpdate(
+        { _id: existingPost._id },
+        { $inc: { likesCount: -1 } },
+        { new: true }
+      );
+    }
     
     if (post && post.likesCount < 0) {
       post.likesCount = 0;
@@ -754,23 +812,42 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
       postId: { $in: [String(post._id), String(post.id)].filter(Boolean) } 
     }).sort({ createdAt: -1 }).lean();
 
-    // Enrich comments with author data
+    // Batch enrich comments with author data (Resolves N+1 query bottleneck)
     const User = mongoose.model('User');
-    const enriched = await Promise.all(comments.map(async (c) => {
-      const author = await User.findOne({
+    const userIds = Array.from(new Set(comments.map(c => String(c.userId)).filter(Boolean)));
+    
+    let users = [];
+    if (userIds.length > 0) {
+      users = await User.find({
         $or: [
-          { _id: mongoose.Types.ObjectId.isValid(c.userId) ? new mongoose.Types.ObjectId(c.userId) : null },
-          { firebaseUid: c.userId },
-          { uid: c.userId }
-        ].filter(q => q._id !== null || q.firebaseUid || q.uid)
+          { _id: { $in: userIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
+          { firebaseUid: { $in: userIds } },
+          { uid: { $in: userIds } }
+        ]
       }).select('displayName name username avatar photoURL profilePicture').lean();
+    }
 
+    const userMap = {};
+    users.forEach(u => {
+      const id = String(u._id);
+      const fuid = u.firebaseUid || u.uid;
+      const profile = {
+        userName: u.displayName || u.name || u.username || 'Anonymous',
+        userAvatar: u.avatar || u.photoURL || u.profilePicture || null
+      };
+      if (id) userMap[id] = profile;
+      if (fuid) userMap[String(fuid)] = profile;
+    });
+
+    const enriched = comments.map(c => {
+      const uRef = String(c.userId || '');
+      const profile = userMap[uRef] || { userName: 'Anonymous', userAvatar: null };
       return {
         ...c,
-        userName: author?.displayName || author?.name || author?.username || 'Anonymous',
-        userAvatar: author?.avatar || author?.photoURL || author?.profilePicture || null
+        userName: profile.userName,
+        userAvatar: profile.userAvatar
       };
-    }));
+    });
 
     res.json({ success: true, data: enriched });
   } catch (err) {

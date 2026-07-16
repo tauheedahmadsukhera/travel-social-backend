@@ -52,9 +52,13 @@ require('./models/Story');
 require('./models/Highlight');
 require('./models/Section');
 require('./models/Notification');
+require('./models/ArchivedNotification');
 require('./models/Group');
 require('./models/Report');
 require('./models/Block');
+require('./models/Like');
+require('./models/Save');
+require('./models/Reaction');
 require('./models/AdminLog');
 require('./models/Region');
 
@@ -141,6 +145,15 @@ const connectDatabase = async () => {
       serverSelectionTimeoutMS: 5000, // Match test-db options
     });
     console.log('✅ MongoDB connected');
+
+    // Start database archiving scheduler
+    try {
+      const { startArchiveScheduler } = require('../services/archiveService');
+      startArchiveScheduler();
+      console.log('✅ Database Archiving Scheduler started.');
+    } catch (archiveErr) {
+      console.warn('⚠️ Archiving Scheduler startup warning:', archiveErr.message);
+    }
 
     // Clean up any incorrectly created 1-to-1 conversations that reference group IDs
     try {

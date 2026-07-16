@@ -13,7 +13,7 @@ const Follow = require('../models/Follow');
 
 const uniqStrings = (arr) => Array.from(new Set((arr || []).filter(Boolean).map(v => String(v))));
 
-const { resolveUserIdentifiers } = require('../utils/userUtils');
+const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../utils/userUtils');
 
 // Follow a user (POST /api/follow) — authenticated
 router.post('/', verifyToken, validate(followUserSchema), async (req, res) => {
@@ -33,6 +33,13 @@ router.post('/', verifyToken, validate(followUserSchema), async (req, res) => {
 
     const followerIdCanonical = follower.canonicalId;
     const followingIdCanonical = following.canonicalId;
+
+    // Block check: Prevent follow if blocker/blocked relationship exists
+    const blockedIds = await getBlockedUserBoundaries(followerId);
+    const isBlocked = blockedIds.some(id => following.candidates.map(String).includes(String(id)));
+    if (isBlocked) {
+      return res.status(403).json({ success: false, error: 'Cannot follow: Block relationship exists.' });
+    }
 
     // Check if already following
     const existingFollow = await Follow.findOne({

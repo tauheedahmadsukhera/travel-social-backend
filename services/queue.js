@@ -171,5 +171,8 @@ async function processInline(payload) {
 }
 
 module.exports = {
-  notificationQueue
+  notificationQueue,
+  redisClient,
+  isRedisAvailable: () => redisAvailable
 };
+

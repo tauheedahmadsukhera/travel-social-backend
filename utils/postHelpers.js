@@ -99,19 +99,60 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       countMap[String(c._id)] = (c.commentCount || 0) + (c.replyCount || 0);
     });
     
-    // BATCH FETCH: Saved status for viewer (Optimized)
+    // BATCH FETCH: Likes, Saves, and Reactions status for viewer (Optimized for Scaling)
+    const likedPostIds = new Set();
     const savedPostIds = new Set();
-    if (viewerVariants.length > 0) {
-      try {
-        const SavedPost = mongoose.model('SavedPost');
-        const userSaved = await SavedPost.find({ 
-          userId: { $in: viewerVariants },
+    const reactionsMap = {}; // postId -> Array of Reactions
+    try {
+      const Like = mongoose.model('Like');
+      const Save = mongoose.model('Save');
+      const Reaction = mongoose.model('Reaction');
+
+      const promises = [
+        Reaction.find({
           postId: { $in: postIds }
-        }).select('postId').lean();
-        userSaved.forEach(s => savedPostIds.add(String(s.postId)));
-      } catch (e) {
-        console.warn('[enrich] SavedPost fetch failed:', e.message);
+        }).sort({ createdAt: -1 }).lean()
+      ];
+
+      if (viewerVariants.length > 0) {
+        promises.push(
+          Like.find({ 
+            userId: { $in: viewerVariants },
+            postId: { $in: postIds }
+          }).select('postId').lean(),
+          Save.find({ 
+            userId: { $in: viewerVariants },
+            postId: { $in: postIds }
+          }).select('postId').lean()
+        );
       }
+
+      const results = await Promise.all(promises);
+      const reactions = results[0] || [];
+      const likes = results[1] || [];
+      const saves = results[2] || [];
+
+      likes.forEach(l => likedPostIds.add(String(l.postId)));
+      saves.forEach(s => savedPostIds.add(String(s.postId)));
+
+      // Group reactions by postId (limit to 5 per post)
+      reactions.forEach(r => {
+        const pidKey = String(r.postId);
+        if (!reactionsMap[pidKey]) {
+          reactionsMap[pidKey] = [];
+        }
+        if (reactionsMap[pidKey].length < 5) {
+          reactionsMap[pidKey].push({
+            userId: String(r.userId),
+            userName: r.userName || 'User',
+            userAvatar: r.userAvatar || null,
+            emoji: r.emoji || '❤️',
+            createdAt: r.createdAt
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('[enrich] Likes/Saves/Reactions batch fetch failed:', e.message);
     }
 
 
@@ -121,6 +162,7 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
     return posts.map(post => {
       const p = post.toObject ? post.toObject() : post;
       const pid = String(p._id || p.id);
+      const cleanPid = pid.split('-loop')[0];
 
       // --- NEW UNIFIED MEDIA LOGIC ---
       const mediaList = [];
@@ -195,22 +237,7 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
         p.userName = p.userName || 'User';
       }
 
-      if (Array.isArray(p.reactions)) {
-        const uniqueReactions = [];
-        const seenReactors = new Set();
-        for (const r of p.reactions) {
-          const rId = String(r.userId || '');
-          if (rId && !seenReactors.has(rId)) {
-            seenReactors.add(rId);
-            uniqueReactions.push({
-              ...r,
-              userName: userMap[rId]?.name || r.userName || 'User',
-              userAvatar: userMap[rId]?.avatar || userMap[rId]?.photoURL || userMap[rId]?.profilePicture || r.userAvatar || null
-            });
-          }
-        }
-        p.reactions = uniqueReactions;
-      }
+      p.reactions = reactionsMap[cleanPid] || [];
 
       // Enrich taggedUsers array
       if (Array.isArray(p.taggedUserIds) && p.taggedUserIds.length > 0) {
@@ -252,57 +279,33 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       p.commentCount = collectionCount + inlineCount;
 
 
-      p.reactionCount = Array.isArray(p.reactions) ? p.reactions.length : 0;
+      p.reactionCount = p.reactionsCount || 0;
       
       const viewerStrings = viewerVariants.map(v => String(v));
 
       // Determine if viewer liked the post
       p.isLiked = false;
-      const cleanPid = pid.split('-loop')[0];
-      if (viewerStrings.length > 0 && Array.isArray(p.likes)) {
-        p.isLiked = p.likes.some(id => viewerStrings.includes(String(id)));
-        
-        if (!p.isLiked) {
-          p.isLiked = p.likes.some(l => {
-            const lid = String(l?._id || l?.id || l || '');
-            return viewerStrings.includes(lid);
-          });
-        }
-        if (p.isLiked) {
-          console.log(`❤️ [enrich] POST LIKE MATCH: pid=${cleanPid} for viewer=${viewerStrings[0]}`);
-        }
+      if (viewerStrings.length > 0) {
+        p.isLiked = likedPostIds.has(cleanPid);
       }
+      
+      // Mock likes array so frontend doesn't break expecting post.likes
+      p.likes = p.isLiked ? viewerStrings : [];
 
       // Determine if viewer saved the post
       p.isSaved = false;
-      // cleanPid already declared above
-      
       if (viewerStrings.length > 0) {
-        // 1. Check inline savedBy array if it exists
-        if (Array.isArray(p.savedBy)) {
-          p.isSaved = p.savedBy.some(id => viewerStrings.includes(String(id)));
-        }
+        p.isSaved = savedPostIds.has(cleanPid);
         
-        // 2. Check the batch-fetched saved IDs (Source of Truth)
-        if (!p.isSaved && typeof savedPostIds !== 'undefined' && savedPostIds.has(cleanPid)) {
-          p.isSaved = true;
-        }
-
-        // 3. Sync for Frontend: If saved, ensure savedBy includes the viewer
-        // This fixes the blue bookmark in SaveButton.tsx
         if (p.isSaved) {
-          console.log(`✅ [enrich] POST SAVED MATCH: pid=${cleanPid} for viewer=${viewerStrings[0]}`);
           p.saved = true; // Extra flag for safety
-          if (!Array.isArray(p.savedBy)) p.savedBy = [];
-          
-          // CRITICAL: Add ALL variants (Firebase UID, Mongo ID) to savedBy
-          // so frontend can match regardless of which ID it holds.
-          viewerStrings.forEach(vId => {
-            if (!p.savedBy.some(existing => String(existing) === String(vId))) {
-              p.savedBy.push(String(vId));
-            }
-          });
+          p.savedBy = viewerStrings;
+        } else {
+          p.saved = false;
+          p.savedBy = [];
         }
+      } else {
+        p.savedBy = [];
       }
 
       return p;

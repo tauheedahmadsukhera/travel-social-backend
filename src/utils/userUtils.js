@@ -11,6 +11,26 @@ async function resolveUserIdentifiers(inputId) {
 
   const uniqStrings = (arr) => Array.from(new Set((arr || []).filter(Boolean).map(v => String(v))));
 
+  // Dynamic require to prevent circular references on startup
+  let redisClient, isRedisAvailable;
+  try {
+    const queueService = require('../../services/queue');
+    redisClient = queueService.redisClient;
+    isRedisAvailable = queueService.isRedisAvailable;
+  } catch (e) {}
+
+  const cacheKey = `user:resolve:${raw}`;
+  if (isRedisAvailable && isRedisAvailable()) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (cacheErr) {
+      // Non-blocking warning
+    }
+  }
+
   try {
     // Aggressive lookup: search all possible ID fields for the input string
     let user = await User.findOne({
@@ -30,12 +50,22 @@ async function resolveUserIdentifiers(inputId) {
     const firebaseUid = user?.firebaseUid || user?.uid || null;
     const candidates = uniqStrings([raw, canonicalId, firebaseUid ? String(firebaseUid) : null]);
 
-    return { 
+    const result = { 
       raw, 
       canonicalId, 
       firebaseUid: firebaseUid ? String(firebaseUid) : null, 
       candidates 
     };
+
+    if (isRedisAvailable && isRedisAvailable() && user) {
+      try {
+        await redisClient.setex(cacheKey, 3600, JSON.stringify(result)); // Cache for 1 hour
+      } catch (cacheErr) {
+        // Non-blocking write error
+      }
+    }
+
+    return result;
   } catch (err) {
     console.error('[resolveUserIdentifiers] Error:', err.message);
     return { 
@@ -56,7 +86,45 @@ const toObjectId = (id) => {
   }
 };
 
+/**
+ * Gets all user IDs involved in blocking with the current user (either blocked by or blocking the current user).
+ * @param {string} userId - The current user's ID
+ * @returns {Promise<string[]>} - Array of unique string IDs
+ */
+async function getBlockedUserBoundaries(userId) {
+  if (!userId) return [];
+  const User = mongoose.model('User');
+  const resolved = await resolveUserIdentifiers(userId);
+  const userCandidates = resolved.candidates.map(String);
+
+  // Find the user to get their blockedUsers list
+  const user = await User.findOne({
+    $or: [
+      { _id: { $in: userCandidates.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
+      { firebaseUid: { $in: userCandidates } },
+      { uid: { $in: userCandidates } }
+    ]
+  }).select('blockedUsers').lean();
+
+  const blockedByMe = user?.blockedUsers || [];
+
+  // Find users who blocked me
+  const blockedMeUsers = await User.find({
+    blockedUsers: { $in: userCandidates }
+  }).select('_id firebaseUid uid').lean();
+
+  const blockedMe = blockedMeUsers.flatMap(u => [
+    String(u._id),
+    u.firebaseUid,
+    u.uid
+  ]).filter(Boolean);
+
+  // Return unique string identifiers
+  return [...new Set([...blockedByMe, ...blockedMe])].map(String);
+}
+
 module.exports = {
   resolveUserIdentifiers,
-  toObjectId
+  toObjectId,
+  getBlockedUserBoundaries
 };

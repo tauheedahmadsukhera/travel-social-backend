@@ -28,13 +28,11 @@ const PostSchema = new mongoose.Schema({
   hashtags: { type: [String], default: [] },
   mentions: { type: [String], default: [] },
   taggedUserIds: { type: [String], default: [] },
-  likes: { type: [String], default: [] },
-  likesCount: { type: Number, default: 0 },
+    likesCount: { type: Number, default: 0 },
   comments: { type: Array, default: [] }, // Array of comment objects (when stored in post)
   commentsCount: { type: Number, default: 0 }, // Cached count
   commentCount: { type: Number, default: 0 }, // Alias for frontend compatibility
-  reactions: { type: Array, default: [] }, // Array of { userId, userName, userAvatar, emoji, createdAt }
-  savedBy: { type: [String], default: [] }, // Array of user IDs who saved this post
+  reactionsCount: { type: Number, default: 0 },
   savesCount: { type: Number, default: 0 }, // Count of saves
   isPrivate: { type: Boolean, default: false }, // Privacy flag: true = private account post
   visibility: { type: String, default: 'Everyone' }, // Visibility setting: 'Everyone', 'Friends', 'Family', etc.
@@ -52,7 +50,6 @@ PostSchema.index({ allowedFollowers: 1, createdAt: -1 });
 PostSchema.index({ hashtags: 1, createdAt: -1 });
 PostSchema.index({ category: 1, createdAt: -1 });
 PostSchema.index({ visibility: 1, createdAt: -1 });
-PostSchema.index({ savedBy: 1 });
 PostSchema.index({ 
   location: 'text', 
   'locationData.name': 'text', 

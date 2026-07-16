@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../src/utils/userUtils');
 const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
 const { enrichPostsWithUserData } = require('../utils/postHelpers');
 const postService = require('../services/postService');
@@ -64,10 +64,19 @@ router.get('/search', verifyToken, cacheMiddleware(60), async (req, res) => {
 
     // Exclude current user from search results
     if (requesterUserId) {
+      const blockedIds = await getBlockedUserBoundaries(requesterUserId);
+      const blockedObjectIds = blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+
       searchQuery.$and = [
         { _id: { $ne: mongoose.Types.ObjectId.isValid(requesterUserId) ? new mongoose.Types.ObjectId(requesterUserId) : null } },
         { firebaseUid: { $ne: requesterUserId } }
       ];
+
+      if (blockedIds.length > 0) {
+        searchQuery.$and.push({ _id: { $nin: blockedObjectIds } });
+        searchQuery.$and.push({ firebaseUid: { $nin: blockedIds } });
+        searchQuery.$and.push({ uid: { $nin: blockedIds } });
+      }
     }
 
     const users = await User.find(searchQuery)
@@ -434,6 +443,18 @@ router.get('/:userId/aggregated', optionalAuth, async (req, res) => {
     let requesterResolved = null;
     if (requesterUserId) {
       requesterResolved = await resolveUserIdentifiers(requesterUserId);
+
+      // Block Check: If viewer has blocked target or target has blocked viewer
+      const blockedIds = await getBlockedUserBoundaries(requesterUserId);
+      const isBlocked = blockedIds.some(id => 
+        String(id) === String(user._id) || 
+        (user.firebaseUid && String(id) === String(user.firebaseUid)) || 
+        (user.uid && String(id) === String(user.uid))
+      );
+
+      if (isBlocked) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
     }
 
     const targetResolved = {
@@ -1882,10 +1903,14 @@ router.delete('/:userId/block/:targetId', verifyToken, async (req, res) => {
       query.$or.push({ _id: new mongoose.Types.ObjectId(userId) });
     }
 
-    // Remove targetId from blockedUsers array
+    // Resolve targetId candidates to pull any stored variant (Mongo ID or Firebase UID)
+    const targetIdResolved = await resolveUserIdentifiers(targetId);
+    const targetCandidates = targetIdResolved.candidates.map(String);
+
+    // Remove targetId candidates from blockedUsers array
     const user = await User.findOneAndUpdate(
       query,
-      { $pull: { blockedUsers: targetId }, updatedAt: new Date() },
+      { $pull: { blockedUsers: { $in: targetCandidates } }, updatedAt: new Date() },
       { new: true }
     );
 
