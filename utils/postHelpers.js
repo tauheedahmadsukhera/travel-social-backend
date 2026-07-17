@@ -68,7 +68,8 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
         profilePicture: u.profilePicture || avatar || null,
         name,
         displayName: u.displayName || name,
-        username: u.username || u.displayName || name
+        username: u.username || u.displayName || name,
+        verified: u.isVerified || false
       };
       
       if (id) userMap[id] = profile;
@@ -225,7 +226,8 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
           username: author.username || undefined,
           avatar: author.avatar || author.photoURL || author.profilePicture || null,
           photoURL: author.photoURL || author.avatar || author.profilePicture || null,
-          profilePicture: author.profilePicture || author.avatar || author.photoURL || null
+          profilePicture: author.profilePicture || author.avatar || author.photoURL || null,
+          verified: author.verified || false
         };
 
         // Standardize naming
