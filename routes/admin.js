@@ -12,8 +12,14 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
+const s3Service = require('../src/utils/s3Service');
+
 // Helper for Cloudinary Upload
-async function uploadToCloudinary(fileBuffer, folder) {
+async function uploadToCloudinary(fileBuffer, folder, originalName = 'image.jpg') {
+  if (process.env.STORAGE_PROVIDER === 's3') {
+    const result = await s3Service.uploadMedia(fileBuffer, folder, 'admin', 'image', originalName);
+    return result.secure_url;
+  }
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder: folder, resource_type: 'auto' },
@@ -551,9 +557,35 @@ router.get('/reports', verifyToken, async (req, res, next) => {
     const { status = 'pending' } = req.query;
     const reports = await Report.find({ status })
       .sort({ createdAt: -1 })
-      .limit(100);
+      .limit(100)
+      .lean();
 
-    res.json({ success: true, data: reports });
+    const Post = mongoose.model('Post');
+    const Comment = mongoose.model('Comment');
+    const Story = mongoose.model('Story');
+
+    const reportsWithTargets = await Promise.all(reports.map(async (report) => {
+      let targetContent = null;
+      try {
+        if (report.targetType === 'post' || report.targetType === 'Post') {
+          targetContent = await Post.findById(report.targetId).populate('userId', 'displayName email avatar').lean();
+        } else if (report.targetType === 'user' || report.targetType === 'User') {
+          targetContent = await User.findById(report.targetId, 'displayName email avatar role status').lean();
+        } else if (report.targetType === 'comment' || report.targetType === 'Comment') {
+          targetContent = await Comment.findById(report.targetId).lean();
+        } else if (report.targetType === 'story' || report.targetType === 'Story') {
+          targetContent = await Story.findById(report.targetId).lean();
+        }
+      } catch (e) {
+        logger.warn(`Failed to fetch report target: ${e.message}`);
+      }
+      return {
+        ...report,
+        targetContent
+      };
+    }));
+
+    res.json({ success: true, data: reportsWithTargets });
   } catch (err) {
     next(err);
   }
@@ -599,6 +631,235 @@ router.post('/reports/:id/resolve', verifyToken, async (req, res, next) => {
 });
 
 /**
+ * @route   GET /api/admin/comments
+ * @desc    Get all comments with pagination/search for moderation
+ */
+router.get('/comments', verifyToken, async (req, res, next) => {
+  try {
+    const User = mongoose.model('User');
+    const Comment = mongoose.model('Comment');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const { page = 1, limit = 20, search = '' } = req.query;
+    let query = {};
+    if (search) {
+      query.text = new RegExp(search, 'i');
+    }
+
+    const [comments, total] = await Promise.all([
+      Comment.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .lean(),
+      Comment.countDocuments(query)
+    ]);
+
+    res.json({ success: true, data: comments, total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/comments/:id
+ * @desc    Admin delete any comment
+ */
+router.delete('/comments/:id', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const User = mongoose.model('User');
+    const Comment = mongoose.model('Comment');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const comment = await Comment.findByIdAndDelete(id);
+    if (!comment) return res.status(404).json({ success: false, error: 'Comment not found' });
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: 'COMMENT_DELETED',
+      targetId: id,
+      targetType: 'Comment',
+      details: { text: comment.text?.slice(0, 100) },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, message: 'Comment deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   GET /api/admin/stories
+ * @desc    Get active/all stories for moderation
+ */
+router.get('/stories', verifyToken, async (req, res, next) => {
+  try {
+    const User = mongoose.model('User');
+    const Story = mongoose.model('Story');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const { page = 1, limit = 20 } = req.query;
+
+    const [stories, total] = await Promise.all([
+      Story.find()
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .lean(),
+      Story.countDocuments()
+    ]);
+
+    res.json({ success: true, data: stories, total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/stories/:id
+ * @desc    Admin delete any story
+ */
+router.delete('/stories/:id', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const User = mongoose.model('User');
+    const Story = mongoose.model('Story');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const story = await Story.findByIdAndDelete(id);
+    if (!story) return res.status(404).json({ success: false, error: 'Story not found' });
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: 'STORY_DELETED',
+      targetId: id,
+      targetType: 'Story',
+      details: { caption: story.caption?.slice(0, 100) },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, message: 'Story deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   POST /api/admin/users/:id/verify
+ * @desc    Toggle verified status for user
+ */
+router.post('/users/:id/verify', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { isVerified } = req.body;
+    const User = mongoose.model('User');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    user.isVerified = isVerified;
+    await user.save();
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: isVerified ? 'USER_VERIFIED' : 'USER_UNVERIFIED',
+      targetId: id,
+      targetType: 'User',
+      details: { displayName: user.displayName },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   GET /api/admin/streams
+ * @desc    Get all active or past streams for moderation
+ */
+router.get('/streams', verifyToken, async (req, res, next) => {
+  try {
+    const User = mongoose.model('User');
+    const LiveStream = mongoose.model('LiveStream');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const { page = 1, limit = 20 } = req.query;
+
+    const [streams, total] = await Promise.all([
+      LiveStream.find()
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .lean(),
+      LiveStream.countDocuments()
+    ]);
+
+    res.json({ success: true, data: streams, total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   POST /api/admin/streams/:id/end
+ * @desc    Admin force end a live stream
+ */
+router.post('/streams/:id/end', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const User = mongoose.model('User');
+    const LiveStream = mongoose.model('LiveStream');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const stream = await LiveStream.findById(id);
+    if (!stream) return res.status(404).json({ success: false, error: 'Live stream not found' });
+
+    stream.isActive = false;
+    await stream.save();
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: 'STREAM_ENDED_BY_ADMIN',
+      targetId: id,
+      targetType: 'LiveStream',
+      details: { title: stream.title },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, message: 'Live stream force-ended successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * CATEGORIES MANAGEMENT
  */
 router.get('/categories', verifyToken, async (req, res, next) => {
@@ -625,7 +886,7 @@ router.post('/categories', verifyToken, upload.single('image'), async (req, res,
     
     // If a file is uploaded, use it
     if (req.file) {
-      imageUrl = await uploadToCloudinary(req.file.buffer, 'admin/categories');
+      imageUrl = await uploadToCloudinary(req.file.buffer, 'admin/categories', req.file.originalname);
     }
 
     if (!name || !imageUrl) {
@@ -705,7 +966,7 @@ router.post('/regions', verifyToken, upload.single('image'), async (req, res, ne
     let imageUrl = req.body.image;
     
     if (req.file) {
-      imageUrl = await uploadToCloudinary(req.file.buffer, 'admin/regions');
+      imageUrl = await uploadToCloudinary(req.file.buffer, 'admin/regions', req.file.originalname);
     }
 
     if (!name || !imageUrl) {
