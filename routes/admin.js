@@ -99,6 +99,13 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
     }
 
+    const { get: cacheGet, set: cacheSet } = require('../src/utils/redis');
+    const cacheKey = 'admin:stats';
+    const cachedStats = await cacheGet(cacheKey);
+    if (cachedStats) {
+      return res.json({ success: true, data: cachedStats });
+    }
+
     const now = new Date();
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
@@ -159,18 +166,22 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       return { name: dayName, users: userDay ? userDay.count : 0, posts: postDay ? postDay.count : 0 };
     });
 
+    const statsData = {
+      totalUsers,
+      totalPosts,
+      activeReports,
+      userTrend,
+      postTrend,
+      activeUserRate,
+      activeUserRateTrend: '+0.0%',
+      growthData: last7Days
+    };
+
+    await cacheSet(cacheKey, statsData, 900); // 15 mins cache TTL
+
     res.json({
       success: true,
-      data: {
-        totalUsers,
-        totalPosts,
-        activeReports,
-        userTrend,
-        postTrend,
-        activeUserRate,
-        activeUserRateTrend: '+0.0%',
-        growthData: last7Days
-      }
+      data: statsData
     });
   } catch (err) {
     next(err);
