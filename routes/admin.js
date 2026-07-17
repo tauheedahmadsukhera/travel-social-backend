@@ -13,6 +13,13 @@ const upload = multer({
 });
 
 const s3Service = require('../src/utils/s3Service');
+const rateLimiter = require('../src/middleware/rateLimiter');
+
+const adminLoginLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,                  // Max 5 attempts
+  keyPrefix: 'rl:admin:login:'
+});
 
 // Helper for Cloudinary Upload
 async function uploadToCloudinary(fileBuffer, folder, originalName = 'image.jpg') {
@@ -37,7 +44,7 @@ async function uploadToCloudinary(fileBuffer, folder, originalName = 'image.jpg'
  * @desc    Admin login with role verification
  * @access  Public
  */
-router.post('/login', async (req, res) => {
+router.post('/login', adminLoginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     const User = mongoose.model('User');
@@ -90,6 +97,13 @@ router.get('/stats', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { get: cacheGet, set: cacheSet } = require('../src/utils/redis');
+    const cacheKey = 'admin:stats';
+    const cachedStats = await cacheGet(cacheKey);
+    if (cachedStats) {
+      return res.json({ success: true, data: cachedStats });
     }
 
     const now = new Date();
@@ -152,18 +166,22 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       return { name: dayName, users: userDay ? userDay.count : 0, posts: postDay ? postDay.count : 0 };
     });
 
+    const statsData = {
+      totalUsers,
+      totalPosts,
+      activeReports,
+      userTrend,
+      postTrend,
+      activeUserRate,
+      activeUserRateTrend: '+0.0%',
+      growthData: last7Days
+    };
+
+    await cacheSet(cacheKey, statsData, 900); // 15 mins cache TTL
+
     res.json({
       success: true,
-      data: {
-        totalUsers,
-        totalPosts,
-        activeReports,
-        userTrend,
-        postTrend,
-        activeUserRate,
-        activeUserRateTrend: '+0.0%',
-        growthData: last7Days
-      }
+      data: statsData
     });
   } catch (err) {
     next(err);
