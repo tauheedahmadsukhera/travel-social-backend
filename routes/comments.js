@@ -152,7 +152,7 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
           { firebaseUid: { $in: stringIds } },
           { uid: { $in: stringIds } }
         ]
-      }).select('displayName name username email avatar photoURL profilePicture firebaseUid uid').lean();
+      }).select('displayName name username email avatar photoURL profilePicture firebaseUid uid isVerified').lean();
 
       users.forEach(user => {
         const avatarUrl = user.avatar || user.photoURL || user.profilePicture || null;
@@ -178,7 +178,8 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
         
         const profile = {
           userName: resolvedName,
-          userAvatar: avatarUrl
+          userAvatar: avatarUrl,
+          verified: user.isVerified || false
         };
         
         // Cache user profile details for 5 minutes (300 seconds)
@@ -200,7 +201,8 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
         ...c,
         id: String(c._id || c.id),
         userName: profile?.userName || c.userName || 'User',
-        userAvatar: profile?.userAvatar || c.userAvatar || null
+        userAvatar: profile?.userAvatar || c.userAvatar || null,
+        verified: profile?.verified || false
       };
 
       if (Array.isArray(c.replies)) {
@@ -211,7 +213,8 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
             ...r,
             id: String(r._id || r.id),
             userName: rProfile?.userName || r.userName || 'User',
-            userAvatar: rProfile?.userAvatar || r.userAvatar || null
+            userAvatar: rProfile?.userAvatar || r.userAvatar || null,
+            verified: rProfile?.verified || false
           };
         });
       }

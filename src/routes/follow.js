@@ -248,7 +248,7 @@ router.get('/users/:userId/followers', optionalAuth, async (req, res) => {
         { firebaseUid: { $in: followerIds } },
         { _id: { $in: followerIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } }
       ]
-    }).select('firebaseUid displayName name username avatar photoURL profilePicture').lean();
+    }).select('firebaseUid displayName name username avatar photoURL profilePicture isVerified').lean();
 
     // Check if current user follows each follower
     let currentUserFollowing = [];
@@ -285,7 +285,8 @@ router.get('/users/:userId/followers', optionalAuth, async (req, res) => {
         username: user.username || '',
         avatar: resolvedAvatar,
         isFollowing,
-        isFollowingYou
+        isFollowingYou,
+        verified: user.isVerified || false
       };
     });
 
@@ -329,7 +330,7 @@ router.get('/users/:userId/following', optionalAuth, async (req, res) => {
         { firebaseUid: { $in: followingIds } },
         { _id: { $in: followingIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } }
       ]
-    }).select('firebaseUid displayName name username avatar photoURL profilePicture').lean();
+    }).select('firebaseUid displayName name username avatar photoURL profilePicture isVerified').lean();
 
     // Resolve target user's canonical + firebase ids so follow-back works with legacy mixed ids
     const targetUserIdCandidates = Array.from(
@@ -383,7 +384,8 @@ router.get('/users/:userId/following', optionalAuth, async (req, res) => {
         username: user.username || '',
         avatar: resolvedAvatar,
         isFollowing,
-        isFollowingYou
+        isFollowingYou,
+        verified: user.isVerified || false
       };
     });
 

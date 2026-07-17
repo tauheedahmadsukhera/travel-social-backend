@@ -536,6 +536,27 @@ if (process.env.NODE_ENV !== 'test') {
   // Initialize Socket.IO
   const JWT_SECRET = process.env.JWT_SECRET;
   io = initSockets(server, JWT_SECRET);
+
+  // ============= RENDER KEEP-ALIVE SELF-PING =============
+  // Render Free Tier sleeps after 15 minutes of inactivity.
+  // This self-ping runs every 12 minutes to keep the container warm and prevent sleep.
+  const startSelfPing = () => {
+    const publicUrl = process.env.RENDER_EXTERNAL_URL || 'https://travel-social-backend.onrender.com';
+    
+    // Ping every 12 minutes
+    setInterval(() => {
+      fetch(`${publicUrl}/api/health`)
+        .then(res => {
+          console.log(`📡 [Self-Ping] Keep-alive request successful. Status: ${res.status}`);
+        })
+        .catch(err => {
+          console.warn(`⚠️ [Self-Ping] Keep-alive request failed: ${err.message}`);
+        });
+    }, 12 * 60 * 1000);
+
+    console.log(`📡 Self-Ping service initialized for: ${publicUrl}`);
+  };
+  startSelfPing();
 }
 
 // ============= GRACEFUL SHUTDOWN =============

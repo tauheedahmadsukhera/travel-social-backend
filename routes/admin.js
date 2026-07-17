@@ -790,7 +790,13 @@ router.post('/users/:id/verify', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
-    const user = await User.findById(id);
+    const user = await User.findOne({
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(id) ? id : null },
+        { firebaseUid: id },
+        { uid: id }
+      ]
+    });
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
     user.isVerified = isVerified;

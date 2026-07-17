@@ -81,7 +81,7 @@ router.get('/search', verifyToken, cacheMiddleware(60), async (req, res) => {
 
     const users = await User.find(searchQuery)
       .limit(parseInt(limit) || 20)
-      .select('_id firebaseUid uid displayName username email avatar photoURL profilePicture bio followersCount followingCount isPrivate')
+      .select('_id firebaseUid uid displayName username email avatar photoURL profilePicture bio followersCount followingCount isPrivate isVerified')
       .lean();
 
     const mappedUsers = users.map(user => {

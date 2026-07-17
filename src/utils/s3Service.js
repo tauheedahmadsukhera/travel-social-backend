@@ -138,6 +138,13 @@ async function generateVideoThumbnail(videoBuffer) {
  * @returns {Promise<Buffer>} Optimized MP4 video buffer
  */
 async function compressVideo(videoBuffer) {
+  // Performance optimization: Skip CPU-heavy compression if video is already pre-optimized on device (under 20MB)
+  // or explicitly bypassed via environment variable.
+  if (process.env.SKIP_BACKEND_VIDEO_COMPRESSION === 'true' || videoBuffer.length < 20 * 1024 * 1024) {
+    logger.info(`⚡ Skipping backend video compression (Buffer size: ${(videoBuffer.length / 1024 / 1024).toFixed(2)}MB is under 20MB threshold).`);
+    return videoBuffer;
+  }
+
   const tempDir = os.tmpdir();
   const randomSuffix = Math.random().toString(36).substring(7);
   const tempInputPath = path.join(tempDir, `temp_input_${randomSuffix}.mp4`);
