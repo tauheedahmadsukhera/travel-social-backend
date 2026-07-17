@@ -13,6 +13,13 @@ const upload = multer({
 });
 
 const s3Service = require('../src/utils/s3Service');
+const rateLimiter = require('../src/middleware/rateLimiter');
+
+const adminLoginLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,                  // Max 5 attempts
+  keyPrefix: 'rl:admin:login:'
+});
 
 // Helper for Cloudinary Upload
 async function uploadToCloudinary(fileBuffer, folder, originalName = 'image.jpg') {
@@ -37,7 +44,7 @@ async function uploadToCloudinary(fileBuffer, folder, originalName = 'image.jpg'
  * @desc    Admin login with role verification
  * @access  Public
  */
-router.post('/login', async (req, res) => {
+router.post('/login', adminLoginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     const User = mongoose.model('User');

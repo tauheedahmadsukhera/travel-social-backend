@@ -10,4 +10,7 @@ const ReportSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+ReportSchema.index({ status: 1, createdAt: -1 });
+ReportSchema.index({ targetId: 1 });
+
 module.exports = mongoose.models.Report || mongoose.model('Report', ReportSchema);
