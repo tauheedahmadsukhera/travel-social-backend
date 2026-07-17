@@ -58,7 +58,7 @@ router.post('/', verifyToken, validate(followUserSchema), async (req, res) => {
     // Best-effort: create follow notification
     try {
       const User = mongoose.model('User');
-      const { notificationQueue } = require('../services/queue');
+      const { notificationQueue } = require('../../services/queue');
 
       const followerUser = await User.findOne({ 
         $or: [
@@ -429,6 +429,37 @@ router.post('/request', verifyToken, validate(followRequestSchema), async (req, 
     const followRequest = new FollowRequest({ fromUserId: from.canonicalId, toUserId: to.canonicalId });
     await followRequest.save();
     console.log('[Follow Request] Created:', followRequest);
+
+    // Best-effort: trigger follow-request notification
+    try {
+      const User = mongoose.model('User');
+      const { notificationQueue } = require('../../services/queue');
+
+      const followerUser = await User.findOne({ 
+        $or: [
+          { _id: mongoose.Types.ObjectId.isValid(from.canonicalId) ? new mongoose.Types.ObjectId(from.canonicalId) : null },
+          { firebaseUid: from.raw },
+          { uid: from.raw }
+        ]
+      }).select('displayName name username avatar photoURL profilePicture').lean();
+
+      const senderName = followerUser?.displayName || followerUser?.name || followerUser?.username || 'Someone';
+
+      notificationQueue.add('follow-request', {
+        userId: to.canonicalId,
+        senderId: from.canonicalId,
+        title: 'Follow Request',
+        body: `${senderName} requested to follow you`,
+        data: { 
+          senderId: from.canonicalId, 
+          type: 'FOLLOW_REQUEST', 
+          requestId: followRequest._id.toString() 
+        }
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('[POST /follow/request] Notification skipped:', e.message);
+    }
+
     res.json({ success: true, data: followRequest });
   } catch (err) {
     console.error('[Follow Request] Error:', err.message);
@@ -479,6 +510,31 @@ router.post('/request/:requestId/accept', verifyToken, async (req, res) => {
     // Update request status
     followRequest.status = 'accepted';
     await followRequest.save();
+
+    // Best-effort: trigger follow-approved notification
+    try {
+      const { notificationQueue } = require('../../services/queue');
+
+      const acceptingUser = await User.findOne({ 
+        $or: [
+          { _id: mongoose.Types.ObjectId.isValid(to.canonicalId) ? new mongoose.Types.ObjectId(to.canonicalId) : null },
+          { firebaseUid: to.raw },
+          { uid: to.raw }
+        ]
+      }).select('displayName name username avatar photoURL profilePicture').lean();
+
+      const senderName = acceptingUser?.displayName || acceptingUser?.name || acceptingUser?.username || 'Someone';
+
+      notificationQueue.add('follow-approved', {
+        userId: from.canonicalId,
+        senderId: to.canonicalId,
+        title: 'Follow Request Accepted',
+        body: `${senderName} accepted your follow request`,
+        data: { senderId: to.canonicalId, type: 'FOLLOW_APPROVED' }
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('[POST /follow/request/accept] Notification skipped:', e.message);
+    }
 
     console.log('[Accept Follow Request] Accepted and created follow');
     res.json({ success: true, data: follow });

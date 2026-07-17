@@ -45,7 +45,7 @@ exports.getUserSections = async (req, res) => {
     const sections = await Section.find({
       $or: [
         { userId: uid },
-        { 'collaborators.userId': uid },
+        { collaborators: uid },
       ],
     }).sort({ createdAt: 1 });
     res.json({ success: true, data: sections });
@@ -70,7 +70,7 @@ exports.createSection = async (req, res) => {
       visibility: visibility || 'private',
       specificUsers: Array.isArray(specificUsers) ? specificUsers : [],
       collaborators: Array.isArray(collaborators)
-        ? collaborators.map(id => ({ userId: id }))
+        ? collaborators.map(id => String(id._id || id.userId || id))
         : [],
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -185,9 +185,9 @@ exports.addCollaborator = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Only the owner can add collaborators' });
     }
 
-    const alreadyIn = section.collaborators.some(c => c.userId === collaboratorId);
+    const alreadyIn = section.collaborators.some(c => String(c) === String(collaboratorId));
     if (!alreadyIn) {
-      section.collaborators.push({ userId: collaboratorId });
+      section.collaborators.push(String(collaboratorId));
       section.updatedAt = new Date();
       await section.save();
     }
@@ -210,7 +210,7 @@ exports.removeCollaborator = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Only the owner can remove collaborators' });
     }
 
-    section.collaborators = section.collaborators.filter(c => c.userId !== collabId);
+    section.collaborators = section.collaborators.filter(c => String(c) !== String(collabId));
     section.updatedAt = new Date();
     await section.save();
 

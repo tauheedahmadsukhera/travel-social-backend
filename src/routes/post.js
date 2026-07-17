@@ -32,8 +32,19 @@ router.get('/feed', optionalAuth, async (req, res) => {
     const postsCollection = db.collection('posts');
     const userId = req.userId ? String(req.userId) : null;
 
+    // Industrial-grade Visibility Filter
+    const matchStage = {
+      $match: {
+        $or: [
+          { visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+          ...(userId ? [{ userId: userId }] : [])
+        ]
+      }
+    };
+
     // Use aggregation for high-performance field selection and computed values
     const pipeline = [
+      matchStage,
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: limit },
@@ -69,13 +80,23 @@ router.get('/recommended', optionalAuth, async (req, res) => {
     const excludeIdsStr = req.query.excludeIds || '';
     const excludeIds = excludeIdsStr ? excludeIdsStr.split(',').filter(Boolean) : [];
 
-    const filter = {};
+    const userId = req.userId ? String(req.userId) : null;
+    const filter = {
+      $and: [
+        {
+          $or: [
+            { visibility: { $in: ['Everyone', 'everyone', null, undefined] } },
+            ...(userId ? [{ userId: userId }] : [])
+          ]
+        }
+      ]
+    };
     if (excludeIds.length > 0) {
       const objectIds = excludeIds
         .filter(id => mongoose.Types.ObjectId.isValid(id))
         .map(id => new mongoose.Types.ObjectId(id));
       if (objectIds.length > 0) {
-        filter._id = { $nin: objectIds };
+        filter.$and.push({ _id: { $nin: objectIds } });
       }
     }
 

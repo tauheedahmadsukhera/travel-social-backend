@@ -267,7 +267,7 @@ exports.deleteHighlight = async (req, res) => {
     const highlight = await Highlight.findById(id);
     if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
 
-    if (userId && highlight.userId !== String(userId)) {
+    if (userId && String(highlight.userId) !== String(userId)) {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
     }
 

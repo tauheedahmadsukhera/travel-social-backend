@@ -497,6 +497,14 @@ router.post('/:postId/comments', verifyToken, validate(createCommentSchema), asy
           data: { postId: post._id, type: 'COMMENT', screen: 'home' }
         }).catch(() => {});
       }
+
+      // Scan for @mentions in comment text
+      try {
+        const { handleMentionsAndTags } = require('../src/utils/mentionHelper');
+        await handleMentionsAndTags(text, userId, cleanPostId, newComment._id);
+      } catch (mentionErr) {
+        console.warn('Comment mentions resolution warning:', mentionErr.message);
+      }
     } catch (e) {
       console.warn('Post count update failed:', e.message);
     }
@@ -827,6 +835,14 @@ router.post('/:postId/comments/:commentId/replies', verifyToken, async (req, res
       } catch (notiErr) {
         console.warn('Comment reply notification warning:', notiErr.message);
       }
+    }
+
+    // Scan for @mentions in reply text
+    try {
+      const { handleMentionsAndTags } = require('../src/utils/mentionHelper');
+      await handleMentionsAndTags(text, userId, req.params.postId, reply._id);
+    } catch (mentionErr) {
+      console.warn('Reply mentions resolution warning:', mentionErr.message);
     }
 
     res.status(201).json({ success: true, id: reply._id, data: reply });

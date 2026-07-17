@@ -47,6 +47,15 @@ async function uploadBufferToS3(buffer, key, contentType) {
   });
 
   const result = await upload.done();
+  
+  // If CDN is configured, return the CDN-mapped URL instead of raw S3
+  if (process.env.MEDIA_CDN_URL) {
+    const cleanCDN = process.env.MEDIA_CDN_URL.endsWith('/') 
+      ? process.env.MEDIA_CDN_URL.slice(0, -1) 
+      : process.env.MEDIA_CDN_URL;
+    return `${cleanCDN}/${key}`;
+  }
+
   // AWS S3 standard public URL
   return result.Location || `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
 }
@@ -69,8 +78,8 @@ async function optimizeImage(buffer, context) {
       pipeline = pipeline.resize(1200, null, { withoutEnlargement: true });
     }
 
-    // Convert to JPEG with quality 80 for universal browser/mobile compatibility and low file size
-    return await pipeline.jpeg({ quality: 80, force: true }).toBuffer();
+    // Convert to WebP with quality 80 for modern compression and low file size
+    return await pipeline.webp({ quality: 80 }).toBuffer();
   } catch (err) {
     logger.warn(`Image optimization failed, returning original buffer: ${err.message}`);
     return buffer;
@@ -123,6 +132,53 @@ async function generateVideoThumbnail(videoBuffer) {
 }
 
 /**
+ * Compress video using fluent-ffmpeg
+ * Resizes to max 720p height, uses h264/aac and +faststart flag for instant-play streaming
+ * @param {Buffer} videoBuffer - Video file buffer
+ * @returns {Promise<Buffer>} Optimized MP4 video buffer
+ */
+async function compressVideo(videoBuffer) {
+  const tempDir = os.tmpdir();
+  const randomSuffix = Math.random().toString(36).substring(7);
+  const tempInputPath = path.join(tempDir, `temp_input_${randomSuffix}.mp4`);
+  const tempOutputPath = path.join(tempDir, `temp_output_${randomSuffix}.mp4`);
+
+  try {
+    // Write buffer to temporary file
+    await fs.writeFile(tempInputPath, videoBuffer);
+
+    await new Promise((resolve, reject) => {
+      ffmpeg(tempInputPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .outputOptions([
+          '-preset fast',
+          '-crf 26',
+          '-movflags +faststart',
+          '-vf scale=-2:min(720\\,ih)' // Resize to max 720p height, maintaining aspect ratio
+        ])
+        .output(tempOutputPath)
+        .on('end', resolve)
+        .on('error', (err) => {
+          reject(err);
+        })
+        .run();
+    });
+
+    // Read compressed file into buffer
+    const compressedBuffer = await fs.readFile(tempOutputPath);
+    return compressedBuffer;
+  } catch (err) {
+    logger.warn(`Video compression failed, returning original buffer: ${err.message}`);
+    return videoBuffer;
+  } finally {
+    // Clean up temporary files
+    try { await fs.unlink(tempInputPath); } catch (_) {}
+    try { await fs.unlink(tempOutputPath); } catch (_) {}
+  }
+}
+
+/**
  * Unified entry point to handle client media uploads and optimization
  * @param {Buffer} fileBuffer - Media file buffer
  * @param {string} folder - Upload folder path prefix
@@ -162,7 +218,7 @@ async function uploadMedia(fileBuffer, folder, context, mediaType = 'auto', orig
     }
   }
 
-  // 2. Handle Video Thumbnailing
+  // 2. Handle Video Thumbnailing & Compression
   if (finalMediaType === 'video' || (mediaType === 'auto' && finalMediaType !== 'image')) {
     finalMediaType = 'video';
     try {
@@ -172,14 +228,22 @@ async function uploadMedia(fileBuffer, folder, context, mediaType = 'auto', orig
     } catch (err) {
       logger.warn(`Could not generate thumbnail for video: ${err.message}`);
     }
+
+    try {
+      logger.info('🎬 Compressing video before uploading to S3...');
+      finalBuffer = await compressVideo(fileBuffer);
+      logger.info('✅ Video compression complete');
+    } catch (err) {
+      logger.warn(`Video compression failed, using original file buffer: ${err.message}`);
+    }
   }
 
   // 3. Upload Main File
   const contentType = finalMediaType === 'image' 
-    ? 'image/jpeg' 
+    ? 'image/webp' 
     : (finalMediaType === 'video' ? 'video/mp4' : 'application/octet-stream');
   
-  const mainKey = `${baseKey}${finalMediaType === 'image' ? '.jpg' : extension}`;
+  const mainKey = `${baseKey}${finalMediaType === 'image' ? '.webp' : extension}`;
   const s3Url = await uploadBufferToS3(finalBuffer, mainKey, contentType);
 
   return {

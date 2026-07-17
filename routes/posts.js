@@ -53,6 +53,10 @@ router.get('/', verifyToken, cacheMiddleware(300), async (req, res) => {
       ]
     };
 
+    if (req.query.category) {
+      visibilityQuery.category = new RegExp('^' + escapeRegExp(req.query.category) + '$', 'i');
+    }
+
     const enriched = await postService.getEnrichedPosts(visibilityQuery, { skip, limit, viewerId });
     
     // Log feed view for analytics
@@ -138,6 +142,10 @@ router.get('/feed', optionalAuth, async (req, res, next) => {
       const blockedObjectIds = blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
       const blockedIdQueries = [...blockedIds, ...blockedObjectIds];
       visibilityQuery.userId = { $nin: blockedIdQueries };
+    }
+
+    if (req.query.category) {
+      visibilityQuery.category = new RegExp('^' + escapeRegExp(req.query.category) + '$', 'i');
     }
 
     // 3. Execute optimized fetch
@@ -539,6 +547,44 @@ router.post('/', verifyToken, validate(createPostSchema), async (req, res) => {
 
     const post = new Post(postData);
     await post.save();
+
+    // Trigger tags & mentions notifications
+    (async () => {
+      try {
+        const { handleMentionsAndTags } = require('../src/utils/mentionHelper');
+        // Handle @mentions in caption
+        if (post.caption) {
+          await handleMentionsAndTags(post.caption, post.userId, post._id);
+        }
+
+        // Handle taggedUserIds
+        if (Array.isArray(post.taggedUserIds) && post.taggedUserIds.length > 0) {
+          const User = mongoose.model('User');
+          const sender = await User.findOne({
+            $or: [
+              { _id: mongoose.Types.ObjectId.isValid(post.userId) ? new mongoose.Types.ObjectId(post.userId) : null },
+              { firebaseUid: post.userId },
+              { uid: post.userId }
+            ].filter(Boolean)
+          }).select('displayName name username').lean();
+          const senderName = sender?.displayName || sender?.name || sender?.username || 'Someone';
+
+          for (const taggedId of post.taggedUserIds) {
+            if (String(taggedId) === String(post.userId)) continue;
+            notificationQueue.add('tag', {
+              userId: taggedId,
+              senderId: post.userId,
+              title: 'Tagged in a post 🏷️',
+              body: `${senderName} tagged you in a post`,
+              data: { postId: String(post._id), type: 'TAG', screen: 'home' }
+            }).catch(() => {});
+          }
+        }
+      } catch (notiErr) {
+        console.warn('[Post-Created-Notification] Error:', notiErr.message);
+      }
+    })();
+
     res.status(201).json({ success: true, data: post });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

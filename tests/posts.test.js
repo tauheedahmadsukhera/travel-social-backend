@@ -50,6 +50,23 @@ describe('Posts API', () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.length).toBeLessThanOrEqual(5);
     });
+
+    it('should support category filtering', async () => {
+      const catPost = await Post.create({
+        userId: testUser._id,
+        content: 'Categorized test post',
+        category: 'TestCategoryOnly',
+        isPrivate: false,
+        visibility: 'Everyone'
+      });
+
+      const res = await request(app).get('/api/posts/feed?category=TestCategoryOnly');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.data[0].category).toEqual('TestCategoryOnly');
+
+      await Post.deleteOne({ _id: catPost._id });
+    });
   });
 
   describe('GET /api/posts/recommended', () => {

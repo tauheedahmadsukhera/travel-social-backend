@@ -5,6 +5,16 @@ const multer = require('multer');
 const { verifyToken } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
 const s3Service = require('../utils/s3Service');
+const rateLimiter = require('../middleware/rateLimiter');
+
+// Rate limit uploads to 30 requests per hour per user/IP
+const uploadLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyPrefix: 'rl:upload:'
+});
+
+router.use(uploadLimiter);
 
 // Configure Cloudinary
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
