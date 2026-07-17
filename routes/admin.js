@@ -86,37 +86,64 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
     }
 
-    const [totalUsers, totalPosts, activeReports, engagementData] = await Promise.all([
+    const now = new Date();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalUsers, totalPosts, activeReports,
+      usersLast7, usersPrev7,
+      postsLast7, postsPrev7,
+      activeUsers30Days,
+      engagementData, postGrowthData
+    ] = await Promise.all([
       User.countDocuments(),
       Post.countDocuments(),
       Report.countDocuments({ status: 'pending' }),
-      // Aggregate for growth chart (last 7 days)
+      // Trend: users last 7 days vs previous 7 days
+      User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      User.countDocuments({ createdAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } }),
+      // Post trend
+      Post.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      Post.countDocuments({ createdAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } }),
+      // Active users (users who posted or signed up in last 30 days)
+      User.countDocuments({ updatedAt: { $gte: thirtyDaysAgo } }),
+      // User growth chart (last 7 days)
       User.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-          }
-        },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            count: { $sum: 1 }
-          }
-        },
+        { $match: { createdAt: { $gte: sevenDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]),
+      // Post growth chart (last 7 days)
+      Post.aggregate([
+        { $match: { createdAt: { $gte: sevenDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
         { $sort: { _id: 1 } }
       ])
     ]);
 
-    // Format engagement data for chart
+    // Calculate trend percentages
+    const calcTrend = (current, previous) => {
+      if (previous === 0) return current > 0 ? '+100%' : '0%';
+      const pct = (((current - previous) / previous) * 100).toFixed(1);
+      return pct >= 0 ? `+${pct}%` : `${pct}%`;
+    };
+
+    const userTrend = calcTrend(usersLast7, usersPrev7);
+    const postTrend = calcTrend(postsLast7, postsPrev7);
+    const activeUserRate = totalUsers > 0 ? `${Math.round((activeUsers30Days / totalUsers) * 100)}%` : '0%';
+
+    // Format chart data (last 7 days)
     const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date();
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
-      d.setDate(today.getDate() - (6 - i));
+      d.setDate(now.getDate() - (6 - i));
       const dateStr = d.toISOString().split('T')[0];
       const dayName = labels[d.getDay()];
-      const dayData = engagementData.find(item => item._id === dateStr);
-      return { name: dayName, users: dayData ? dayData.count : 0, posts: 0 }; // We can add post growth too if needed
+      const userDay = engagementData.find(item => item._id === dateStr);
+      const postDay = postGrowthData.find(item => item._id === dateStr);
+      return { name: dayName, users: userDay ? userDay.count : 0, posts: postDay ? postDay.count : 0 };
     });
 
     res.json({
@@ -125,6 +152,10 @@ router.get('/stats', verifyToken, async (req, res, next) => {
         totalUsers,
         totalPosts,
         activeReports,
+        userTrend,
+        postTrend,
+        activeUserRate,
+        activeUserRateTrend: '+0.0%',
         growthData: last7Days
       }
     });
@@ -299,6 +330,184 @@ router.post('/users/:id/role', verifyToken, async (req, res, next) => {
     await log.save();
 
     res.json({ success: true, message: 'User role updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/users/:id
+ * @desc    Permanently delete a user and all their data
+ */
+router.delete('/users/:id', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const User = mongoose.model('User');
+    const Post = mongoose.model('Post');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const targetUser = await User.findOne({
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(id) ? id : null },
+        { firebaseUid: id },
+        { uid: id }
+      ]
+    });
+
+    if (!targetUser) return res.status(404).json({ success: false, error: 'User not found' });
+    if (String(targetUser._id) === String(req.userId)) {
+      return res.status(400).json({ success: false, error: 'Cannot delete your own admin account' });
+    }
+
+    const deletedUserId = targetUser._id;
+    const deletedEmail = targetUser.email;
+
+    // Delete user and their posts
+    await Promise.all([
+      User.deleteOne({ _id: deletedUserId }),
+      Post.deleteMany({ userId: deletedUserId })
+    ]);
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: 'USER_DELETED',
+      targetId: deletedUserId,
+      targetType: 'User',
+      details: { email: deletedEmail },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, message: 'User and their posts deleted permanently' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   POST /api/admin/broadcast
+ * @desc    Send a push notification/announcement to all users
+ */
+router.post('/broadcast', verifyToken, async (req, res, next) => {
+  try {
+    const { title, message, type = 'announcement' } = req.body;
+    const User = mongoose.model('User');
+    const Notification = mongoose.model('Notification');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    if (!title || !message) return res.status(400).json({ success: false, error: 'Title and message are required' });
+
+    // Fetch all user IDs
+    const users = await User.find({ status: { $ne: 'suspended' } }).select('_id').lean();
+    const userIds = users.map(u => u._id);
+
+    // Bulk insert notifications
+    const notifications = userIds.map(uid => ({
+      userId: uid,
+      type,
+      title,
+      message,
+      senderId: req.userId,
+      isRead: false,
+      createdAt: new Date()
+    }));
+
+    await Notification.insertMany(notifications, { ordered: false });
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: 'BROADCAST_SENT',
+      targetType: 'AllUsers',
+      details: { title, message, recipientCount: userIds.length },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, message: `Broadcast sent to ${userIds.length} users`, recipientCount: userIds.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   GET /api/admin/posts
+ * @desc    Get all posts with pagination for moderation
+ */
+router.get('/posts', verifyToken, async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search = '', flagged = '' } = req.query;
+    const User = mongoose.model('User');
+    const Post = mongoose.model('Post');
+    const Report = mongoose.model('Report');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    let query = {};
+    if (search) {
+      query.$or = [
+        { caption: new RegExp(search, 'i') },
+        { 'location.name': new RegExp(search, 'i') }
+      ];
+    }
+
+    // If flagged=true, only show reported posts
+    let postIds = null;
+    if (flagged === 'true') {
+      const reportedPosts = await Report.find({ targetType: 'Post', status: 'pending' }).distinct('targetId');
+      postIds = reportedPosts;
+      query._id = { $in: postIds };
+    }
+
+    const [posts, total] = await Promise.all([
+      Post.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .lean(),
+      Post.countDocuments(query)
+    ]);
+
+    res.json({ success: true, data: posts, total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/posts/:id
+ * @desc    Admin delete any post
+ */
+router.delete('/posts/:id', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const User = mongoose.model('User');
+    const Post = mongoose.model('Post');
+    const AdminLog = mongoose.model('AdminLog');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const post = await Post.findByIdAndDelete(id);
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: 'POST_DELETED',
+      targetId: id,
+      targetType: 'Post',
+      details: { caption: post.caption?.slice(0, 100) },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, message: 'Post deleted successfully' });
   } catch (err) {
     next(err);
   }
