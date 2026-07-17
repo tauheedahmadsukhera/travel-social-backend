@@ -21,22 +21,10 @@ const adminLoginLimiter = rateLimiter({
   keyPrefix: 'rl:admin:login:'
 });
 
-// Helper for Cloudinary Upload
+// Helper for S3 Upload
 async function uploadToCloudinary(fileBuffer, folder, originalName = 'image.jpg') {
-  if (process.env.STORAGE_PROVIDER === 's3') {
-    const result = await s3Service.uploadMedia(fileBuffer, folder, 'admin', 'image', originalName);
-    return result.secure_url;
-  }
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { folder: folder, resource_type: 'auto' },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve(result.secure_url);
-      }
-    );
-    uploadStream.end(fileBuffer);
-  });
+  const result = await s3Service.uploadMedia(fileBuffer, folder, 'admin', 'image', originalName);
+  return result.secure_url;
 }
 
 /**
