@@ -521,7 +521,7 @@ router.get('/:userId/aggregated', optionalAuth, async (req, res) => {
 
     // Strip sensitive info if private and no access
     if (user.isPrivate && !isApprovedFollower) {
-      const publicFields = ['_id', 'firebaseUid', 'displayName', 'username', 'avatar', 'isPrivate', 'followersCount', 'followingCount'];
+      const publicFields = ['_id', 'firebaseUid', 'displayName', 'username', 'avatar', 'isPrivate', 'followersCount', 'followingCount', 'isVerified', 'verified'];
       const filtered = {};
       publicFields.forEach(f => { filtered[f] = responseData[f]; });
       filtered.postsCount = postCount || 0;
