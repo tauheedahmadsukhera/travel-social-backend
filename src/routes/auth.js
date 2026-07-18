@@ -108,7 +108,8 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
     } else {
       user.displayName = displayName || user.displayName;
       user.avatar = avatar || user.avatar;
-      user.isVerified = isVerified;
+      // Preserve verified creator status if already set to true
+      user.isVerified = user.isVerified || isVerified;
       if (username && !user.username) {
         user.username = username.toLowerCase().trim();
       }
@@ -193,7 +194,8 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
     } else {
       user.displayName = displayName || user.displayName;
       user.avatar = avatar || user.avatar;
-      user.isVerified = isVerified;
+      // Preserve verified creator status if already set to true
+      user.isVerified = user.isVerified || isVerified;
       user.updatedAt = new Date();
       await user.save();
       logger.info(`✅ User updated on login: ${user.email}`);
