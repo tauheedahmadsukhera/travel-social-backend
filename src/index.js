@@ -61,6 +61,7 @@ require('./models/Save');
 require('./models/Reaction');
 require('./models/AdminLog');
 require('./models/Region');
+require('./models/VerificationRequest');
 
 const app = express();
 app.set('trust proxy', 1); // Trust Render reverse proxy for rate-limiting IP detection
