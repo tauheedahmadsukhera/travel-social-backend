@@ -28,6 +28,7 @@ router.use('/posts', postRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/stories', storyRoutes);
+router.use('/users/verification', require('../../routes/verification'));
 router.use('/users', userRoutes);
 router.use('/users', sectionRoutes);
 router.use('/categories', categoriesRoutes);

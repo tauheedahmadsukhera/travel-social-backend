@@ -1032,4 +1032,158 @@ router.delete('/regions/:id', verifyToken, async (req, res, next) => {
   }
 });
 
+/**
+ * @route   GET /api/admin/verification-requests
+ * @desc    Get all verification requests
+ */
+router.get('/verification-requests', verifyToken, async (req, res, next) => {
+  try {
+    const User = mongoose.model('User');
+    const VerificationRequest = mongoose.model('VerificationRequest');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status || 'pending';
+    const skip = (page - 1) * limit;
+
+    const query = { status };
+
+    const total = await VerificationRequest.countDocuments(query);
+    const requests = await VerificationRequest.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Populate user info manually/efficiently
+    const populatedRequests = [];
+    for (const request of requests) {
+      const user = await User.findOne({
+        $or: [
+          { _id: mongoose.Types.ObjectId.isValid(request.userId) ? request.userId : null },
+          { firebaseUid: request.userId },
+          { uid: request.userId }
+        ].filter(q => q._id !== null || q.firebaseUid || q.uid)
+      }).select('displayName username email avatar photoURL profilePicture').lean();
+      
+      populatedRequests.push({
+        ...request,
+        user: user || null
+      });
+    }
+
+    res.json({
+      success: true,
+      data: populatedRequests,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   PUT /api/admin/verification-requests/:id
+ * @desc    Approve or reject verification request
+ */
+router.put('/verification-requests/:id', verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, rejectionReason } = req.body;
+
+    const User = mongoose.model('User');
+    const VerificationRequest = mongoose.model('VerificationRequest');
+    const AdminLog = mongoose.model('AdminLog');
+    const Notification = mongoose.model('Notification');
+
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status update. Must be approved or rejected.' });
+    }
+
+    const verificationRequest = await VerificationRequest.findById(id);
+    if (!verificationRequest) {
+      return res.status(404).json({ success: false, error: 'Verification request not found' });
+    }
+
+    verificationRequest.status = status;
+    if (status === 'rejected') {
+      verificationRequest.rejectionReason = rejectionReason || 'Information provided did not meet criteria.';
+    } else {
+      verificationRequest.rejectionReason = '';
+    }
+    await verificationRequest.save();
+
+    // Find the user to update their verified badge status
+    const user = await User.findOne({
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(verificationRequest.userId) ? verificationRequest.userId : null },
+        { firebaseUid: verificationRequest.userId },
+        { uid: verificationRequest.userId }
+      ].filter(q => q._id !== null || q.firebaseUid || q.uid)
+    });
+
+    if (user) {
+      user.isVerified = (status === 'approved');
+      await user.save();
+
+      // Create a system notification for the user
+      const message = status === 'approved' 
+        ? 'Congratulations! Your verification request has been approved and you now have a blue tick.' 
+        : `Your verification request was rejected. Reason: ${verificationRequest.rejectionReason}`;
+
+      const notification = new Notification({
+        recipientId: verificationRequest.userId,
+        senderId: 'system',
+        senderName: 'Trips Verification',
+        type: 'verification',
+        message: message,
+        createdAt: new Date(),
+        read: false
+      });
+      await notification.save();
+
+      // Send push notification if they have a token
+      if (user.pushToken) {
+        try {
+          const { sendPushNotification } = require('../services/pushNotificationService');
+          await sendPushNotification(user.pushToken, '✓ Account Verification', message, { type: 'verification' });
+        } catch (pushErr) {
+          console.warn('Could not send verification push notification:', pushErr.message);
+        }
+      }
+    }
+
+    // Log admin action
+    const log = new AdminLog({
+      adminId: req.userId,
+      action: status === 'approved' ? 'USER_VERIFIED' : 'USER_UNVERIFIED',
+      targetId: verificationRequest.userId,
+      targetType: 'User',
+      details: {
+        requestId: id,
+        fullName: verificationRequest.fullName,
+        category: verificationRequest.category,
+        reason: rejectionReason
+      },
+      ipAddress: req.ip
+    });
+    await log.save();
+
+    res.json({ success: true, data: verificationRequest });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
