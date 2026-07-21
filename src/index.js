@@ -67,15 +67,49 @@ const app = express();
 app.set('trust proxy', 1); // Trust Render reverse proxy for rate-limiting IP detection
 const PORT = process.env.PORT || 5000;
 
-// ============= RATE LIMITING =============
-const limiter = rateLimit({
+// ============= RATE LIMITING (MULTI-TIER SECURITY) =============
+
+// 1. Rapid Burst Protection (Max 10 requests/second per IP to stop automated scraping/spam loops)
+const burstLimiter = rateLimit({
+  windowMs: 1 * 1000, // 1 second
+  max: 10,
+  message: { success: false, error: 'Too many rapid requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 2. Auth Route Protection (Max 20 requests/15 mins per IP to stop brute-force & OTP spam)
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // limit each IP to 300 requests per windowMs (defense against DDoS/scraping)
+  max: 20,
+  message: { success: false, error: 'Too many authentication attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 3. Upload Protection (Max 10 file uploads/minute per IP to prevent media storage flooding)
+const uploadLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 10,
+  message: { success: false, error: 'Upload limit exceeded. Please wait a minute before uploading again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 4. Global API Limit (Max 600 requests/15 mins per IP for smooth app usage)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 600,
   message: { success: false, error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api/', limiter);
+
+// Apply Rate Limiters
+app.use('/api/auth/', authLimiter);
+app.use('/api/upload/', uploadLimiter);
+app.use('/api/', burstLimiter);
+app.use('/api/', globalLimiter);
 
 // ============= SENTRY INITIALIZATION =============
 // Must be called before any other middleware

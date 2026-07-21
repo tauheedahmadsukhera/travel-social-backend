@@ -191,11 +191,17 @@ router.get('/users', verifyToken, async (req, res, next) => {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
     }
 
+    // Industrial scale sanitization
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
     const query = {};
-    if (search) {
+    if (search && typeof search === 'string') {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { displayName: new RegExp(search, 'i') },
-        { email: new RegExp(search, 'i') }
+        { displayName: new RegExp(safeSearch, 'i') },
+        { email: new RegExp(safeSearch, 'i') }
       ];
     }
     if (role) query.role = role;
@@ -204,8 +210,8 @@ router.get('/users', verifyToken, async (req, res, next) => {
     const [users, total] = await Promise.all([
       User.find(query)
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit)),
+        .skip(skip)
+        .limit(limitNum),
       User.countDocuments(query)
     ]);
 
@@ -415,22 +421,26 @@ router.post('/broadcast', verifyToken, async (req, res, next) => {
 
     if (!title || !message) return res.status(400).json({ success: false, error: 'Title and message are required' });
 
-    // Fetch all user IDs
+    // Fetch all active user IDs in lean mode
     const users = await User.find({ status: { $ne: 'suspended' } }).select('_id').lean();
     const userIds = users.map(u => u._id);
 
-    // Bulk insert notifications
-    const notifications = userIds.map(uid => ({
-      userId: uid,
-      type,
-      title,
-      message,
-      senderId: req.userId,
-      isRead: false,
-      createdAt: new Date()
-    }));
-
-    await Notification.insertMany(notifications, { ordered: false });
+    // Industrial Scale Batch Insertion (1,000 items per chunk) to avoid RAM spikes & DB timeouts
+    const CHUNK_SIZE = 1000;
+    const now = new Date();
+    for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
+      const chunkIds = userIds.slice(i, i + CHUNK_SIZE);
+      const chunkNotifications = chunkIds.map(uid => ({
+        userId: uid,
+        type,
+        title,
+        message,
+        senderId: req.userId,
+        isRead: false,
+        createdAt: now
+      }));
+      await Notification.insertMany(chunkNotifications, { ordered: false });
+    }
 
     const log = new AdminLog({
       adminId: req.userId,
@@ -461,11 +471,17 @@ router.get('/posts', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
+    // Industrial scale sanitization
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
     let query = {};
-    if (search) {
+    if (search && typeof search === 'string') {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { caption: new RegExp(search, 'i') },
-        { 'location.name': new RegExp(search, 'i') }
+        { caption: new RegExp(safeSearch, 'i') },
+        { 'location.name': new RegExp(safeSearch, 'i') }
       ];
     }
 
@@ -480,8 +496,8 @@ router.get('/posts', verifyToken, async (req, res, next) => {
     const [posts, total] = await Promise.all([
       Post.find(query)
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit))
+        .skip(skip)
+        .limit(limitNum)
         .lean(),
       Post.countDocuments(query)
     ]);
@@ -536,11 +552,14 @@ router.get('/logs', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
-    const { page = 1, limit = 50 } = req.query;
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
     const logs = await AdminLog.find()
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
+      .skip(skip)
+      .limit(limitNum)
       .populate('adminId', 'displayName email');
 
     res.json({ success: true, data: logs });
@@ -648,17 +667,22 @@ router.get('/comments', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
-    const { page = 1, limit = 20, search = '' } = req.query;
+    const { search = '' } = req.query;
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
     let query = {};
-    if (search) {
-      query.text = new RegExp(search, 'i');
+    if (search && typeof search === 'string') {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.text = new RegExp(safeSearch, 'i');
     }
 
     const [comments, total] = await Promise.all([
       Comment.find(query)
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit))
+        .skip(skip)
+        .limit(limitNum)
         .lean(),
       Comment.countDocuments(query)
     ]);
@@ -714,13 +738,15 @@ router.get('/stories', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
-    const { page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
     const [stories, total] = await Promise.all([
       Story.find()
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit))
+        .skip(skip)
+        .limit(limitNum)
         .lean(),
       Story.countDocuments()
     ]);
@@ -818,13 +844,15 @@ router.get('/streams', verifyToken, async (req, res, next) => {
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
-    const { page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
     const [streams, total] = await Promise.all([
       LiveStream.find()
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit))
+        .skip(skip)
+        .limit(limitNum)
         .lean(),
       LiveStream.countDocuments()
     ]);
