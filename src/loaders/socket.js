@@ -19,13 +19,26 @@ const initSockets = (server, secret) => {
   });
   
   // Secure WebSocket Middleware
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.headers.token;
     if (!token) {
       return next(new Error('Authentication error: Token missing'));
     }
     try {
       const decoded = jwt.verify(token, secret);
+      
+      // Verify user status in database in real-time
+      const User = mongoose.model('User');
+      const user = await User.findById(decoded.userId).select('status').lean();
+      
+      if (!user) {
+        return next(new Error('Authentication error: User not found'));
+      }
+      
+      if (user.status === 'suspended' || user.status === 'banned') {
+        return next(new Error(`Authentication error: Account ${user.status}`));
+      }
+
       socket.userId = decoded.userId;
       next();
     } catch (err) {

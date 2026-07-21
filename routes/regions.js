@@ -20,13 +20,7 @@ router.get('/', cacheMiddleware(3600), async (req, res) => {
       countryCode: r.countryCode
     }));
 
-    // Explicitly set JSON content type and no-cache
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    res.status(200).send(JSON.stringify({ success: true, data: mappedRegions }));
+    res.status(200).json({ success: true, data: mappedRegions });
   } catch (err) {
     console.error('[GET /api/regions] ❌ Error:', err.message);
     res.status(500).json({ success: false, error: err.message });

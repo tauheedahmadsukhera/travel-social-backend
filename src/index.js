@@ -593,7 +593,8 @@ if (process.env.NODE_ENV !== 'test') {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-// Connect to Database AFTER server/routes are fully loaded to prevent event loop blockage
-connectDatabase();
+if (process.env.NODE_ENV !== 'test') {
+  connectDatabase();
+}
 
 module.exports = server || app;

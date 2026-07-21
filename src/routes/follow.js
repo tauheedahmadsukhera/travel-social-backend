@@ -603,37 +603,36 @@ router.get('/users/:userId/blocked', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const db = mongoose.connection.db;
-    const blocksCollection = db.collection('blocks');
+    const User = mongoose.model('User');
+    
+    // Find the blocker user to retrieve their blockedUsers array
+    const blockerQuery = { $or: [{ firebaseUid: userId }, { uid: userId }] };
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      blockerQuery.$or.push({ _id: new mongoose.Types.ObjectId(userId) });
+    }
 
-    // Get all blocked users
-    const blocks = await blocksCollection.find({
-      blockerId: mongoose.Types.ObjectId.isValid(userId)
-        ? new mongoose.Types.ObjectId(userId)
-        : userId
-    }).toArray();
-
-    if (blocks.length === 0) {
+    const blocker = await User.findOne(blockerQuery).select('blockedUsers');
+    if (!blocker || !blocker.blockedUsers || blocker.blockedUsers.length === 0) {
       return res.json({ success: true, data: [] });
     }
 
-    const blockedIds = blocks.map(b => b.blockedId.toString());
+    const blockedIds = blocker.blockedUsers.map(String);
 
-    // Get user details
-    const User = mongoose.model('User');
+    // Get user details for all blocked users
     const users = await User.find({
       $or: [
+        { _id: { $in: blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
         { firebaseUid: { $in: blockedIds } },
-        { _id: { $in: blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } }
+        { uid: { $in: blockedIds } }
       ]
-    }).select('firebaseUid displayName name username avatar photoURL profilePicture');
+    }).select('firebaseUid uid displayName name username avatar photoURL profilePicture');
 
     const userItems = users.map(user => {
       const displayName = user.displayName || user.name || 'User';
       const resolvedAvatar = user.avatar || user.photoURL || user.profilePicture || '';
 
       return {
-        uid: user.firebaseUid || user._id.toString(),
+        uid: user.firebaseUid || user.uid || user._id.toString(),
         name: displayName,
         username: user.username || '',
         avatar: resolvedAvatar,

@@ -141,7 +141,7 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
 
   const jwtSecret = getJwtSecretOrNull();
   if (jwtSecret) {
-    io.use((socket, next) => {
+    io.use(async (socket, next) => {
       try {
         const token = socket.handshake.auth?.token || socket.handshake.query?.token;
         if (!token) {
@@ -151,6 +151,15 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
         const decoded = jwt.verify(String(token), jwtSecret);
         const uid = String(decoded.userId || '').trim();
         if (!uid) return next(new Error('Unauthorized'));
+
+        // Real-time account status check to block suspended/banned users
+        const User = mongoose.model('User');
+        const user = await User.findById(uid).select('status').lean();
+        if (!user || user.status === 'suspended' || user.status === 'banned') {
+          logger.warn('🔌 Socket connection rejected for suspended/banned user %s (socket: %s)', uid, socket.id);
+          return next(new Error('Unauthorized'));
+        }
+
         socket.data.authUserId = uid;
         socket.data.authEmail = decoded.email;
         return next();

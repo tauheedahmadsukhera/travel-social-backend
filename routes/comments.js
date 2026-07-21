@@ -568,10 +568,20 @@ router.delete('/:postId/comments/:commentId', verifyToken, async (req, res) => {
 
     await Comment.deleteOne({ _id: req.params.commentId });
 
-    // Update post count
+    // Update post count using updateOne with dynamic query so it works for
+    // both native MongoDB ObjectIds and custom string id fields.
     try {
       const Post = mongoose.model('Post');
-      await Post.findByIdAndUpdate(req.params.postId, { $inc: { commentsCount: -1, commentCount: -1 } });
+      if (post && post._id) {
+        // Fast path: we already have the resolved ObjectId from the earlier fetch
+        await Post.updateOne({ _id: post._id }, { $inc: { commentsCount: -1, commentCount: -1 } });
+      } else if (req.params.postId) {
+        // Fallback: use the same dual-id query pattern to handle custom string ids
+        const fallbackQuery = mongoose.Types.ObjectId.isValid(req.params.postId)
+          ? { $or: [{ _id: req.params.postId }, { id: req.params.postId }] }
+          : { id: req.params.postId };
+        await Post.updateOne(fallbackQuery, { $inc: { commentsCount: -1, commentCount: -1 } });
+      }
     } catch (e) {
       console.warn('Post count update failed:', e.message);
     }

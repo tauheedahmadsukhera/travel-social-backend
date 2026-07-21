@@ -542,6 +542,31 @@ router.post('/forgot-password', validate(require('../validations/authValidation'
 });
 
 /**
+ * POST /api/auth/verify-reset-code
+ * Verify password reset code without resetting password
+ */
+router.post('/verify-reset-code', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ success: false, error: 'Email and verification code are required' });
+    }
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      resetCode: code,
+      resetCodeExpires: { $gt: Date.now() }
+    });
+    if (!user) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired verification code' });
+    }
+    res.json({ success: true, message: 'Code verified successfully' });
+  } catch (error) {
+    logger.error('[Auth] Verify reset code error: %O', error);
+    res.status(500).json({ success: false, error: 'Failed to verify code' });
+  }
+});
+
+/**
  * POST /api/auth/reset-password
  * Reset password using verification code
  */
@@ -618,6 +643,70 @@ router.get('/tiktok/callback', (req, res) => {
   return res.redirect(finalRedirect);
 });
 
+// POST /api/auth/send-otp - Generate and cache a secure OTP for signup/login
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+    if (!email && !phone) {
+      return res.status(400).json({ success: false, error: 'Email or phone number is required' });
+    }
+
+    const target = email || phone;
+    // Generate a secure 6-digit OTP using crypto (NOT Math.random which is predictable)
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    
+    // Store OTP in cache for 5 minutes (300 seconds)
+    const { set } = require('../utils/redis');
+    await set(`signup_otp:${target}`, otp, 300);
+
+    logger.info(`📱 Generated signup OTP for ${target}`);
+
+    // DEV ONLY: log to server console for testing, never expose in API response
+    if (process.env.NODE_ENV !== 'production') {
+      logger.info(`[DEV] OTP for ${target}: ${otp}`);
+    }
+
+    res.json({
+      success: true,
+      message: 'OTP sent successfully'
+      // NOTE: generatedOtp intentionally omitted from response for security
+    });
+  } catch (err) {
+    logger.error('Error sending OTP: %s', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/auth/verify-otp - Verify cached OTP
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, phone, code } = req.body;
+    if ((!email && !phone) || !code) {
+      return res.status(400).json({ success: false, error: 'Email/phone and OTP code are required' });
+    }
+
+    const target = email || phone;
+    const { get, del } = require('../utils/redis');
+    const cachedOtp = await get(`signup_otp:${target}`);
+
+    if (!cachedOtp) {
+      return res.status(400).json({ success: false, error: 'OTP has expired or does not exist' });
+    }
+
+    if (String(cachedOtp) !== String(code)) {
+      return res.status(400).json({ success: false, error: 'Invalid OTP code' });
+    }
+
+    // Delete verified OTP so it cannot be re-used
+    await del(`signup_otp:${target}`);
+
+    res.json({ success: true, message: 'OTP verified successfully' });
+  } catch (err) {
+    logger.error('Error verifying OTP: %s', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * POST /api/auth/tiktok
  * Exchanges a TikTok OAuth code for access token and profile info.
@@ -629,8 +718,11 @@ router.post('/tiktok', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing code or redirectUri' });
     }
 
-    const clientKey = process.env.TIKTOK_CLIENT_KEY || 'sbaw2fl1aploaraj7w';
-    const clientSecret = process.env.TIKTOK_CLIENT_SECRET || 'zXKL2dYJ7CUir9DwoowFdmUjWGVL16dN';
+    const clientKey = process.env.TIKTOK_CLIENT_KEY;
+    const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+    if (!clientKey || !clientSecret) {
+      return res.status(500).json({ success: false, error: 'TikTok OAuth credentials are not configured on this server.' });
+    }
 
     const axios = require('axios');
     const params = new URLSearchParams();
@@ -668,6 +760,17 @@ router.post('/tiktok', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Failed to obtain user info from TikTok' });
     }
 
+    const admin = require('firebase-admin');
+    let customToken = null;
+    try {
+      if (admin.apps.length > 0) {
+        const firebaseUid = `tiktok_${userInfoData.data.user.open_id}`;
+        customToken = await admin.auth().createCustomToken(firebaseUid);
+      }
+    } catch (e) {
+      logger.warn('Failed to create Firebase custom token for TikTok: %s', e.message);
+    }
+
     res.json({
       success: true,
       accessToken: tokenData.access_token,
@@ -675,6 +778,7 @@ router.post('/tiktok', async (req, res) => {
       unionId: userInfoData.data.user.union_id,
       displayName: userInfoData.data.user.display_name,
       avatarUrl: userInfoData.data.user.avatar_url,
+      customToken
     });
   } catch (error) {
     logger.error('❌ TikTok auth error: %s', error.response?.data ? JSON.stringify(error.response.data) : error.message);
@@ -696,8 +800,11 @@ router.post('/snapchat', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing code or redirectUri' });
     }
 
-    const clientId = process.env.SNAPCHAT_CLIENT_ID || 'df984df9-50a4-43a7-a90f-7a9e303dc92d';
-    const clientSecret = process.env.SNAPCHAT_CLIENT_SECRET || '0727a5df-e02e-4bf0-a716-5dba1c20f017';
+    const clientId = process.env.SNAPCHAT_CLIENT_ID;
+    const clientSecret = process.env.SNAPCHAT_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ success: false, error: 'Snapchat OAuth credentials are not configured on this server.' });
+    }
 
     const axios = require('axios');
 
@@ -739,12 +846,24 @@ router.post('/snapchat', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Failed to retrieve Snapchat user profile' });
     }
 
+    const admin = require('firebase-admin');
+    let customToken = null;
+    try {
+      if (admin.apps.length > 0) {
+        const firebaseUid = `snapchat_${me.externalId}`;
+        customToken = await admin.auth().createCustomToken(firebaseUid);
+      }
+    } catch (e) {
+      logger.warn('Failed to create Firebase custom token for Snapchat: %s', e.message);
+    }
+
     res.json({
       success: true,
       accessToken: tokenData.access_token,
       externalId: me.externalId,
       displayName: me.displayName || 'Snapchat User',
       avatarUrl: me.bitmoji?.avatar || null,
+      customToken
     });
   } catch (error) {
     logger.error('❌ Snapchat auth error: %s', error.response?.data ? JSON.stringify(error.response.data) : error.message);

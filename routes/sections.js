@@ -248,6 +248,7 @@ router.put('/:uid/sections/:sectionId', verifyToken, async (req, res) => {
     };
 
     if (isCollaborator && !isOwner) {
+      if (Array.isArray(postIds)) section.postIds = postIds.map(String);
       if (addPostId) safeAddPost(addPostId);
       if (removePostId) safeRemovePost(removePostId);
     } else {

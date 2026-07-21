@@ -165,9 +165,41 @@ UserSchema.set('toJSON', { virtuals: true });
 UserSchema.set('toObject', { virtuals: true });
 
 UserSchema.pre('save', function(next) {
+  const av = this.avatar || this.photoURL || this.profilePicture || null;
+  this.avatar = av;
+  this.photoURL = av;
+  this.profilePicture = av;
   this.updatedAt = new Date();
   next();
 });
+
+// Middleware hooks to sync duplicate profile fields on queries updating the User
+function syncAvatars(next) {
+  const update = this.getUpdate();
+  if (update) {
+    let av = update.avatar || update.photoURL || update.profilePicture;
+    if (update.$set) {
+      av = av || update.$set.avatar || update.$set.photoURL || update.$set.profilePicture;
+    }
+    
+    if (av !== undefined) {
+      if (update.$set) {
+        update.$set.avatar = av;
+        update.$set.photoURL = av;
+        update.$set.profilePicture = av;
+      } else {
+        update.avatar = av;
+        update.photoURL = av;
+        update.profilePicture = av;
+      }
+    }
+  }
+  next();
+}
+
+UserSchema.pre('updateOne', syncAvatars);
+UserSchema.pre('findOneAndUpdate', syncAvatars);
+UserSchema.pre('updateMany', syncAvatars);
 
 // Indexes for fast queries
 UserSchema.index({ email: 1 });

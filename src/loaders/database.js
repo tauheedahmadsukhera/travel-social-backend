@@ -15,7 +15,7 @@ const connectDB = async () => {
     logger.info('✅ MongoDB Connected Successfully');
 
     // Auto-register models
-    const modelsPath = path.resolve(__dirname, '../../models');
+    const modelsPath = path.resolve(__dirname, '../models');
     if (fs.existsSync(modelsPath)) {
       fs.readdirSync(modelsPath).forEach(file => {
         if (file.endsWith('.js')) require(path.join(modelsPath, file));
