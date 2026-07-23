@@ -303,19 +303,32 @@ router.delete('/:sectionId', verifyToken, async (req, res) => {
   }
 });
 
-// UPDATE section order  
-router.patch('/:userId/sections-order', async (req, res) => {
+// UPDATE section order (Requires Auth + ownership)
+router.patch('/:userId/sections-order', verifyToken, async (req, res) => {
   try {
+    const { userId } = req.params;
     const { sections } = req.body;
+    const authenticatedUserId = req.userId;
+
+    const resolved = await resolveUserIdentifiers(authenticatedUserId);
+    const target = await resolveUserIdentifiers(userId);
+    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You can only reorder your own sections' });
+    }
 
     if (!sections || !Array.isArray(sections)) {
       return res.status(400).json({ success: false, error: 'sections array required' });
     }
 
-    // Update all sections in a single operation
+    // Only update sections that belong to this user
+    const ownerCandidates = target.candidates.map(String);
     const updatePromises = sections.map((section, index) =>
       Section.updateOne(
-        { _id: section._id || section.id },
+        {
+          _id: section._id || section.id,
+          userId: { $in: ownerCandidates }
+        },
         { order: index, updatedAt: new Date() }
       )
     );

@@ -53,11 +53,12 @@ const User = require('../models/User');
  */
 router.post('/register-firebase', validate(registerFirebaseSchema), async (req, res) => {
   try {
-    const { idToken, firebaseUid: clientUid, email, displayName, avatar, username } = req.body;
+    const { idToken, firebaseUid: clientUid, email: bodyEmail, displayName, avatar, username } = req.body;
 
     // SECURITY: Verify Firebase ID Token on backend
     let firebaseUid = clientUid;
     let isVerified = false;
+    let tokenEmail = null;
     if (idToken) {
       const admin = getFirebaseAdmin();
       if (!admin) {
@@ -71,6 +72,7 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
           const decodedToken = await admin.auth().verifyIdToken(idToken);
           firebaseUid = decodedToken.uid;
           isVerified = decodedToken.email_verified || false;
+          tokenEmail = decodedToken.email ? String(decodedToken.email).toLowerCase() : null;
           logger.info(`✅ Firebase token verified for UID: ${firebaseUid}, email_verified: ${isVerified}`);
         } catch (err) {
           logger.error('❌ Firebase token verification failed: %s', err.message);
@@ -81,21 +83,28 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
       return res.status(401).json({ success: false, error: 'Authentication token required' });
     }
 
+    // Never trust client-supplied email for account linking — use verified token email only
+    const email = tokenEmail || (process.env.NODE_ENV !== 'production' ? (bodyEmail ? String(bodyEmail).toLowerCase() : null) : null);
+
     let user = await User.findOne({ firebaseUid });
 
-    // If not found by UID, check by email for account linking
-    if (!user && email) {
-      user = await User.findOne({ email: email.toLowerCase() });
-      if (user) {
-        user.firebaseUid = firebaseUid; // Link the new social provider to existing account
-        logger.info(`🔗 Linked existing user ${user.email} with new Firebase UID: ${firebaseUid}`);
+    // Link only when verified token email matches an existing account AND email is verified in Firebase
+    if (!user && tokenEmail) {
+      if (isVerified) {
+        user = await User.findOne({ email: tokenEmail });
+        if (user) {
+          user.firebaseUid = firebaseUid;
+          logger.info(`🔗 Linked existing user ${user.email} with new Firebase UID: ${firebaseUid}`);
+        }
+      } else {
+        logger.warn(`⚠️ Skipped auto-linking for unverified email on register: ${tokenEmail} (firebaseUid: ${firebaseUid})`);
       }
     }
     
     if (!user) {
       user = new User({
         firebaseUid,
-        email: email ? email.toLowerCase() : `${firebaseUid}@trips.app`,
+        email: email || `${firebaseUid}@trips.app`,
         displayName: displayName || (email ? email.split('@')[0] : 'User'),
         avatar: avatar || null,
         username: username ? username.toLowerCase().trim() : undefined,
@@ -143,11 +152,12 @@ router.post('/register-firebase', validate(registerFirebaseSchema), async (req, 
  */
 router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) => {
   try {
-    const { idToken, firebaseUid: clientUid, email, displayName, avatar } = req.body;
+    const { idToken, firebaseUid: clientUid, email: bodyEmail, displayName, avatar } = req.body;
 
     // SECURITY: Verify Firebase ID Token on backend
     let firebaseUid = clientUid;
     let isVerified = false;
+    let tokenEmail = null;
     if (idToken) {
       const admin = getFirebaseAdmin();
       if (!admin) {
@@ -160,6 +170,7 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
           const decodedToken = await admin.auth().verifyIdToken(idToken);
           firebaseUid = decodedToken.uid;
           isVerified = decodedToken.email_verified || false;
+          tokenEmail = decodedToken.email ? String(decodedToken.email).toLowerCase() : null;
           logger.info(`✅ Firebase token verified for UID: ${firebaseUid}, email_verified: ${isVerified}`);
         } catch (err) {
           logger.error('❌ Firebase token verification failed: %s', err.message);
@@ -170,21 +181,28 @@ router.post('/login-firebase', validate(loginFirebaseSchema), async (req, res) =
       return res.status(401).json({ success: false, error: 'Authentication token required' });
     }
 
+    // Never trust client-supplied email for account linking — use verified token email only
+    const email = tokenEmail || (process.env.NODE_ENV !== 'production' ? (bodyEmail ? String(bodyEmail).toLowerCase() : null) : null);
+
     let user = await User.findOne({ firebaseUid });
 
-    // If not found by UID, check by email for account linking
-    if (!user && email) {
-      user = await User.findOne({ email: email.toLowerCase() });
-      if (user) {
-        user.firebaseUid = firebaseUid; // Link the new social provider to existing account
-        logger.info(`🔗 Linked existing user ${user.email} with new Firebase UID: ${firebaseUid}`);
+    // Link only when verified token email matches an existing account AND email is verified in Firebase
+    if (!user && tokenEmail) {
+      if (isVerified) {
+        user = await User.findOne({ email: tokenEmail });
+        if (user) {
+          user.firebaseUid = firebaseUid;
+          logger.info(`🔗 Linked existing user ${user.email} with new Firebase UID: ${firebaseUid}`);
+        }
+      } else {
+        logger.warn(`⚠️ Skipped auto-linking for unverified email: ${tokenEmail} (firebaseUid: ${firebaseUid})`);
       }
     }
     
     if (!user) {
       user = new User({
         firebaseUid,
-        email: email ? email.toLowerCase() : `${firebaseUid}@trips.app`,
+        email: email || `${firebaseUid}@trips.app`,
         displayName: displayName || (email ? email.split('@')[0] : 'User'),
         avatar: avatar || null,
         isVerified
@@ -617,7 +635,16 @@ router.get('/tiktok/callback', (req, res) => {
       const decodedStr = state.startsWith('%') || state.startsWith('{') ? decodeURIComponent(state) : state;
       const stateObj = JSON.parse(decodedStr);
       if (stateObj && stateObj.returnUrl) {
-        redirectUrl = stateObj.returnUrl;
+        // Allowlist: only app deep-link schemes / known hosts — block open redirects
+        const candidate = String(stateObj.returnUrl);
+        const allowed =
+          candidate.startsWith('trave-social://') ||
+          candidate.startsWith('com.tauhee56.travesocial://');
+        if (allowed) {
+          redirectUrl = candidate;
+        } else {
+          logger.warn(`[Auth] Rejected TikTok returnUrl open-redirect candidate: ${candidate}`);
+        }
       }
       if (stateObj && stateObj.csrf) {
         csrfToken = stateObj.csrf;

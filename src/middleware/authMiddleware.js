@@ -103,7 +103,7 @@ const generateToken = (userId, email, firebaseUid = null) => {
       iat: Math.floor(Date.now() / 1000),
     },
     getJwtSecret(),
-    { expiresIn: '7300d' }
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 };
 

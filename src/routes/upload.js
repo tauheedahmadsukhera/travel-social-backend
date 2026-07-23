@@ -99,13 +99,38 @@ router.post('/story', verifyToken, diskUpload.single('file'), handleMulterError,
   }
 });
 
+/** Sanitize client-supplied upload folder path to prevent S3 key traversal. */
+function sanitizeUploadFolder(rawPath, userId) {
+  const fallback = `media/${userId}`;
+  if (!rawPath || typeof rawPath !== 'string') return fallback;
+
+  const trimmed = rawPath.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (
+    trimmed.includes('..') ||
+    trimmed.startsWith('/') ||
+    /^[a-zA-Z]:/.test(trimmed) ||
+    trimmed.includes('\0')
+  ) {
+    return null; // reject
+  }
+
+  const allowed = /^media\/[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)*$/;
+  if (!allowed.test(trimmed)) {
+    return fallback;
+  }
+  return trimmed;
+}
+
 // Alias route for industrial standard binary upload
 router.post('/upload', verifyToken, diskUpload.single('file'), handleMulterError, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No binary file provided. Use multipart/form-data.' });
     
     const userId = req.userId || 'anonymous';
-    const folder = req.body.path || `media/${userId}`;
+    const folder = sanitizeUploadFolder(req.body.path, userId);
+    if (folder === null) {
+      return res.status(400).json({ success: false, error: 'Invalid upload path' });
+    }
 
     const result = await s3Service.uploadMedia(req.file.path, folder, 'media', req.body.mediaType || 'auto', req.file.originalname || 'file');
 

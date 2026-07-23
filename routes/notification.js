@@ -31,8 +31,19 @@ router.post('/', verifyToken, async (req, res, next) => {
 // Get notifications for a user (multiple route patterns supported)
 const getNotificationsHandler = async (req, res, next) => {
   try {
-    const user = await resolveUserIdentifiers(req.params.userId);
-    console.log(`🔍 [Notifications] Fetching for ${req.params.userId}, resolved candidates:`, user.candidates);
+    // IDOR prevention: only self (or admin) may read another user's notifications
+    const requestedId = req.params.userId;
+    const resolvedMe = await resolveUserIdentifiers(req.userId);
+    const resolvedTarget = await resolveUserIdentifiers(requestedId);
+    const isSelf = resolvedMe.candidates.some(c =>
+      resolvedTarget.candidates.map(String).includes(String(c))
+    );
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const user = resolvedTarget;
+    console.log(`🔍 [Notifications] Fetching for ${requestedId}, resolved candidates:`, user.candidates);
     
     const notifications = await Notification.find({ 
       recipientId: { $in: user.candidates } 
@@ -117,9 +128,19 @@ router.put('/:notificationId/read', verifyToken, async (req, res, next) => {
 });
 
 // Alias for mark as read (some clients use PATCH)
-router.patch('/:notificationId/read', async (req, res, next) => {
+router.patch('/:notificationId/read', verifyToken, async (req, res, next) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.notificationId, { read: true });
+    const notification = await Notification.findById(req.params.notificationId);
+    if (!notification) return res.status(404).json({ success: false, error: 'Not found' });
+
+    const userId = req.userId;
+    const resolved = await resolveUserIdentifiers(userId);
+    if (!resolved.candidates.includes(String(notification.recipientId)) && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    notification.read = true;
+    await notification.save();
     res.json({ success: true });
   } catch (err) {
     next(err);

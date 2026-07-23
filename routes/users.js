@@ -103,7 +103,7 @@ router.get('/search', verifyToken, cacheMiddleware(60), async (req, res) => {
 });
 
 // GET /api/users/:userId/passport - Get passport data
-router.get('/:userId/passport', async (req, res) => {
+router.get('/:userId/passport', optionalAuth, async (req, res) => {
   try {
     const { userId } = req.params;
     const User = mongoose.model('User');
@@ -111,6 +111,36 @@ router.get('/:userId/passport', async (req, res) => {
     const Passport = mongoose.model('Passport');
 
     const resolved = await resolveUserIdentifiers(userId);
+
+    // Privacy gate for private accounts — JWT identity only
+    const targetUser = await User.findOne({
+      $or: [
+        { firebaseUid: userId },
+        { uid: userId },
+        { _id: mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null }
+      ]
+    }).select('isPrivate').lean();
+
+    if (targetUser?.isPrivate) {
+      const requesterUserId = req.userId || null;
+      if (!requesterUserId) {
+        return res.json({ success: true, data: { ticketCount: 0, stamps: [] }, isPrivate: true, hasAccess: false });
+      }
+      const requesterResolved = await resolveUserIdentifiers(requesterUserId);
+      const isSelf = resolved.candidates.some(c =>
+        requesterResolved.candidates.map(String).includes(String(c))
+      );
+      if (!isSelf) {
+        const Follow = mongoose.model('Follow');
+        const isFollowing = await Follow.findOne({
+          followerId: { $in: requesterResolved.candidates.map(String) },
+          followingId: { $in: resolved.candidates.map(String) }
+        });
+        if (!isFollowing) {
+          return res.json({ success: true, data: { ticketCount: 0, stamps: [] }, isPrivate: true, hasAccess: false });
+        }
+      }
+    }
     
     // Also add ObjectId variants for Passport userId matching just in case
     const objectIdCandidates = resolved.candidates
@@ -371,26 +401,45 @@ router.get('/:userId/conversations/archived', verifyToken, async (req, res) => {
     const conversations = await Conversation.find({
       archivedBy: { $in: idsToMatch },
       deletedBy: { $nin: idsToMatch }
-    }).sort({ lastMessageAt: -1 });
+    }).sort({ lastMessageAt: -1 }).lean();
 
     const User = mongoose.model('User');
 
-    const enriched = await Promise.all(conversations.map(async (conversation) => {
-      const convObj = conversation.toObject ? conversation.toObject() : conversation;
-      const participants = Array.isArray(convObj?.participants) ? convObj.participants.map(String) : [];
-      const otherParticipantId = participants.find(p => !idsToMatch.includes(String(p)));
+    const otherIds = [...new Set(
+      conversations
+        .map((c) => {
+          const participants = Array.isArray(c?.participants) ? c.participants.map(String) : [];
+          return participants.find((p) => !idsToMatch.includes(String(p)));
+        })
+        .filter(Boolean)
+        .map(String)
+    )];
 
-      let otherUser = null;
-      if (otherParticipantId) {
-        otherUser = await User.findOne({
+    const objectIds = otherIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const otherUsers = otherIds.length === 0
+      ? []
+      : await User.find({
           $or: [
-            { firebaseUid: otherParticipantId },
-            { uid: otherParticipantId },
-            { _id: mongoose.Types.ObjectId.isValid(otherParticipantId) ? new mongoose.Types.ObjectId(otherParticipantId) : null }
+            { firebaseUid: { $in: otherIds } },
+            { uid: { $in: otherIds } },
+            ...(objectIds.length ? [{ _id: { $in: objectIds } }] : [])
           ]
-        });
-      }
+        }).select('displayName name avatar photoURL firebaseUid uid').lean();
 
+    const userById = new Map();
+    for (const u of otherUsers) {
+      if (u.firebaseUid) userById.set(String(u.firebaseUid), u);
+      if (u.uid) userById.set(String(u.uid), u);
+      if (u._id) userById.set(String(u._id), u);
+    }
+
+    const enriched = conversations.map((convObj) => {
+      const participants = Array.isArray(convObj?.participants) ? convObj.participants.map(String) : [];
+      const otherParticipantId = participants.find((p) => !idsToMatch.includes(String(p)));
+      const otherUser = otherParticipantId ? userById.get(String(otherParticipantId)) : null;
       const resolvedOtherUserId = otherUser?._id ? String(otherUser._id) : otherParticipantId;
 
       return {
@@ -404,7 +453,7 @@ router.get('/:userId/conversations/archived', verifyToken, async (req, res) => {
           avatar: otherUser?.avatar || otherUser?.photoURL || null
         } : null
       };
-    }));
+    });
 
     return res.json({ success: true, data: enriched || [] });
   } catch (err) {
@@ -585,21 +634,26 @@ router.get('/:userId', optionalAuth, async (req, res) => {
         }
       } catch { }
 
-      // Check if profile is private
-      if (userObj.isPrivate && requesterUserId) {
+      // Check if profile is private — always enforce for anonymous and non-followers
+      if (userObj.isPrivate) {
         const targetResolved = await resolveUserIdentifiers(userId);
-        const requesterResolved = await resolveUserIdentifiers(requesterUserId);
-        const isSelf = targetResolved.canonicalId === requesterResolved.canonicalId;
+        let isSelf = false;
+        let isFollowing = false;
 
-        if (!isSelf) {
-          // Check if requester is following
-          const Follow = mongoose.model('Follow');
-          const isFollowing = await Follow.findOne({
-            followerId: { $in: requesterResolved.candidates.map(String) },
-            followingId: { $in: targetResolved.candidates.map(String) }
-          });
+        if (requesterUserId) {
+          const requesterResolved = await resolveUserIdentifiers(requesterUserId);
+          isSelf = targetResolved.canonicalId === requesterResolved.canonicalId;
 
-          if (!isFollowing) {
+          if (!isSelf) {
+            const Follow = mongoose.model('Follow');
+            isFollowing = !!(await Follow.findOne({
+              followerId: { $in: requesterResolved.candidates.map(String) },
+              followingId: { $in: targetResolved.candidates.map(String) }
+            }));
+          }
+        }
+
+        if (!isSelf && !isFollowing) {
             // Return limited profile info for private accounts
             return res.json({
               success: true,
@@ -623,7 +677,6 @@ router.get('/:userId', optionalAuth, async (req, res) => {
               isPrivate: true,
               hasAccess: false
             });
-          }
         }
       }
 
@@ -941,10 +994,11 @@ router.get('/:userId/tagged-posts', optionalAuth, async (req, res) => {
 });
 
 // GET /api/users/:userId/sections - Get user sections (with privacy check)
-router.get('/:userId/sections', async (req, res) => {
+router.get('/:userId/sections', optionalAuth, async (req, res) => {
   try {
     const { userId } = req.params;
-    const requesterUserId = req.query.requesterUserId || req.query.viewerId || req.query.requesterId;
+    // SECURITY: Only trust JWT identity — never query-param spoofing
+    const requesterUserId = req.userId || null;
 
     const Section = mongoose.model('Section');
     const User = mongoose.model('User');
@@ -1012,36 +1066,53 @@ router.get('/:userId/sections', async (req, res) => {
       .sort({ order: 1, createdAt: 1 })
       .lean();
 
-    // Populate collaborators with basic user info (same logic as sections.js)
-    const populatedSections = await Promise.all(sections.map(async (section) => {
-      const s = section;
-      if (s.collaborators && s.collaborators.length > 0) {
-        const collabIds = s.collaborators
-          .map(entry => {
-            if (entry && typeof entry === 'object') {
-              return String(entry.userId || entry._id || entry.id || entry.uid || entry.firebaseUid || '');
-            }
-            return String(entry || '');
-          })
-          .filter(Boolean);
-        const collabUsers = await User.find({ 
+    // Populate collaborators in ONE user query (avoid N+1 per section)
+    const allCollabIds = new Set();
+    for (const s of sections) {
+      if (!s.collaborators?.length) continue;
+      for (const entry of s.collaborators) {
+        const idStr = entry && typeof entry === 'object'
+          ? String(entry.userId || entry._id || entry.id || entry.uid || entry.firebaseUid || '')
+          : String(entry || '');
+        if (idStr) allCollabIds.add(idStr);
+      }
+    }
+
+    const collabIdList = [...allCollabIds];
+    const collabObjectIds = collabIdList
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const collabUsers = collabIdList.length === 0
+      ? []
+      : await User.find({
           $or: [
-            { _id: { $in: collabIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
-            { uid: { $in: collabIds } },
-            { firebaseUid: { $in: collabIds } }
+            ...(collabObjectIds.length ? [{ _id: { $in: collabObjectIds } }] : []),
+            { uid: { $in: collabIdList } },
+            { firebaseUid: { $in: collabIdList } }
           ]
         }, 'name displayName username avatar uid firebaseUid _id').lean();
 
-        s.collaborators = s.collaborators.map(entry => {
+    const collabById = new Map();
+    for (const u of collabUsers) {
+      if (u._id) collabById.set(String(u._id), u);
+      if (u.uid) collabById.set(String(u.uid), u);
+      if (u.firebaseUid) collabById.set(String(u.firebaseUid), u);
+    }
+
+    const populatedSections = sections.map((section) => {
+      const s = { ...section };
+      if (s.collaborators && s.collaborators.length > 0) {
+        s.collaborators = s.collaborators.map((entry) => {
           const idStr = entry && typeof entry === 'object'
             ? String(entry.userId || entry._id || entry.id || entry.uid || entry.firebaseUid || '')
             : String(entry || '');
-          const u = collabUsers.find(user => String(user._id) === idStr || user.uid === idStr || user.firebaseUid === idStr);
+          const u = collabById.get(idStr);
           return u ? { ...u, id: String(u._id), _id: String(u._id) } : entry;
         });
       }
       return s;
-    }));
+    });
 
     res.json({ success: true, data: populatedSections || [] });
   } catch (err) {
@@ -1050,12 +1121,11 @@ router.get('/:userId/sections', async (req, res) => {
 });
 
 // GET /api/users/:userId/highlights - Get user highlights (with privacy check)
-router.get('/:userId/highlights', async (req, res) => {
+router.get('/:userId/highlights', optionalAuth, async (req, res) => {
   try {
     const { userId } = req.params;
-    const requesterUserId = typeof req.query?.requesterUserId === 'string'
-      ? req.query.requesterUserId
-      : (typeof req.query?.viewerId === 'string' ? req.query.viewerId : null);
+    // SECURITY: Only trust JWT identity — never query-param spoofing
+    const requesterUserId = req.userId || null;
 
     const Highlight = mongoose.model('Highlight');
     const User = mongoose.model('User');
@@ -1102,12 +1172,11 @@ router.get('/:userId/highlights', async (req, res) => {
 });
 
 // GET /api/users/:userId/stories - Get user stories (with privacy check)
-router.get('/:userId/stories', async (req, res) => {
+router.get('/:userId/stories', optionalAuth, async (req, res) => {
   try {
     const { userId } = req.params;
-    const requesterUserId = typeof req.query?.requesterUserId === 'string'
-      ? req.query.requesterUserId
-      : (typeof req.query?.viewerId === 'string' ? req.query.viewerId : null);
+    // SECURITY: Only trust JWT identity — never query-param spoofing
+    const requesterUserId = req.userId || null;
 
     const Story = mongoose.model('Story');
     const User = mongoose.model('User');
@@ -1489,10 +1558,17 @@ router.delete('/:userId/sections/:sectionId', verifyToken, async (req, res) => {
 });
 
 // PATCH /api/users/:userId/sections-order - Update section order
-router.patch('/:userId/sections-order', async (req, res) => {
+router.patch('/:userId/sections-order', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     const { sections } = req.body;
+
+    const resolved = await resolveUserIdentifiers(req.userId);
+    const target = await resolveUserIdentifiers(userId);
+    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
 
     if (!Array.isArray(sections)) {
       return res.status(400).json({ success: false, error: 'sections array required' });
@@ -1503,7 +1579,7 @@ router.patch('/:userId/sections-order', async (req, res) => {
     // Update order for each section
     const updatePromises = sections.map(async (section, index) => {
       return Section.updateOne(
-        { _id: new mongoose.Types.ObjectId(section._id), userId },
+        { _id: new mongoose.Types.ObjectId(section._id), userId: { $in: target.candidates.map(String) } },
         { $set: { order: index, updatedAt: new Date() } }
       );
     });
@@ -1747,8 +1823,8 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
 
     const totalSavedCount = await Post.countDocuments(postQuery);
 
-    // Enrich posts with user data
-    const viewerId = req.query.viewerId || req.query.requesterUserId || null;
+    // Enrich posts with user data — viewer identity from JWT only
+    const viewerId = req.userId || null;
     const enrichedPosts = await enrichPostsWithUserData(savedPosts, viewerId);
 
     console.log(`✅ Retrieved ${enrichedPosts.length} saved posts for user ${userId}`);
@@ -1769,16 +1845,24 @@ router.get('/:userId/saved', verifyToken, async (req, res) => {
 });
 
 // GET /api/users/:userId/blocked - Get blocked users for a user (with details)
-router.get('/:userId/blocked', async (req, res) => {
+router.get('/:userId/blocked', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const query = { $or: [{ firebaseUid: userId }, { uid: userId }] };
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      query.$or.push({ _id: new mongoose.Types.ObjectId(userId) });
+    const resolved = await resolveUserIdentifiers(req.userId);
+    const target = await resolveUserIdentifiers(userId);
+    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
-    const user = await User.findOne(query).select('blockedUsers');
+    let user;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId).select('blockedUsers');
+    }
+    if (!user) {
+      user = await User.findOne({ $or: [{ firebaseUid: userId }, { uid: userId }] }).select('blockedUsers');
+    }
 
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
@@ -1790,13 +1874,21 @@ router.get('/:userId/blocked', async (req, res) => {
     }
 
     // Fetch details for all blocked users
-    const blockedDetails = await User.find({
-      $or: [
-        { _id: { $in: blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
-        { firebaseUid: { $in: blockedIds } },
-        { uid: { $in: blockedIds } }
-      ]
-    }).select('_id firebaseUid uid displayName username avatar photoURL profilePicture');
+    const validObjectIds = blockedIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+    const nonObjectIds = blockedIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    
+    let blockedDetails;
+    if (nonObjectIds.length === 0) {
+      blockedDetails = await User.find({ _id: { $in: validObjectIds } }).select('_id firebaseUid uid displayName username avatar photoURL profilePicture');
+    } else {
+      blockedDetails = await User.find({
+        $or: [
+          { _id: { $in: validObjectIds } },
+          { firebaseUid: { $in: nonObjectIds } },
+          { uid: { $in: nonObjectIds } }
+        ]
+      }).select('_id firebaseUid uid displayName username avatar photoURL profilePicture');
+    }
 
     res.json({ success: true, data: blockedDetails });
   } catch (err) {
@@ -1925,43 +2017,6 @@ router.delete('/:userId/block/:targetId', verifyToken, async (req, res) => {
   }
 });
 
-// PUT /api/users/:userId/push-token - Save expo push token
-router.put('/:userId/push-token', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { pushToken } = req.body;
-
-    if (!pushToken) {
-      return res.status(400).json({ success: false, error: 'pushToken is required' });
-    }
-
-    const User = mongoose.model('User');
-    const resolved = await resolveUserIdentifiers(userId);
-
-    const user = await User.findOneAndUpdate(
-      { 
-        $or: [
-          { _id: { $in: resolved.candidates.filter(id => mongoose.Types.ObjectId.isValid(id)) } },
-          { firebaseUid: { $in: resolved.candidates } },
-          { uid: { $in: resolved.candidates } }
-        ]
-      },
-      { pushToken, updatedAt: new Date() },
-      { new: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    console.log(`✅ Push token updated for user: ${userId}`);
-    res.json({ success: true, message: 'Push token updated' });
-  } catch (err) {
-    console.error('[PUT /:userId/push-token] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // Helper to lazy-load Firebase Admin SDK for user deletion
 function getFirebaseAdmin() {
   try {
@@ -1973,10 +2028,17 @@ function getFirebaseAdmin() {
   }
 }
 
-// DELETE /api/users/:userId - Delete user account
-router.delete('/:userId', async (req, res) => {
+// DELETE /api/users/:userId - Delete user account (auth + ownership required)
+router.delete('/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
+
+    const resolved = await resolveUserIdentifiers(req.userId);
+    const target = await resolveUserIdentifiers(userId);
+    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You can only delete your own account' });
+    }
     
     const User = mongoose.model('User');
     const Post = mongoose.model('Post');
@@ -2051,6 +2113,28 @@ router.delete('/:userId', async (req, res) => {
     res.json({ success: true, message: 'Account deleted successfully' });
   } catch (err) {
     console.error('[DELETE /users/:userId] Error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to delete account' });
+  }
+});
+
+// POST /api/users/bulk-profiles - Resolve user details for a list of user IDs
+router.post('/bulk-profiles', async (req, res) => {
+  try {
+    const { uids } = req.body;
+    if (!Array.isArray(uids) || uids.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    const User = mongoose.model('User');
+    const users = await User.find({
+      $or: [
+        { _id: { $in: uids.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) } },
+        { firebaseUid: { $in: uids } },
+        { uid: { $in: uids } }
+      ]
+    }).select('_id firebaseUid uid displayName username avatar photoURL profilePicture name');
+    res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('[POST /users/bulk-profiles] Error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });

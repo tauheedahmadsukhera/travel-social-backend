@@ -1,6 +1,42 @@
 const mongoose = require('mongoose');
 const Highlight = require('../models/Highlight');
 const Story = require('../models/Story');
+const { resolveUserIdentifiers } = require('../utils/userUtils');
+
+/**
+ * Ensure the authenticated user owns the highlight (admins bypass).
+ * @returns {Promise<true|null>} true if allowed; null if a 403 was already sent
+ */
+async function assertHighlightOwner(req, res, highlight) {
+  if (!req.userId) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return null;
+  }
+
+  if (req.user?.role === 'admin') {
+    return true;
+  }
+
+  // Prefer role from DB if middleware did not sync it
+  try {
+    const User = mongoose.model('User');
+    const authUser = await User.findById(req.userId).select('role').lean();
+    if (authUser?.role === 'admin') {
+      return true;
+    }
+  } catch (_) { /* ignore */ }
+
+  const resolved = await resolveUserIdentifiers(req.userId);
+  const ownerResolved = await resolveUserIdentifiers(highlight.userId);
+  const isOwner = resolved.candidates.some(c =>
+    ownerResolved.candidates.map(String).includes(String(c))
+  );
+  if (!isOwner) {
+    res.status(403).json({ success: false, error: 'Forbidden: You can only modify your own highlights' });
+    return null;
+  }
+  return true;
+}
 
 function safeDate(value) {
   const date = value ? new Date(value) : new Date();
@@ -60,6 +96,39 @@ exports.getHighlightsByUser = async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
+
+    // Privacy: private accounts only visible to self / followers (JWT identity only)
+    const User = mongoose.model('User');
+    const Follow = mongoose.model('Follow');
+    const targetUser = await User.findOne({
+      $or: [
+        { firebaseUid: userId },
+        { uid: userId },
+        { _id: mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null }
+      ]
+    }).select('isPrivate').lean();
+
+    if (targetUser?.isPrivate) {
+      const requesterUserId = req.userId || null;
+      if (!requesterUserId) {
+        return res.json({ success: true, data: [], isPrivate: true, hasAccess: false });
+      }
+      const targetResolved = await resolveUserIdentifiers(userId);
+      const requesterResolved = await resolveUserIdentifiers(requesterUserId);
+      const isSelf = targetResolved.candidates.some(c =>
+        requesterResolved.candidates.map(String).includes(String(c))
+      );
+      if (!isSelf) {
+        const isFollowing = await Follow.findOne({
+          followerId: { $in: requesterResolved.candidates.map(String) },
+          followingId: { $in: targetResolved.candidates.map(String) }
+        });
+        if (!isFollowing) {
+          return res.json({ success: true, data: [], isPrivate: true, hasAccess: false });
+        }
+      }
+    }
+
     const highlights = await Highlight.find({ userId }).sort({ createdAt: -1 });
     res.json({ success: true, data: highlights });
   } catch (err) {
@@ -71,8 +140,8 @@ exports.getHighlightsByUser = async (req, res) => {
 exports.createHighlight = async (req, res) => {
   console.log('[createHighlight] Request body:', req.body);
   try {
-    const { userId, title, coverImage, stories = [], storyIds = [], items = [], storySnapshot, storySnapshots = [], visibility } = req.body;
-    const resolvedUserId = req.userId || userId;
+    const { title, coverImage, stories = [], storyIds = [], items = [], storySnapshot, storySnapshots = [], visibility } = req.body;
+    const resolvedUserId = req.userId;
     if (!resolvedUserId || !title) {
       console.warn('[createHighlight] Validation failed: userId or title missing.', { resolvedUserId, title });
       return res.status(400).json({ success: false, error: 'userId and title required' });
@@ -140,6 +209,8 @@ exports.addStoryToHighlight = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Highlight not found' });
     }
 
+    if (!(await assertHighlightOwner(req, res, highlight))) return;
+
     let entry = storySnapshot ? normaliseStory(storySnapshot) : null;
     const storyId = String(clientStoryId || entry?.storyId || req.body.storyId || '').trim();
 
@@ -153,11 +224,17 @@ exports.addStoryToHighlight = async (req, res) => {
         const st = mongoose.Types.ObjectId.isValid(storyId) ? await Story.findById(storyId).lean() : null;
         if (st) {
           entry = {
+            id: String(st._id),
             storyId: String(st._id),
+            userId: st.userId || null,
+            userName: st.userName || null,
+            userAvatar: st.userAvatar || null,
             imageUrl: st.image || null,
             videoUrl: st.video || null,
             mediaType: st.video ? 'video' : 'image',
-            createdAt: st.createdAt || new Date()
+            createdAt: st.createdAt || new Date(),
+            locationData: st.locationData || null,
+            postMetadata: st.postMetadata || null
           };
         }
       } catch (err) {
@@ -212,6 +289,8 @@ exports.removeStoryFromHighlight = async (req, res) => {
     const highlight = await Highlight.findById(id);
     if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
 
+    if (!(await assertHighlightOwner(req, res, highlight))) return;
+
     if (highlight.stories) {
       highlight.stories = highlight.stories.filter(s => String(s) !== String(storyId));
     }
@@ -247,6 +326,8 @@ exports.updateHighlight = async (req, res) => {
     const highlight = await Highlight.findById(id);
     if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
 
+    if (!(await assertHighlightOwner(req, res, highlight))) return;
+
     if (title !== undefined) highlight.title = title;
     if (coverImage !== undefined) highlight.coverImage = coverImage;
     highlight.updatedAt = new Date();
@@ -262,14 +343,11 @@ exports.updateHighlight = async (req, res) => {
 exports.deleteHighlight = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
 
     const highlight = await Highlight.findById(id);
     if (!highlight) return res.status(404).json({ success: false, error: 'Highlight not found' });
 
-    if (userId && String(highlight.userId) !== String(userId)) {
-      return res.status(403).json({ success: false, error: 'Unauthorized' });
-    }
+    if (!(await assertHighlightOwner(req, res, highlight))) return;
 
     await Highlight.deleteOne({ _id: id });
     res.json({ success: true, message: 'Highlight deleted' });

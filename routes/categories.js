@@ -2,9 +2,9 @@ console.log('📌 Loading categories routes...');
 const express = require('express');
 const router = express.Router();
 
-
 const Category = require('../src/models/Category');
 const cacheMiddleware = require('../src/middleware/cacheMiddleware');
+const { verifyToken, isAdmin } = require('../src/middleware/authMiddleware');
 
 // GET /api/categories - Return all categories from DB (Cached for 1 hour)
 router.get('/', cacheMiddleware(3600), async (req, res) => {
@@ -16,15 +16,18 @@ router.get('/', cacheMiddleware(3600), async (req, res) => {
   }
 });
 
-// POST /api/categories - Add a new category
-router.post('/', async (req, res) => {
+// POST /api/categories - Admin only
+router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
     const { name } = req.body;
-    const category = new Category({ name });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'name is required' });
+    }
+    const category = new Category({ name: name.trim() });
     await category.save();
     res.json({ success: true, data: category });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to create category' });
   }
 });
 

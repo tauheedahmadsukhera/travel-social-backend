@@ -1282,39 +1282,54 @@ router.get('/users/:userId', verifyToken, async (req, res) => {
     }
 
     const userId = req.params.userId;
-    const conversations = await Conversation.find({ participants: userId }).sort({ lastMessageAt: -1 });
+    const conversations = await Conversation.find({ participants: userId }).sort({ lastMessageAt: -1 }).lean();
 
-    // Populate participant data
+    // Batch-fetch other participants (avoid N+1 per conversation)
     const db = mongoose.connection.db;
     const usersCollection = db.collection('users');
 
-    const enrichedConversations = await Promise.all(conversations.map(async (conversation) => {
-      const convObj = conversation.toObject ? conversation.toObject() : conversation;
+    const otherIds = [...new Set(
+      conversations
+        .map((c) => (c.participants || []).find((p) => String(p) !== String(userId)))
+        .filter(Boolean)
+        .map(String)
+    )];
 
-      // Get other participant (not current user)
-      const otherParticipantId = convObj.participants.find(p => p !== userId);
+    const objectIds = otherIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
 
-      if (otherParticipantId) {
-        const otherUser = await usersCollection.findOne({
+    const otherUsers = otherIds.length === 0
+      ? []
+      : await usersCollection.find({
           $or: [
-            { firebaseUid: otherParticipantId },
-            { uid: otherParticipantId },
-            { _id: mongoose.Types.ObjectId.isValid(otherParticipantId) ? new mongoose.Types.ObjectId(otherParticipantId) : null }
+            { firebaseUid: { $in: otherIds } },
+            { uid: { $in: otherIds } },
+            ...(objectIds.length ? [{ _id: { $in: objectIds } }] : [])
           ]
-        });
+        }).project({ firebaseUid: 1, uid: 1, displayName: 1, name: 1, avatar: 1, photoURL: 1 }).toArray();
 
-        return {
-          ...convObj,
-          otherParticipant: {
-            id: otherParticipantId,
-            name: otherUser?.displayName || otherUser?.name || 'User',
-            avatar: otherUser?.avatar || otherUser?.photoURL || null
-          }
-        };
-      }
+    const userById = new Map();
+    for (const u of otherUsers) {
+      if (u.firebaseUid) userById.set(String(u.firebaseUid), u);
+      if (u.uid) userById.set(String(u.uid), u);
+      if (u._id) userById.set(String(u._id), u);
+    }
 
-      return convObj;
-    }));
+    const enrichedConversations = conversations.map((convObj) => {
+      const otherParticipantId = (convObj.participants || []).find((p) => String(p) !== String(userId));
+      if (!otherParticipantId) return convObj;
+
+      const otherUser = userById.get(String(otherParticipantId));
+      return {
+        ...convObj,
+        otherParticipant: {
+          id: otherParticipantId,
+          name: otherUser?.displayName || otherUser?.name || 'User',
+          avatar: otherUser?.avatar || otherUser?.photoURL || null
+        }
+      };
+    });
 
     res.json({ success: true, data: enrichedConversations });
   } catch (err) {

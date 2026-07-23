@@ -111,9 +111,22 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       const Reaction = mongoose.model('Reaction');
 
       const promises = [
-        Reaction.find({
-          postId: { $in: postIds }
-        }).sort({ createdAt: -1 }).lean()
+        // Cap reactions fetched: at most 5 per post via aggregation (avoid loading all then truncating in JS)
+        Reaction.aggregate([
+          { $match: { postId: { $in: postIds } } },
+          { $sort: { createdAt: -1 } },
+          {
+            $group: {
+              _id: '$postId',
+              reactions: { $push: '$$ROOT' }
+            }
+          },
+          {
+            $project: {
+              reactions: { $slice: ['$reactions', 5] }
+            }
+          }
+        ])
       ];
 
       if (viewerVariants.length > 0) {
@@ -130,28 +143,22 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
       }
 
       const results = await Promise.all(promises);
-      const reactions = results[0] || [];
+      const reactionGroups = results[0] || [];
       const likes = results[1] || [];
       const saves = results[2] || [];
 
       likes.forEach(l => likedPostIds.add(String(l.postId)));
       saves.forEach(s => savedPostIds.add(String(s.postId)));
 
-      // Group reactions by postId (limit to 5 per post)
-      reactions.forEach(r => {
-        const pidKey = String(r.postId);
-        if (!reactionsMap[pidKey]) {
-          reactionsMap[pidKey] = [];
-        }
-        if (reactionsMap[pidKey].length < 5) {
-          reactionsMap[pidKey].push({
-            userId: String(r.userId),
-            userName: r.userName || 'User',
-            userAvatar: r.userAvatar || null,
-            emoji: r.emoji || '❤️',
-            createdAt: r.createdAt
-          });
-        }
+      reactionGroups.forEach((group) => {
+        const pidKey = String(group._id);
+        reactionsMap[pidKey] = (group.reactions || []).map((r) => ({
+          userId: String(r.userId),
+          userName: r.userName || 'User',
+          userAvatar: r.userAvatar || null,
+          emoji: r.emoji || '❤️',
+          createdAt: r.createdAt
+        }));
       });
     } catch (e) {
       console.warn('[enrich] Likes/Saves/Reactions batch fetch failed:', e.message);
@@ -232,10 +239,15 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
           isVerified: author.verified || false
         };
 
-        // Standardize naming
-        p.userId = enrichedUser;
+        // Standardize naming — bad/missing avatars → null (client shows one default)
+        p.userId = {
+          ...enrichedUser,
+          avatar: isBadAvatar(enrichedUser.avatar) ? null : enrichedUser.avatar,
+          photoURL: isBadAvatar(enrichedUser.photoURL) ? null : enrichedUser.photoURL,
+          profilePicture: isBadAvatar(enrichedUser.profilePicture) ? null : enrichedUser.profilePicture,
+        };
         p.userName = enrichedUser.displayName;
-        p.userAvatar = enrichedUser.avatar;
+        p.userAvatar = isBadAvatar(enrichedUser.avatar) ? null : enrichedUser.avatar;
       } else {
         // Fallback for missing authors
         p.userName = p.userName || 'User';

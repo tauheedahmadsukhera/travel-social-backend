@@ -48,6 +48,8 @@ async function uploadBufferToS3(bufferOrPath, key, contentType) {
       Key: key,
       Body: body,
       ContentType: contentType,
+      // Content-addressed media — long browser/CDN cache speeds story/post loads
+      CacheControl: 'public, max-age=31536000, immutable',
     },
   });
 
@@ -152,6 +154,48 @@ async function generateVideoThumbnail(videoBufferOrPath) {
  * @param {Buffer|string} videoBufferOrPath - Video file buffer or file path
  * @returns {Promise<Buffer|string>} Optimized MP4 video buffer, or file path if input was a path
  */
+async function ensureFastStart(videoBufferOrPath) {
+  const tempDir = os.tmpdir();
+  const randomSuffix = Math.random().toString(36).substring(7);
+  const tempOutputPath = path.join(tempDir, `temp_faststart_${randomSuffix}.mp4`);
+
+  let inputPath = videoBufferOrPath;
+  let isTempInput = false;
+
+  if (Buffer.isBuffer(videoBufferOrPath)) {
+    const tempInputPath = path.join(tempDir, `temp_fs_in_${randomSuffix}.mp4`);
+    await fs.writeFile(tempInputPath, videoBufferOrPath);
+    inputPath = tempInputPath;
+    isTempInput = true;
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .outputOptions(['-c', 'copy', '-movflags', '+faststart'])
+        .output(tempOutputPath)
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+
+    if (Buffer.isBuffer(videoBufferOrPath)) {
+      return await fs.readFile(tempOutputPath);
+    }
+    return tempOutputPath;
+  } catch (err) {
+    logger.warn(`Faststart remux failed, using original: ${err.message}`);
+    return videoBufferOrPath;
+  } finally {
+    if (isTempInput) {
+      try { await fs.unlink(inputPath); } catch (_) {}
+    }
+    if (Buffer.isBuffer(videoBufferOrPath)) {
+      try { await fs.unlink(tempOutputPath); } catch (_) {}
+    }
+  }
+}
+
 async function compressVideo(videoBufferOrPath) {
   let size = 0;
   if (Buffer.isBuffer(videoBufferOrPath)) {
@@ -163,11 +207,10 @@ async function compressVideo(videoBufferOrPath) {
     } catch (_) {}
   }
 
-  // Performance optimization: Skip CPU-heavy compression if video is already pre-optimized on device (under 20MB)
-  // or explicitly bypassed via environment variable.
+  // Client usually already compressed (<20MB). Still remux for +faststart so feed play starts fast.
   if (process.env.SKIP_BACKEND_VIDEO_COMPRESSION === 'true' || size < 20 * 1024 * 1024) {
-    logger.info(`⚡ Skipping backend video compression (Size: ${(size / 1024 / 1024).toFixed(2)}MB is under 20MB threshold).`);
-    return videoBufferOrPath;
+    logger.info(`⚡ Skipping full re-encode (${(size / 1024 / 1024).toFixed(2)}MB) — applying faststart remux`);
+    return ensureFastStart(videoBufferOrPath);
   }
 
   const tempDir = os.tmpdir();
@@ -269,8 +312,17 @@ async function uploadMedia(fileBufferOrPath, folder, context, mediaType = 'auto'
     finalMediaType = 'video';
     try {
       const thumbBuffer = await generateVideoThumbnail(fileBufferOrPath);
-      const thumbKey = `${baseKey}-thumb.jpg`;
-      thumbnailUrl = await uploadBufferToS3(thumbBuffer, thumbKey, 'image/jpeg');
+      // Smaller WebP thumb = faster story-row bubbles (UI unchanged)
+      let optimizedThumb = thumbBuffer;
+      try {
+        optimizedThumb = await sharp(thumbBuffer)
+          .resize(480, null, { withoutEnlargement: true })
+          .webp({ quality: 72 })
+          .toBuffer();
+      } catch (_) { /* keep jpeg */ }
+      const useWebp = optimizedThumb !== thumbBuffer;
+      const thumbKey = `${baseKey}-thumb.${useWebp ? 'webp' : 'jpg'}`;
+      thumbnailUrl = await uploadBufferToS3(optimizedThumb, thumbKey, useWebp ? 'image/webp' : 'image/jpeg');
     } catch (err) {
       logger.warn(`Could not generate thumbnail for video: ${err.message}`);
     }

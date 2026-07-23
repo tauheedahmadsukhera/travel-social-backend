@@ -84,15 +84,27 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
     return true;
   }
 
+  // Short-lived caches to avoid DB hits on every typing keystroke
+  const conversationCache = new Map();
+  const membershipCache = new Map();
+  const variantsCache = new Map();
+
   const findConversation = async (conversationId) => {
     if (!conversationId) return null;
+    const key = String(conversationId);
+    const cached = conversationCache.get(key);
+    if (cached && cached.expires > Date.now()) return cached.convo;
+
     const Conversation = mongoose.model('Conversation');
-    return Conversation.findOne({
+    const convo = await Conversation.findOne({
       $or: [
-        { conversationId: String(conversationId) },
-        { _id: mongoose.Types.ObjectId.isValid(conversationId) ? new mongoose.Types.ObjectId(conversationId) : null },
+        { conversationId: key },
+        { _id: mongoose.Types.ObjectId.isValid(key) ? new mongoose.Types.ObjectId(key) : null },
       ],
-    });
+    }).lean();
+
+    conversationCache.set(key, { convo, expires: Date.now() + 30_000 });
+    return convo;
   };
 
   /**
@@ -102,15 +114,18 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
   async function resolveUserIdVariants(userId) {
     if (!userId) return [];
     const id = String(userId).trim();
+    const cached = variantsCache.get(id);
+    if (cached && cached.expires > Date.now()) return cached.variants;
+
     const User = mongoose.model('User');
     const out = new Set([id]);
     
     try {
       let user;
       if (mongoose.Types.ObjectId.isValid(id)) {
-        user = await User.findById(id).select('_id firebaseUid uid');
+        user = await User.findById(id).select('_id firebaseUid uid').lean();
       } else {
-        user = await User.findOne({ $or: [{ firebaseUid: id }, { uid: id }] }).select('_id firebaseUid uid');
+        user = await User.findOne({ $or: [{ firebaseUid: id }, { uid: id }] }).select('_id firebaseUid uid').lean();
       }
 
       if (user) {
@@ -121,14 +136,22 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
     } catch (e) {
       logger.debug('Failed to resolve user variants for %s: %s', id, e.message);
     }
-    return Array.from(out);
+    const variants = Array.from(out);
+    variantsCache.set(id, { variants, expires: Date.now() + 60_000 });
+    return variants;
   }
 
   async function isConversationMember(convo, authUserId) {
     if (!convo || !authUserId) return false;
+    const cacheKey = `${convo._id || convo.conversationId}:${authUserId}`;
+    const cached = membershipCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) return cached.ok;
+
     const variants = await resolveUserIdVariants(authUserId);
     const parts = (convo.participants || []).map(String);
-    return variants.some((v) => parts.includes(v));
+    const ok = variants.some((v) => parts.includes(v));
+    membershipCache.set(cacheKey, { ok, expires: Date.now() + 60_000 });
+    return ok;
   }
 
   async function assertMessagingAllowed(convo, authUserId, recipientId) {
@@ -416,7 +439,7 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
 
     socket.on('typing', trackEvent(socket, 'typing', async (data) => {
       const { conversationId, userId, recipientId } = data || {};
-      if (!allowEvent(socket.id, 'typing', 250)) return;
+      if (!allowEvent(socket.id, 'typing', 400)) return;
       const authId = jwtSecret ? socket.data.authUserId : userId;
       if (jwtSecret && authId) {
         const variants = await resolveUserIdVariants(authId);
@@ -432,7 +455,7 @@ function registerMessagingSocket({ io, mongoose, toObjectId, sendExpoPushToUser 
 
     socket.on('stopTyping', trackEvent(socket, 'stopTyping', async (data) => {
       const { conversationId, userId, recipientId } = data || {};
-      if (!allowEvent(socket.id, 'stopTyping', 250)) return;
+      if (!allowEvent(socket.id, 'stopTyping', 400)) return;
       const authId = jwtSecret ? socket.data.authUserId : userId;
       if (jwtSecret && authId) {
         const variants = await resolveUserIdVariants(authId);

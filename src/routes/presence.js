@@ -1,14 +1,24 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { verifyToken } = require('../middleware/authMiddleware');
+const { resolveUserIdentifiers } = require('../utils/userUtils');
 
-// Unified presence store using User model directly (resolves data conflicts and allows scaling)
+async function assertSelfOrAdmin(req, userId) {
+  const resolved = await resolveUserIdentifiers(req.userId);
+  const target = await resolveUserIdentifiers(userId);
+  const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+  if (!isSelf && req.user?.role !== 'admin') {
+    return false;
+  }
+  return true;
+}
 
-router.post('/online', async (req, res) => {
+router.post('/online', verifyToken, async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ success: false, error: 'userId is required' });
+    const userId = req.body.userId || req.userId;
+    if (!(await assertSelfOrAdmin(req, userId))) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
     }
     const User = mongoose.model('User');
     await User.updateOne(
@@ -23,15 +33,15 @@ router.post('/online', async (req, res) => {
     );
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to update presence' });
   }
 });
 
-router.post('/offline', async (req, res) => {
+router.post('/offline', verifyToken, async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ success: false, error: 'userId is required' });
+    const userId = req.body.userId || req.userId;
+    if (!(await assertSelfOrAdmin(req, userId))) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
     }
     const User = mongoose.model('User');
     await User.updateOne(
@@ -46,11 +56,12 @@ router.post('/offline', async (req, res) => {
     );
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to update presence' });
   }
 });
 
-router.get('/:userId', async (req, res) => {
+// GET /api/presence/:userId - Read presence (authenticated)
+router.get('/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     const User = mongoose.model('User');
@@ -61,10 +72,10 @@ router.get('/:userId', async (req, res) => {
         { uid: userId }
       ]
     }).select('isOnline lastSeen').lean();
-    
+
     res.json(user || { isOnline: false, lastSeen: null });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch presence' });
   }
 });
 

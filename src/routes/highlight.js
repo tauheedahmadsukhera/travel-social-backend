@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const highlightController = require('../controllers/highlightController');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, optionalAuth } = require('../middleware/authMiddleware');
 
-// GET /api/highlights?userId=... (public — viewing highlights is unrestricted)
-router.get('/', highlightController.getHighlightsByUser);
+// GET /api/highlights?userId=... (optional auth — privacy enforced for private accounts)
+router.get('/', optionalAuth, highlightController.getHighlightsByUser);
 
 // GET /api/highlights/:id/stories (public — viewing highlight stories is unrestricted)
 router.get('/:id/stories', highlightController.getHighlightStories);

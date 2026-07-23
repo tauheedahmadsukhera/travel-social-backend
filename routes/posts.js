@@ -201,12 +201,19 @@ router.get('/recommended', optionalAuth, async (req, res, next) => {
       matchQuery.userId = { $nin: blockedIdQueries };
     }
     
-    // Aggregation for random public posts
-    const posts = await Post.aggregate([
-      { $match: matchQuery },
-      { $sample: { size: limit } },
-      { $sort: { createdAt: -1 } }
-    ]);
+    // Prefer recent posts + in-memory shuffle over collection-wide $sample (scales poorly)
+    const poolSize = Math.min(Math.max(limit * 8, 40), 200);
+    const recentPool = await Post.find(matchQuery)
+      .sort({ createdAt: -1 })
+      .limit(poolSize)
+      .lean();
+
+    // Fisher–Yates shuffle then take `limit` (same response shape as before)
+    for (let i = recentPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [recentPool[i], recentPool[j]] = [recentPool[j], recentPool[i]];
+    }
+    const posts = recentPool.slice(0, limit);
 
     const finalPosts = await enrichPostsWithUserData(posts, viewerId);
 
@@ -225,7 +232,7 @@ router.get('/recommended', optionalAuth, async (req, res, next) => {
 // --- Location Routes ---
 
 // GET /hashtags - Search for unique hashtags
-router.get('/hashtags', async (req, res) => {
+router.get('/hashtags', cacheMiddleware(120), async (req, res) => {
   try {
     const q = (req.query.q || '').trim().replace(/^#/, ''); // Remove leading # if present
     const limit = Math.min(parseInt(req.query.limit || '20'), 50);
@@ -289,7 +296,7 @@ router.get('/hashtags/posts', async (req, res) => {
 });
 
 // GET /locations/suggest - Autocomplete for locations
-router.get('/locations/suggest', async (req, res) => {
+router.get('/locations/suggest', cacheMiddleware(120), async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     if (!q) return res.json({ success: true, data: [] });

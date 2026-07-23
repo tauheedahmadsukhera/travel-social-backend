@@ -573,6 +573,16 @@ router.delete('/request/:requestId', verifyToken, async (req, res) => {
 router.get('/requests/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
+
+    // SECURITY: Ensure authenticated user can only fetch their OWN pending follow requests
+    const resolved = await resolveUserIdentifiers(req.userId);
+    const target = await resolveUserIdentifiers(userId);
+    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Cannot view follow requests of another user' });
+    }
+
     const requests = await FollowRequest.find({ toUserId: userId, status: 'pending' });
     console.log('[Get Follow Requests] Found', requests.length, 'pending requests for user:', userId);
     res.json({ success: true, data: requests });
@@ -602,6 +612,14 @@ router.get('/request/check', optionalAuth, async (req, res) => {
 router.get('/users/:userId/blocked', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
+
+    // SECURITY: Only the owner (or admin) may read a blocked list
+    const resolved = await resolveUserIdentifiers(req.userId);
+    const target = await resolveUserIdentifiers(userId);
+    const isSelf = resolved.candidates.some(c => target.candidates.map(String).includes(String(c)));
+    if (!isSelf && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Cannot view another user\'s blocked list' });
+    }
 
     const User = mongoose.model('User');
     

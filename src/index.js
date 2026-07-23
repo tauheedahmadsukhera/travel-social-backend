@@ -154,7 +154,22 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(helmet({ contentSecurityPolicy: false })); // Disable CSP for easier dev testing
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", 'https:'],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(mongoSanitize());
 app.use(hpp());
 // Reduced from 50mb to 5mb to prevent DDoS payload attacks
@@ -230,6 +245,24 @@ setupSentryErrorHandler(app);
 const errorAlertMiddleware = require('./middleware/errorAlertMiddleware');
 app.use(errorAlertMiddleware);
 
+// ============= SHARE PAGES (HTML-escaped to prevent stored XSS) =============
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeHttpsUrl(value) {
+  try {
+    const u = new URL(String(value || ''));
+    if (u.protocol === 'https:' || u.protocol === 'http:') return u.toString();
+  } catch (_) {}
+  return '';
+}
+
 app.get('/share/post/:id', async (req, res) => {
   const postId = req.params.id;
   try {
@@ -248,6 +281,12 @@ app.get('/share/post/:id', async (req, res) => {
         authorName = author.displayName || author.username || author.name || 'Someone';
       }
     }
+
+    const safeAuthor = escapeHtml(authorName);
+    const safeCaption = escapeHtml(caption);
+    const safeImage = escapeHtml(safeHttpsUrl(imageUrl));
+    const safePostId = encodeURIComponent(String(postId));
+    const avatarName = encodeURIComponent(String(authorName).slice(0, 40));
     
     res.send(`
 <!DOCTYPE html>
@@ -330,7 +369,7 @@ app.get('/share/post/:id', async (req, res) => {
   <script>
     window.onload = function() {
       var userAgent = navigator.userAgent || navigator.vendor || window.opera;
-      var deepLinkUrl = "trave-social://post-detail?id=${postId}";
+      var deepLinkUrl = "trave-social://post-detail?id=${safePostId}";
       
       // Attempt to launch the deep link
       window.location.href = deepLinkUrl;
@@ -357,12 +396,12 @@ app.get('/share/post/:id', async (req, res) => {
 </head>
 <body>
   <div class="card">
-    <img class="avatar" src="https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=FF8D00&color=fff&size=120" alt="Avatar">
-    <h1>Check out ${authorName}'s post on Trips!</h1>
-    <p>${caption ? '"' + caption + '"' : 'Shared a new travel moment'}</p>
-    ${imageUrl ? '<img class="post-preview" src="' + imageUrl + '" alt="Post Media">' : ''}
+    <img class="avatar" src="https://ui-avatars.com/api/?name=${avatarName}&background=FF8D00&color=fff&size=120" alt="Avatar">
+    <h1>Check out ${safeAuthor}'s post on Trips!</h1>
+    <p>${safeCaption ? '"' + safeCaption + '"' : 'Shared a new travel moment'}</p>
+    ${safeImage ? '<img class="post-preview" src="' + safeImage + '" alt="Post Media">' : ''}
     
-    <a href="trave-social://post-detail?id=${postId}" class="btn">Open in Trips App</a>
+    <a href="trave-social://post-detail?id=${safePostId}" class="btn">Open in Trips App</a>
     <a id="ios-btn" href="https://apps.apple.com/app/id6760894554" class="btn btn-secondary" style="margin-bottom: 8px;">Download from App Store</a>
     <a id="android-btn" href="https://play.google.com/store/apps/details?id=com.tauhee56.travesocial" class="btn btn-secondary">Download from Play Store</a>
   </div>
@@ -398,6 +437,12 @@ app.get('/share/story/:id', async (req, res) => {
         authorName = author.displayName || author.username || author.name || 'Someone';
       }
     }
+
+    const safeAuthor = escapeHtml(authorName);
+    const safeCaption = escapeHtml(caption);
+    const safeImage = escapeHtml(safeHttpsUrl(imageUrl));
+    const safeStoryId = encodeURIComponent(String(storyId));
+    const avatarName = encodeURIComponent(String(authorName).slice(0, 40));
     
     res.send(`
 <!DOCTYPE html>
@@ -480,7 +525,7 @@ app.get('/share/story/:id', async (req, res) => {
   <script>
     window.onload = function() {
       var userAgent = navigator.userAgent || navigator.vendor || window.opera;
-      var deepLinkUrl = "trave-social://story-detail?id=${storyId}";
+      var deepLinkUrl = "trave-social://story-detail?id=${safeStoryId}";
       
       // Attempt to launch the deep link
       window.location.href = deepLinkUrl;
@@ -507,12 +552,12 @@ app.get('/share/story/:id', async (req, res) => {
 </head>
 <body>
   <div class="card">
-    <img class="avatar" src="https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=FF8D00&color=fff&size=120" alt="Avatar">
-    <h1>Check out ${authorName}'s story on Trips!</h1>
-    <p>${caption ? '"' + caption + '"' : 'Shared a new story moment'}</p>
-    ${imageUrl ? '<img class="post-preview" src="' + imageUrl + '" alt="Story Media">' : ''}
+    <img class="avatar" src="https://ui-avatars.com/api/?name=${avatarName}&background=FF8D00&color=fff&size=120" alt="Avatar">
+    <h1>Check out ${safeAuthor}'s story on Trips!</h1>
+    <p>${safeCaption ? '"' + safeCaption + '"' : 'Shared a new story moment'}</p>
+    ${safeImage ? '<img class="post-preview" src="' + safeImage + '" alt="Story Media">' : ''}
     
-    <a href="trave-social://story-detail?id=${storyId}" class="btn">Open in Trips App</a>
+    <a href="trave-social://story-detail?id=${safeStoryId}" class="btn">Open in Trips App</a>
     <a id="ios-btn" href="https://apps.apple.com/app/id6760894554" class="btn btn-secondary" style="margin-bottom: 8px;">Download from App Store</a>
     <a id="android-btn" href="https://play.google.com/store/apps/details?id=com.tauhee56.travesocial" class="btn btn-secondary">Download from Play Store</a>
   </div>

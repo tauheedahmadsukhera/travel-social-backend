@@ -320,6 +320,14 @@ router.post('/users/:id/role', verifyToken, async (req, res, next) => {
     const User = mongoose.model('User');
     const AdminLog = mongoose.model('AdminLog');
 
+    const ALLOWED_ROLES = ['user', 'moderator', 'admin'];
+    if (!role || !ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid role. Allowed: ${ALLOWED_ROLES.join(', ')}`
+      });
+    }
+
     const adminUser = await User.findById(req.userId);
     if (!adminUser || adminUser.role !== 'admin') return res.status(403).json({ success: false, error: 'Unauthorized' });
 
@@ -334,6 +342,19 @@ router.post('/users/:id/role', verifyToken, async (req, res, next) => {
     if (!targetUser) return res.status(404).json({ success: false, error: 'User not found' });
 
     const oldRole = targetUser.role;
+
+    // Prevent demoting yourself if you are the last admin
+    const isSelf = String(targetUser._id) === String(req.userId);
+    if (isSelf && oldRole === 'admin' && role !== 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cannot demote yourself: you are the last remaining admin'
+        });
+      }
+    }
+
     targetUser.role = role;
     await targetUser.save();
 
@@ -589,26 +610,62 @@ router.get('/reports', verifyToken, async (req, res, next) => {
     const Comment = mongoose.model('Comment');
     const Story = mongoose.model('Story');
 
-    const reportsWithTargets = await Promise.all(reports.map(async (report) => {
+    // Batch-load targets by type (avoid N+1 findById per report)
+    const byType = { post: [], user: [], comment: [], story: [] };
+    for (const report of reports) {
+      const t = String(report.targetType || '').toLowerCase();
+      const id = report.targetId;
+      if (!id) continue;
+      if (t === 'post') byType.post.push(id);
+      else if (t === 'user') byType.user.push(id);
+      else if (t === 'comment') byType.comment.push(id);
+      else if (t === 'story') byType.story.push(id);
+    }
+
+    const toObjectIds = (ids) =>
+      [...new Set(ids.map(String))]
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+    const [posts, users, comments, stories] = await Promise.all([
+      byType.post.length
+        ? Post.find({ _id: { $in: toObjectIds(byType.post) } })
+            .populate('userId', 'displayName email avatar')
+            .lean()
+        : Promise.resolve([]),
+      byType.user.length
+        ? User.find({ _id: { $in: toObjectIds(byType.user) } })
+            .select('displayName email avatar role status')
+            .lean()
+        : Promise.resolve([]),
+      byType.comment.length
+        ? Comment.find({ _id: { $in: toObjectIds(byType.comment) } }).lean()
+        : Promise.resolve([]),
+      byType.story.length
+        ? Story.find({ _id: { $in: toObjectIds(byType.story) } }).lean()
+        : Promise.resolve([])
+    ]);
+
+    const indexById = (docs) => {
+      const map = new Map();
+      for (const d of docs) map.set(String(d._id), d);
+      return map;
+    };
+    const postMap = indexById(posts);
+    const userMap = indexById(users);
+    const commentMap = indexById(comments);
+    const storyMap = indexById(stories);
+
+    const reportsWithTargets = reports.map((report) => {
+      const t = String(report.targetType || '').toLowerCase();
+      const id = String(report.targetId || '');
       let targetContent = null;
-      try {
-        if (report.targetType === 'post' || report.targetType === 'Post') {
-          targetContent = await Post.findById(report.targetId).populate('userId', 'displayName email avatar').lean();
-        } else if (report.targetType === 'user' || report.targetType === 'User') {
-          targetContent = await User.findById(report.targetId, 'displayName email avatar role status').lean();
-        } else if (report.targetType === 'comment' || report.targetType === 'Comment') {
-          targetContent = await Comment.findById(report.targetId).lean();
-        } else if (report.targetType === 'story' || report.targetType === 'Story') {
-          targetContent = await Story.findById(report.targetId).lean();
-        }
-      } catch (e) {
-        logger.warn(`Failed to fetch report target: ${e.message}`);
-      }
-      return {
-        ...report,
-        targetContent
-      };
-    }));
+      if (t === 'post') targetContent = postMap.get(id) || null;
+      else if (t === 'user') targetContent = userMap.get(id) || null;
+      else if (t === 'comment') targetContent = commentMap.get(id) || null;
+      else if (t === 'story') targetContent = storyMap.get(id) || null;
+      return { ...report, targetContent };
+    });
 
     res.json({ success: true, data: reportsWithTargets });
   } catch (err) {
@@ -904,6 +961,11 @@ router.post('/streams/:id/end', verifyToken, async (req, res, next) => {
  */
 router.get('/categories', verifyToken, async (req, res, next) => {
   try {
+    const adminUser = await mongoose.model('User').findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
     const Category = mongoose.model('Category');
     const categories = await Category.find().sort({ name: 1 });
     res.json({ success: true, data: categories });
@@ -985,6 +1047,11 @@ router.delete('/categories/:id', verifyToken, async (req, res, next) => {
  */
 router.get('/regions', verifyToken, async (req, res, next) => {
   try {
+    const adminUser = await mongoose.model('User').findById(req.userId);
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
     const Region = mongoose.model('Region');
     const regions = await Region.find().sort({ name: 1 });
     res.json({ success: true, data: regions });
@@ -1086,22 +1153,33 @@ router.get('/verification-requests', verifyToken, async (req, res, next) => {
       .limit(limit)
       .lean();
 
-    // Populate user info manually/efficiently
-    const populatedRequests = [];
-    for (const request of requests) {
-      const user = await User.findOne({
-        $or: [
-          { _id: mongoose.Types.ObjectId.isValid(request.userId) ? request.userId : null },
-          { firebaseUid: request.userId },
-          { uid: request.userId }
-        ].filter(q => q._id !== null || q.firebaseUid || q.uid)
-      }).select('displayName username email avatar photoURL profilePicture').lean();
-      
-      populatedRequests.push({
-        ...request,
-        user: user || null
-      });
+    // Populate user info in one batch query (avoid N+1)
+    const userIds = [...new Set(requests.map((r) => String(r.userId || '')).filter(Boolean))];
+    const userObjectIds = userIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const users = userIds.length === 0
+      ? []
+      : await User.find({
+          $or: [
+            ...(userObjectIds.length ? [{ _id: { $in: userObjectIds } }] : []),
+            { firebaseUid: { $in: userIds } },
+            { uid: { $in: userIds } }
+          ]
+        }).select('displayName username email avatar photoURL profilePicture firebaseUid uid').lean();
+
+    const userById = new Map();
+    for (const u of users) {
+      if (u._id) userById.set(String(u._id), u);
+      if (u.firebaseUid) userById.set(String(u.firebaseUid), u);
+      if (u.uid) userById.set(String(u.uid), u);
     }
+
+    const populatedRequests = requests.map((request) => ({
+      ...request,
+      user: userById.get(String(request.userId)) || null
+    }));
 
     res.json({
       success: true,

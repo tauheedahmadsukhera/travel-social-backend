@@ -181,12 +181,15 @@ router.get('/', optionalAuth, async (req, res) => {
         $addFields: {
           userName: { $ifNull: ['$author.displayName', { $ifNull: ['$author.name', { $ifNull: ['$userName', 'Anonymous'] }] }] },
           userAvatar: { $ifNull: ['$author.avatar', { $ifNull: ['$author.photoURL', { $ifNull: ['$author.profilePicture', '$userAvatar'] }] }] },
+          // Keep count for UI; full comments hydrate on viewer open (much smaller feed payload)
+          commentsCount: { $size: { $ifNull: ['$comments', []] } },
         }
       },
-      { $unset: ['followStatus', 'isFollowing', 'author'] }
+      { $unset: ['followStatus', 'isFollowing', 'author', 'comments', 'allowedFollowers'] }
     ];
 
     const stories = await mongoose.model('Story').aggregate(pipeline);
+    res.set('Cache-Control', 'private, max-age=15');
     res.json({ success: true, data: stories });
   } catch (err) {
     console.error('[GET /api/stories] Aggregation Error:', err.message);
