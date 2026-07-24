@@ -24,7 +24,7 @@ async function handleMentionsAndTags(text, senderId, postId, commentId = null) {
     if (usernames.length === 0) return;
 
     const User = mongoose.model('User');
-    const { notificationQueue } = require('../../services/queue');
+    const { notificationQueue } = require('../services/queue');
 
     // Fetch sender details
     const sender = await User.findOne({

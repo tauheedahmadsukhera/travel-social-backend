@@ -14,7 +14,7 @@ async function resolveUserIdentifiers(inputId) {
   // Dynamic require to prevent circular references on startup
   let redisClient, isRedisAvailable;
   try {
-    const queueService = require('../../services/queue');
+    const queueService = require('../services/queue');
     redisClient = queueService.redisClient;
     isRedisAvailable = queueService.isRedisAvailable;
   } catch (e) {}

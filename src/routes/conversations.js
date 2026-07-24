@@ -1125,7 +1125,7 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
         const convId = String(convo.conversationId || conversationId);
 
         // Trigger real-time push notification
-        const { notificationQueue } = require('../../services/queue');
+        const { notificationQueue } = require('../services/queue');
         notificationQueue.add('message', {
           userId: normalizedRecipientId,
           senderId: normalizedSenderId,

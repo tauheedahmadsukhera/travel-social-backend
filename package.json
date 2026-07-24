@@ -1,5 +1,5 @@
 {
-  "name": "trave-social-backend",
+  "name": "travel-social-backend",
   "version": "1.0.0",
   "description": "Backend for Trave Social app using Node.js, Express, MongoDB, and Cloudinary.",
   "main": "src/index.js",

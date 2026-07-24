@@ -58,7 +58,7 @@ router.post('/', verifyToken, validate(followUserSchema), async (req, res) => {
     // Best-effort: create follow notification
     try {
       const User = mongoose.model('User');
-      const { notificationQueue } = require('../../services/queue');
+      const { notificationQueue } = require('../services/queue');
 
       const followerUser = await User.findOne({ 
         $or: [
@@ -435,7 +435,7 @@ router.post('/request', verifyToken, validate(followRequestSchema), async (req, 
     // Best-effort: trigger follow-request notification
     try {
       const User = mongoose.model('User');
-      const { notificationQueue } = require('../../services/queue');
+      const { notificationQueue } = require('../services/queue');
 
       const followerUser = await User.findOne({ 
         $or: [
@@ -515,7 +515,7 @@ router.post('/request/:requestId/accept', verifyToken, async (req, res) => {
 
     // Best-effort: trigger follow-approved notification
     try {
-      const { notificationQueue } = require('../../services/queue');
+      const { notificationQueue } = require('../services/queue');
 
       const acceptingUser = await User.findOne({ 
         $or: [
