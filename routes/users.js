@@ -295,6 +295,17 @@ router.put('/:userId/push-token', verifyToken, async (req, res) => {
     const { pushToken } = req.body;
     const User = mongoose.model('User');
 
+    if (pushToken) {
+      // Unset this token from any other users to prevent notification leakage on shared/multi-account devices
+      await User.updateMany(
+        { 
+          pushToken,
+          _id: { $nin: targetResolved.candidates.filter(c => mongoose.Types.ObjectId.isValid(c)) }
+        },
+        { $unset: { pushToken: "" } }
+      );
+    }
+
     await User.findOneAndUpdate(
       { 
         $or: [

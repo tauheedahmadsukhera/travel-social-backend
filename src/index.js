@@ -117,19 +117,42 @@ initSentry(app);
 
 // ============= FIREBASE INITIALIZATION =============
 try {
-  const serviceAccountPath = path.join(__dirname, '../serviceAccountKey.json');
-  const serviceAccount = require(serviceAccountPath);
-  
-  if (admin.apps.length === 0) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id,
-    });
+  let serviceAccount = null;
+
+  // 1. Try loading from environment variable (Best for Production/Cloud)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      console.log('ℹ️ Firebase credentials loaded from environment variable');
+    } catch (parseErr) {
+      console.error('🔴 Failed to parse FIREBASE_SERVICE_ACCOUNT environment variable:', parseErr.message);
+    }
   }
-  
-  console.log('✅ Firebase Admin initialized');
+
+  // 2. Fallback to local serviceAccountKey.json (Best for Local Dev)
+  if (!serviceAccount) {
+    try {
+      const serviceAccountPath = path.join(__dirname, '../serviceAccountKey.json');
+      serviceAccount = require(serviceAccountPath);
+      console.log('ℹ️ Firebase credentials loaded from local serviceAccountKey.json');
+    } catch (fileErr) {
+      // Handled below if no credentials found
+    }
+  }
+
+  if (serviceAccount) {
+    if (admin.apps.length === 0) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id,
+      });
+    }
+    console.log('✅ Firebase Admin initialized successfully');
+  } else {
+    console.warn('⚠️ Firebase Admin initialization warning: No Firebase credentials found. (Neither serviceAccountKey.json nor FIREBASE_SERVICE_ACCOUNT environment variable)');
+  }
 } catch (error) {
-  console.warn('⚠️ Firebase Admin initialization warning:', error.message);
+  console.warn('⚠️ Firebase Admin initialization error:', error.message);
 }
 
 // ============= MIDDLEWARE =============

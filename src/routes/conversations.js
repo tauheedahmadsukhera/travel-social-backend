@@ -217,9 +217,11 @@ router.get('/', verifyToken, async (req, res) => {
           const m = candidates[candidates.length - 1];
           let preview = m.text || '';
           if (!preview) {
-             if (m.mediaUrl || m.mediaType === 'image') preview = '[Photo]';
-             else if (m.videoUrl || m.mediaType === 'video') preview = '[Video]';
-             else if (m.sharedPost || m.postId) preview = '[Shared Post]';
+             if (m.mediaType === 'video') preview = '[Video]';
+             else if (m.mediaType === 'audio') preview = '[Audio]';
+             else if (m.mediaType === 'post' || m.sharedPost) preview = '[Shared Post]';
+             else if (m.mediaType === 'story' || m.sharedStory) preview = '[Shared Story]';
+             else if (m.mediaType === 'image' || m.mediaUrl) preview = '[Photo]';
           }
           convObj.lastMessage = preview;
         }
@@ -1081,10 +1083,11 @@ router.post('/:id/messages', verifyToken, validate(sendMessageSchema), async (re
     let previewText = text || '';
     if (!previewText) {
       if (storyIdFromText) previewText = '[Story]';
-      else if (messageData.mediaUrl || messageData.mediaType === 'image') previewText = '[Photo]';
-      else if (messageData.videoUrl || messageData.mediaType === 'video') previewText = '[Video]';
-      else if (messageData.sharedPost || messageData.postId) previewText = '[Shared Post]';
-      else if (messageData.mediaUrl) previewText = '[Media]';
+      else if (messageData.mediaType === 'video' || messageData.videoUrl) previewText = '[Video]';
+      else if (messageData.mediaType === 'audio' || messageData.audioUrl) previewText = '[Audio]';
+      else if (messageData.mediaType === 'post' || messageData.sharedPost || messageData.postId) previewText = '[Shared Post]';
+      else if (messageData.mediaType === 'story' || messageData.sharedStory) previewText = '[Shared Story]';
+      else if (messageData.mediaType === 'image' || messageData.mediaUrl) previewText = '[Photo]';
     }
 
     // Atomic update using findOneAndUpdate to prevent lost updates during high concurrency
@@ -1547,30 +1550,53 @@ router.post('/:conversationId/messages/:messageId/reactions', verifyToken, async
 // POST /upload-media - Upload image/video/audio to message
 router.post('/upload-media', verifyToken, async (req, res) => {
   try {
-    const cloudinary = require('cloudinary').v2;
+    const s3Service = require('../utils/s3Service');
     const { file, mediaType } = req.body; // file is base64 or URL
 
     if (!file) {
       return res.status(400).json({ success: false, error: 'File required' });
     }
 
-    // Upload to Cloudinary
-    const uploadOptions = {
-      resource_type: mediaType === 'audio' ? 'auto' : 'auto',
-      folder: 'messages'
-    };
+    let fileBuffer;
+    let originalName = 'file';
 
-    if (mediaType === 'video') {
-      uploadOptions.video_sampling = 5; // For faster uploads
+    if (file.startsWith('data:')) {
+      const matches = file.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        fileBuffer = Buffer.from(base64Data, 'base64');
+        const ext = mimeType.split('/')[1] || 'jpg';
+        originalName = `upload-${Date.now()}.${ext}`;
+      } else {
+        const base64Data = file.split(';base64,').pop();
+        fileBuffer = Buffer.from(base64Data, 'base64');
+      }
+    } else if (file.startsWith('http://') || file.startsWith('https://')) {
+      const axios = require('axios');
+      const response = await axios.get(file, { responseType: 'arraybuffer' });
+      fileBuffer = Buffer.from(response.data);
+      originalName = file.split('/').pop() || 'file';
+    } else {
+      fileBuffer = Buffer.from(file, 'base64');
     }
 
-    const result = await cloudinary.uploader.upload(file, uploadOptions);
+    const targetMediaType = mediaType || 'auto';
+
+    // Upload to S3
+    const result = await s3Service.uploadMedia(
+      fileBuffer,
+      'messages',
+      'chat',
+      targetMediaType,
+      originalName
+    );
 
     res.json({
       success: true,
       url: result.secure_url,
-      publicId: result.public_id,
-      mediaType,
+      publicId: result.url,
+      mediaType: result.mediaType || mediaType,
       duration: result.duration || null
     });
   } catch (err) {
