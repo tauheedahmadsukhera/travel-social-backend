@@ -3,7 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 // Story model
-const Story = require('../src/models/Story');
+const Story = require('../../models/Story');
 
 // Delete story
 router.delete('/stories/:storyId', async (req, res) => {

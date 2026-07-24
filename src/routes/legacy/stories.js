@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const Story = require('../src/models/Story');
+const Story = require('../../models/Story');
 const mongoose = require('mongoose');
 
-const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
-const validate = require('../src/middleware/validateMiddleware');
-const { createStorySchema } = require('../src/validations/storyValidation');
+const { verifyToken, optionalAuth } = require('../../middleware/authMiddleware');
+const validate = require('../../middleware/validateMiddleware');
+const { createStorySchema } = require('../../validations/storyValidation');
 
 /**
  * GET /api/stories/active
@@ -17,7 +17,7 @@ router.get('/active', optionalAuth, async (req, res) => {
     const Story = mongoose.model('Story');
     const User = mongoose.model('User');
     const Group = mongoose.model('Group');
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
     
     // Resolve requester's user variants and group memberships
     const requesterUserId = req.userId || null;
@@ -79,7 +79,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const requesterUserId = req.userId || null;
     const limit = Math.min(parseInt(req.query.limit || '50'), 100);
     const Group = mongoose.model('Group');
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
 
     let viewerVariants = [];
     let viewerGroupIds = [];
@@ -225,7 +225,7 @@ router.post('/', verifyToken, validate(createStorySchema), async (req, res) => {
     let resolvedLocationData = locationData || null;
     if (caption || locationData) {
       try {
-        const { resolveGeographicalData } = require('../src/utils/geoResolver');
+        const { resolveGeographicalData } = require('../../utils/geoResolver');
         resolvedLocationData = resolveGeographicalData(caption, locationData);
       } catch (err) {
         console.warn('[CreateStory] Failed to resolve geo data:', err.message);
@@ -277,7 +277,7 @@ router.post('/', verifyToken, validate(createStorySchema), async (req, res) => {
     (async () => {
       try {
         const Follow = mongoose.model('Follow');
-        const { notificationQueue } = require('../services/queue');
+        const { notificationQueue } = require('../../services/queue');
         
         // Find all followers
         const followers = await Follow.find({ followingId: userId }).select('followerId').lean();
@@ -352,7 +352,7 @@ router.get('/:storyId', optionalAuth, async (req, res) => {
     if (!story.isPrivate || ['Everyone', 'everyone', null, undefined].includes(story.visibility)) {
       hasAccess = true;
     } else if (requesterUserId) {
-      const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+      const { resolveUserIdentifiers } = require('../../utils/userUtils');
       const requester = await resolveUserIdentifiers(requesterUserId);
       const viewerVariants = requester.candidates.map(id => String(id));
       
@@ -425,7 +425,7 @@ router.delete('/:storyId', verifyToken, async (req, res) => {
 
     // Verify ownership (if userId provided)
     if (userId) {
-      const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+      const { resolveUserIdentifiers } = require('../../utils/userUtils');
       const { candidates: userCandidates } = await resolveUserIdentifiers(userId);
       const userCandidateStrings = userCandidates.map(String);
       
@@ -485,7 +485,7 @@ router.post('/:storyId/like', verifyToken, async (req, res) => {
       const ownerId = story.userId ? String(story.userId) : null;
       const isLike = likeIndex === -1;
       if (isLike && ownerId && ownerId !== String(userId)) {
-        const { notificationQueue } = require('../services/queue');
+        const { notificationQueue } = require('../../services/queue');
         const senderName = user?.displayName || user?.name || 'Someone';
         
         notificationQueue.add('storyLike', {
@@ -563,7 +563,7 @@ router.post('/:storyId/comments', verifyToken, async (req, res) => {
     try {
       const ownerId = story.userId ? String(story.userId) : null;
       if (ownerId && ownerId !== String(userId)) {
-        const { notificationQueue } = require('../services/queue');
+        const { notificationQueue } = require('../../services/queue');
         const senderName = user?.displayName || user?.name || userName || 'Someone';
 
         notificationQueue.add('storyComment', {
@@ -630,7 +630,7 @@ router.delete('/:storyId/comments/:commentId', verifyToken, async (req, res) => 
     }
 
     // Build the full candidates list for the authenticated user
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
     const { candidates: userCandidates } = await resolveUserIdentifiers(userId);
     const userCandidateStrings = userCandidates.map(String);
 
@@ -687,7 +687,7 @@ router.patch('/:storyId/comments/:commentId', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Story not found' });
     }
 
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
     const { candidates: userCandidates } = await resolveUserIdentifiers(userId);
     const userCandidateStrings = userCandidates.map(String);
 

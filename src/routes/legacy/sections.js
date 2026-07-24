@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+const { resolveUserIdentifiers } = require('../../utils/userUtils');
 
 // Load Section model
-const Section = mongoose.models.Section || require('../src/models/Section');
+const Section = mongoose.models.Section || require('../../models/Section');
 
 // Use centralized Section model
-const { verifyToken } = require('../src/middleware/authMiddleware');
+const { verifyToken } = require('../../middleware/authMiddleware');
 
 // POST /api/sections - Create a new section (Requires Auth)
 router.post('/', verifyToken, async (req, res) => {

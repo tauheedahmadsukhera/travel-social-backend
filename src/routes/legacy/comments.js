@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
-const { notificationQueue } = require('../services/queue');
-const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
-const validate = require('../src/middleware/validateMiddleware');
-const { createCommentSchema } = require('../src/validations/commentValidation');
+const { resolveUserIdentifiers } = require('../../utils/userUtils');
+const { notificationQueue } = require('../../services/queue');
+const { verifyToken, optionalAuth } = require('../../middleware/authMiddleware');
+const validate = require('../../middleware/validateMiddleware');
+const { createCommentSchema } = require('../../validations/commentValidation');
 
 
-const Comment = require('../src/models/Comment');
+const Comment = require('../../models/Comment');
 
 // Helper to convert string to ObjectId safely
 const toObjectId = (id) => {
@@ -118,7 +118,7 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
     }
 
     // Bulk resolve all user details using Redis cache first
-    const cache = require('../src/utils/redis');
+    const cache = require('../../utils/redis');
     const userMap = new Map();
     const missingIds = [];
 
@@ -503,7 +503,7 @@ router.post('/:postId/comments', verifyToken, validate(createCommentSchema), asy
 
       // Scan for @mentions in comment text
       try {
-        const { handleMentionsAndTags } = require('../src/utils/mentionHelper');
+        const { handleMentionsAndTags } = require('../../utils/mentionHelper');
         await handleMentionsAndTags(text, userId, cleanPostId, newComment._id);
       } catch (mentionErr) {
         console.warn('Comment mentions resolution warning:', mentionErr.message);
@@ -852,7 +852,7 @@ router.post('/:postId/comments/:commentId/replies', verifyToken, async (req, res
 
     // Scan for @mentions in reply text
     try {
-      const { handleMentionsAndTags } = require('../src/utils/mentionHelper');
+      const { handleMentionsAndTags } = require('../../utils/mentionHelper');
       await handleMentionsAndTags(text, userId, req.params.postId, reply._id);
     } catch (mentionErr) {
       console.warn('Reply mentions resolution warning:', mentionErr.message);

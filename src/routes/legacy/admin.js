@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { verifyToken } = require('../src/middleware/authMiddleware');
+const { verifyToken } = require('../../middleware/authMiddleware');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const logger = require('../src/utils/logger');
+const logger = require('../../utils/logger');
 
 // Configure multer for memory storage
 const upload = multer({ 
@@ -12,8 +12,8 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-const s3Service = require('../src/utils/s3Service');
-const rateLimiter = require('../src/middleware/rateLimiter');
+const s3Service = require('../../utils/s3Service');
+const rateLimiter = require('../../middleware/rateLimiter');
 
 const adminLoginLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -37,7 +37,7 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
     const { email, password } = req.body;
     const User = mongoose.model('User');
     const bcrypt = require('bcryptjs');
-    const { generateToken } = require('../src/middleware/authMiddleware');
+    const { generateToken } = require('../../middleware/authMiddleware');
 
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user || !user.password) {
@@ -87,7 +87,7 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { get: cacheGet, set: cacheSet } = require('../src/utils/redis');
+    const { get: cacheGet, set: cacheSet } = require('../../utils/redis');
     const cacheKey = 'admin:stats';
     const cachedStats = await cacheGet(cacheKey);
     if (cachedStats) {
@@ -1262,7 +1262,7 @@ router.put('/verification-requests/:id', verifyToken, async (req, res, next) => 
       // Send push notification if they have a token
       if (user.pushToken) {
         try {
-          const { sendPushNotification } = require('../services/pushNotificationService');
+          const { sendPushNotification } = require('../../services/pushNotificationService');
           await sendPushNotification(user.pushToken, '✓ Account Verification', message, { type: 'verification' });
         } catch (pushErr) {
           console.warn('Could not send verification push notification:', pushErr.message);

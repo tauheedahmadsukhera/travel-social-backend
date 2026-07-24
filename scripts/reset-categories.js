@@ -76,7 +76,7 @@ async function run() {
 
     // If redis is running, clear cache keys
     try {
-      const queueService = require('../services/queue');
+      const queueService = require('../src/services/queue');
       const redisClient = queueService.redisClient;
       const isRedisAvailable = queueService.isRedisAvailable;
       if (isRedisAvailable && isRedisAvailable()) {

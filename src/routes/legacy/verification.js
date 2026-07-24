@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { verifyToken } = require('../src/middleware/authMiddleware');
-const logger = require('../src/utils/logger');
+const { verifyToken } = require('../../middleware/authMiddleware');
+const logger = require('../../utils/logger');
 
 // Load models
 const User = mongoose.model('User');

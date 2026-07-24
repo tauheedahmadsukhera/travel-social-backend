@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../src/utils/userUtils');
-const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
-const { enrichPostsWithUserData } = require('../utils/postHelpers');
-const postService = require('../services/postService');
-const logger = require('../src/utils/logger');
-const cacheMiddleware = require('../src/middleware/cacheMiddleware');
-const validate = require('../src/middleware/validateMiddleware');
-const { logEvent } = require('../src/services/analyticsService');
-const { updateProfileSchema } = require('../src/validations/userValidation');
+const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../../utils/userUtils');
+const { verifyToken, optionalAuth } = require('../../middleware/authMiddleware');
+const { enrichPostsWithUserData } = require('../../utils/postHelpers');
+const postService = require('../../services/postService');
+const logger = require('../../utils/logger');
+const cacheMiddleware = require('../../middleware/cacheMiddleware');
+const validate = require('../../middleware/validateMiddleware');
+const { logEvent } = require('../../services/analyticsService');
+const { updateProfileSchema } = require('../../validations/userValidation');
 
 // Use centralized User model (already loaded by auth.js or server initialization)
 let User;
@@ -796,7 +796,7 @@ async function handleUpdateUser(req, res, authenticatedUserId) {
 
       // If city or country changed, or first time setting location
       if ((newCity && newCity !== oldCity) || (newCountry && newCountry !== oldCountry)) {
-        const { notificationQueue } = require('../services/queue');
+        const { notificationQueue } = require('../../services/queue');
         const welcomeMessage = newCity 
           ? `Welcome to ${newCity}! 🌍 See what others are posting here.`
           : `You've arrived in ${newCountry}! ✈️ Check out local stories.`;

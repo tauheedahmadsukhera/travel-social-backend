@@ -2,9 +2,9 @@ console.log('📌 Loading categories routes...');
 const express = require('express');
 const router = express.Router();
 
-const Category = require('../src/models/Category');
-const cacheMiddleware = require('../src/middleware/cacheMiddleware');
-const { verifyToken, isAdmin } = require('../src/middleware/authMiddleware');
+const Category = require('../../models/Category');
+const cacheMiddleware = require('../../middleware/cacheMiddleware');
+const { verifyToken, isAdmin } = require('../../middleware/authMiddleware');
 
 // GET /api/categories - Return all categories from DB (Cached for 1 hour)
 router.get('/', cacheMiddleware(3600), async (req, res) => {

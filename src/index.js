@@ -221,7 +221,7 @@ const connectDatabase = async () => {
 
     // Start database archiving scheduler
     try {
-      const { startArchiveScheduler } = require('../services/archiveService');
+      const { startArchiveScheduler } = require('./services/archiveService');
       startArchiveScheduler();
       console.log('✅ Database Archiving Scheduler started.');
     } catch (archiveErr) {

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const cacheMiddleware = require('../src/middleware/cacheMiddleware');
+const cacheMiddleware = require('../../middleware/cacheMiddleware');
 
 // GET /api/regions - Public route with mapping for Mobile App (Cached for 1 hour)
 router.get('/', cacheMiddleware(3600), async (req, res) => {

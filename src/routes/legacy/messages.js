@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-const { verifyToken } = require('../src/middleware/authMiddleware');
+const { verifyToken } = require('../../middleware/authMiddleware');
 
-const Message = require('../src/models/Message');
+const Message = require('../../models/Message');
 
 // Get all messages for a conversation with populated user data
 router.get('/:conversationId/messages', verifyToken, async (req, res) => {
@@ -14,7 +14,7 @@ router.get('/:conversationId/messages', verifyToken, async (req, res) => {
 
     // 1. SECURITY: Check if user is a participant in this conversation
     const Conversation = mongoose.model('Conversation');
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
     const { candidates } = await resolveUserIdentifiers(userId);
 
     const conversation = await Conversation.findOne({

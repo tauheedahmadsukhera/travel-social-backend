@@ -1,9 +1,9 @@
 // routes/conversation.js
 const express = require('express');
 const router = express.Router();
-const Conversation = require('../src/models/Conversation');
-const validate = require('../src/middleware/validateMiddleware');
-const { sendMessageSchema } = require('../src/validations/messageValidation');
+const Conversation = require('../../models/Conversation');
+const validate = require('../../middleware/validateMiddleware');
+const { sendMessageSchema } = require('../../validations/messageValidation');
 
 // Get messages for a conversation
 router.get('/:id/messages', async (req, res) => {

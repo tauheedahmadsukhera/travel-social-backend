@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const cache = require('../utils/cache');
+const cache = require('../../utils/cache');
 
 
 // Get personalized feed for user
 router.get('/', async (req, res) => {
   try {
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
-    const postService = require('../services/postService');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
+    const postService = require('../../services/postService');
     const Group = mongoose.model('Group');
     const { userId, limit, offset } = req.query;
     let viewerVariants = [];

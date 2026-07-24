@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { verifyToken } = require('../src/middleware/authMiddleware');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+const { verifyToken } = require('../../middleware/authMiddleware');
+const { resolveUserIdentifiers } = require('../../utils/userUtils');
 
 /**
  * Ensure the authenticated user matches :userId (admins bypass).

@@ -1,5 +1,5 @@
 const { Expo } = require('expo-server-sdk');
-const logger = require('../src/utils/logger');
+const logger = require('../utils/logger');
 
 // Create a new Expo SDK client
 const expo = new Expo();
@@ -169,4 +169,3 @@ module.exports = {
   sendBulkPushNotifications,
   sendEventNotification,
 };
-

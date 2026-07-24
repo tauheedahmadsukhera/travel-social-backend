@@ -1,20 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../src/utils/userUtils');
+const { resolveUserIdentifiers, getBlockedUserBoundaries } = require('../../utils/userUtils');
 const { 
   enrichPostsWithUserData, 
   escapeRegExp, 
   formatLocationLabel 
-} = require('../utils/postHelpers');
-const { notificationQueue } = require('../services/queue');
-const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
-const postService = require('../services/postService');
-const logger = require('../src/utils/logger');
-const cacheMiddleware = require('../src/middleware/cacheMiddleware');
-const validate = require('../src/middleware/validateMiddleware');
-const { logEvent } = require('../src/services/analyticsService');
-const { createPostSchema, updatePostSchema } = require('../src/validations/postValidation');
+} = require('../../utils/postHelpers');
+const { notificationQueue } = require('../../services/queue');
+const { verifyToken, optionalAuth } = require('../../middleware/authMiddleware');
+const postService = require('../../services/postService');
+const logger = require('../../utils/logger');
+const cacheMiddleware = require('../../middleware/cacheMiddleware');
+const validate = require('../../middleware/validateMiddleware');
+const { logEvent } = require('../../services/analyticsService');
+const { createPostSchema, updatePostSchema } = require('../../validations/postValidation');
 
 // Helper to resolve post by both ObjectId and custom String ID
 function resolvePostQuery(postId) {
@@ -38,7 +38,7 @@ router.get('/', verifyToken, cacheMiddleware(300), async (req, res) => {
     const viewerId = req.userId; // Use authenticated userId
 
     // Resolve viewer variants and group memberships to restrict search query
-    const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+    const { resolveUserIdentifiers } = require('../../utils/userUtils');
     const { candidates } = await resolveUserIdentifiers(viewerId);
     const viewerVariants = candidates.map(id => String(id));
     const Group = mongoose.model('Group');
@@ -170,7 +170,7 @@ router.get('/recommended', optionalAuth, async (req, res, next) => {
 
     let redisClient, isRedisAvailable;
     try {
-      const queueService = require('../services/queue');
+      const queueService = require('../../services/queue');
       redisClient = queueService.redisClient;
       isRedisAvailable = queueService.isRedisAvailable;
     } catch (e) {}
@@ -421,7 +421,7 @@ router.get('/by-location', optionalAuth, async (req, res) => {
           targetCountryCode = codeUpper;
         }
       } else {
-        const { countryNameToCode } = require('../src/utils/geoResolver');
+        const { countryNameToCode } = require('../../utils/geoResolver');
         const code = countryNameToCode[loc];
         if (code && countries[code]) {
           targetCountryName = countries[code].name;
@@ -545,7 +545,7 @@ router.post('/', verifyToken, validate(createPostSchema), async (req, res) => {
     // Resolve structured geographical details
     if (postData.location || postData.locationData) {
       try {
-        const { resolveGeographicalData } = require('../src/utils/geoResolver');
+        const { resolveGeographicalData } = require('../../utils/geoResolver');
         postData.locationData = resolveGeographicalData(postData.location, postData.locationData);
       } catch (err) {
         console.warn('[CreatePost] Failed to resolve geo data:', err.message);
@@ -558,7 +558,7 @@ router.post('/', verifyToken, validate(createPostSchema), async (req, res) => {
     // Trigger tags & mentions notifications
     (async () => {
       try {
-        const { handleMentionsAndTags } = require('../src/utils/mentionHelper');
+        const { handleMentionsAndTags } = require('../../utils/mentionHelper');
         // Handle @mentions in caption
         if (post.caption) {
           await handleMentionsAndTags(post.caption, post.userId, post._id);
@@ -618,7 +618,7 @@ router.get('/:postId', optionalAuth, async (req, res) => {
     if (!post.isPrivate || ['Everyone', 'everyone', null, undefined].includes(post.visibility)) {
       hasAccess = true;
     } else if (viewerId) {
-      const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+      const { resolveUserIdentifiers } = require('../../utils/userUtils');
       const requester = await resolveUserIdentifiers(viewerId);
       const viewerVariants = requester.candidates.map(id => String(id));
       

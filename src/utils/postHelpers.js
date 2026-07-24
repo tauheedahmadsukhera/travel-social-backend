@@ -6,7 +6,7 @@ async function enrichPostsWithUserData(posts, viewerId = null) {
   let viewerVariants = viewerId ? [String(viewerId)] : [];
   if (viewerId) {
     try {
-      const { candidates } = await require('../src/utils/userUtils').resolveUserIdentifiers(viewerId);
+      const { candidates } = await require('./userUtils').resolveUserIdentifiers(viewerId);
       candidates.forEach(id => { if (!viewerVariants.includes(String(id))) viewerVariants.push(String(id)); });
       console.log(`🔍 [enrich] viewerId: ${viewerId}, variants: ${viewerVariants.join(', ')}`);
     } catch (e) {

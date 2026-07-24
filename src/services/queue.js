@@ -1,6 +1,6 @@
 const { Queue, Worker } = require('bullmq');
 const Redis = require('ioredis');
-const { sendExpoPushToUser } = require('../src/services/notificationService');
+const { sendExpoPushToUser } = require('./notificationService');
 
 const connection = {
   host: process.env.REDIS_HOST || '127.0.0.1',
@@ -175,4 +175,3 @@ module.exports = {
   redisClient,
   isRedisAvailable: () => redisAvailable
 };
-

@@ -2,8 +2,8 @@ console.log('📌 Loading highlights routes...');
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
-const { verifyToken, optionalAuth } = require('../src/middleware/authMiddleware');
+const { resolveUserIdentifiers } = require('../../utils/userUtils');
+const { verifyToken, optionalAuth } = require('../../middleware/authMiddleware');
 
 // Use Highlight model (already loaded in server)
 const getHighlight = () => {
@@ -483,7 +483,7 @@ router.get('/highlights/:highlightId/stories', optionalAuth, async (req, res) =>
           };
 
           if (requesterUserId) {
-            const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+            const { resolveUserIdentifiers } = require('../../utils/userUtils');
             const requester = await resolveUserIdentifiers(requesterUserId);
             const viewerVariants = requester.candidates.map(id => String(id));
             const Group = mongoose.model('Group');

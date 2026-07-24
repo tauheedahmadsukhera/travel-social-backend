@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const { buildLocationKeysFromPayload } = require('../utils/postHelpers');
+const { buildLocationKeysFromPayload } = require('../src/utils/postHelpers');
 
 // Connect to MongoDB
 const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/travel-social';

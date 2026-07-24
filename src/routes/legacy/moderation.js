@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { verifyToken } = require('../src/middleware/authMiddleware');
+const { verifyToken } = require('../../middleware/authMiddleware');
 
 /**
  * @route   POST /api/moderation/report

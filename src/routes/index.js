@@ -56,23 +56,23 @@ const router = express.Router();
 //              with full test coverage per file, then delete the legacy file.
 // =============================================================================
 
-// ─── LEGACY-ACTIVE: root/routes/ directory ───────────────────────────────────
-const postRoutes      = require('../../routes/posts');        // Full-featured posts
-const commentRoutes   = require('../../routes/comments');     // Full-featured comments
-const livestreamRoutes= require('../../routes/livestream');
-const notificationRoutes = require('../../routes/notification');
+// ─── LEGACY-ACTIVE: src/routes/legacy/ directory ─────────────────────────────
+const postRoutes      = require('./legacy/posts');        // Full-featured posts
+const commentRoutes   = require('./legacy/comments');     // Full-featured comments
+const livestreamRoutes= require('./legacy/livestream');
+const notificationRoutes = require('./legacy/notification');
 // NOTE: routes/saved.js is a DEAD FILE — it defines /:userId/saved endpoints but
 //       these are implemented DIRECTLY inside routes/users.js (lines ~1521-1766).
 //       routes/saved.js was never used in production (no router.use() for it existed
 //       in the original code either). It remains on disk but is never loaded.
-const sectionRoutes   = require('../../routes/sections');
-const storyRoutes     = require('../../routes/stories');      // Full-featured stories
-const userRoutes      = require('../../routes/users');        // Full-featured users
-const categoriesRoutes= require('../../routes/categories');
-const adminRoutes     = require('../../routes/admin');
-const locationRoutes  = require('../../routes/locations');
-const moderationRoutes= require('../../routes/moderation');
-const gdprRoutes      = require('../../routes/gdpr');
+const sectionRoutes   = require('./legacy/sections');
+const storyRoutes     = require('./legacy/stories');      // Full-featured stories
+const userRoutes      = require('./legacy/users');        // Full-featured users
+const categoriesRoutes= require('./legacy/categories');
+const adminRoutes     = require('./legacy/admin');
+const locationRoutes  = require('./legacy/locations');
+const moderationRoutes= require('./legacy/moderation');
+const gdprRoutes      = require('./legacy/gdpr');
 
 // ─── MVC-ACTIVE: src/routes/ directory ───────────────────────────────────────
 const brandingRoutes      = require('./branding');
@@ -86,7 +86,7 @@ router.use('/posts', postRoutes);
 router.use('/live-streams', livestreamRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/stories', storyRoutes);
-router.use('/users/verification', require('../../routes/verification'));
+router.use('/users/verification', require('./legacy/verification'));
 router.use('/users', userRoutes);
 router.use('/users', sectionRoutes);
 router.use('/categories', categoriesRoutes);

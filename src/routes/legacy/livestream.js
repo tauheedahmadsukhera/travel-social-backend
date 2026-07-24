@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { verifyToken } = require('../src/middleware/authMiddleware');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
+const { verifyToken } = require('../../middleware/authMiddleware');
+const { resolveUserIdentifiers } = require('../../utils/userUtils');
 
-const cacheMiddleware = require('../src/middleware/cacheMiddleware');
+const cacheMiddleware = require('../../middleware/cacheMiddleware');
 
 let LiveStream;
 try {

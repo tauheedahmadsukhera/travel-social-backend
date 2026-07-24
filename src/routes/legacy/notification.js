@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { resolveUserIdentifiers } = require('../src/utils/userUtils');
-const { verifyToken } = require('../src/middleware/authMiddleware');
-const { sendPushNotification, sendEventNotification } = require('../services/pushNotificationService');
+const { resolveUserIdentifiers } = require('../../utils/userUtils');
+const { verifyToken } = require('../../middleware/authMiddleware');
+const { sendPushNotification, sendEventNotification } = require('../../services/pushNotificationService');
 
-const Notification = require('../src/models/Notification');
+const Notification = require('../../models/Notification');
 
 // Add a notification (Requires Auth - usually system internal)
 router.post('/', verifyToken, async (req, res, next) => {
