@@ -276,7 +276,7 @@ async function compressVideo(videoBufferOrPath) {
  * @param {string} originalName - Original file name for ext identification
  */
 async function uploadMedia(fileBufferOrPath, folder, context, mediaType = 'auto', originalName = 'file') {
-  const extension = path.extname(originalName) || (mediaType === 'video' ? '.mp4' : '.jpg');
+  const extension = path.extname(originalName) || (mediaType === 'video' ? '.mp4' : mediaType === 'audio' ? '.m4a' : '.jpg');
   const randomSuffix = Math.random().toString(36).substring(7);
   // Generate file prefix
   const baseKey = `${folder}/${Date.now()}-${randomSuffix}`;
@@ -286,6 +286,23 @@ async function uploadMedia(fileBufferOrPath, folder, context, mediaType = 'auto'
   let width = null;
   let height = null;
   let thumbnailUrl = null;
+
+  // ─── AUDIO: passthrough — no image/video processing needed ───────────────────
+  const isAudioFile = mediaType === 'audio'
+    || /\.(m4a|mp3|aac|wav|ogg|flac|opus)(\?|$)/i.test(String(originalName || ''));
+
+  if (isAudioFile) {
+    finalMediaType = 'audio';
+    const audioExt = path.extname(originalName || 'audio.m4a') || '.m4a';
+    const audioKey = `${baseKey}${audioExt}`;
+    const audioContentType = originalName?.endsWith('.mp3') ? 'audio/mpeg'
+      : originalName?.endsWith('.wav') ? 'audio/wav'
+      : originalName?.endsWith('.ogg') ? 'audio/ogg'
+      : 'audio/mp4'; // default m4a
+    const secureUrl = await uploadBufferToS3(fileBufferOrPath, audioKey, audioContentType);
+    return { secure_url: secureUrl, resource_type: 'audio', mediaType: 'audio', thumbnailUrl: null };
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // 1. Handle Image Optimization & Dimension Parsing
   if (mediaType === 'image' || mediaType === 'auto') {

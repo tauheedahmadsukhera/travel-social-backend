@@ -16,7 +16,7 @@ const upload = multer({
       cb(null, `media-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
     }
   }),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit (audio/video can be large)
 });
 
 // Helper: base64 helper
@@ -68,13 +68,15 @@ router.post('/upload', verifyToken, upload.single('file'), async (req, res) => {
       success: true,
       url: result.secure_url,
       secureUrl: result.secure_url,
-      thumbnailUrl: result.thumbnailUrl,
+      thumbnailUrl: result.thumbnailUrl || null,
+      mediaType: result.mediaType || mediaType,
       data: {
         url: result.secure_url,
-        thumbnailUrl: result.thumbnailUrl,
+        thumbnailUrl: result.thumbnailUrl || null,
+        mediaType: result.mediaType || mediaType,
         width: result.width,
         height: result.height,
-        format: result.mediaType === 'image' ? 'webp' : 'mp4',
+        format: result.mediaType === 'audio' ? 'm4a' : result.mediaType === 'image' ? 'webp' : 'mp4',
         resourceType: result.resource_type
       }
     });
