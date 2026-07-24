@@ -2046,9 +2046,17 @@ router.delete('/:userId', verifyToken, async (req, res) => {
     const Follow = mongoose.model('Follow');
     const Passport = mongoose.model('Passport');
     const Story = mongoose.model('Story');
-    const SavedPost = mongoose.model('SavedPost');
     const Highlight = mongoose.model('Highlight');
     const Section = mongoose.model('Section');
+    const Like = mongoose.model('Like');
+    const Save = mongoose.model('Save');
+    const Block = mongoose.model('Block');
+    const Notification = mongoose.model('Notification');
+
+    let SavedPost = null;
+    try {
+      SavedPost = mongoose.model('SavedPost');
+    } catch (_) {}
 
     const query = {
       $or: [
@@ -2094,9 +2102,15 @@ router.delete('/:userId', verifyToken, async (req, res) => {
       Follow.deleteMany({ followingId: { $in: candidateStrings } }),
       Passport.deleteMany({ userId: { $in: candidateStrings } }),
       Story.deleteMany({ userId: { $in: candidateStrings } }),
-      SavedPost.deleteMany({ userId: { $in: candidateStrings } }),
       Highlight.deleteMany({ userId: { $in: candidateStrings } }),
       Section.deleteMany({ userId: { $in: candidateStrings } }),
+      Like.deleteMany({ userId: { $in: candidateStrings } }),
+      Save.deleteMany({ userId: { $in: candidateStrings } }),
+      Block.deleteMany({ blockerId: { $in: candidateStrings } }),
+      Block.deleteMany({ blockedId: { $in: candidateStrings } }),
+      Notification.deleteMany({ recipientId: { $in: candidateStrings } }),
+      Notification.deleteMany({ senderId: { $in: candidateStrings } }),
+      ...(SavedPost ? [SavedPost.deleteMany({ userId: { $in: candidateStrings } })] : []),
       Post.updateMany({}, {
         $pull: {
           taggedUserIds: { $in: candidateStrings },
